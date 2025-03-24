@@ -56,10 +56,20 @@ const Settings = () => {
   const apiConfig = ApiService.getConfig();
   const notificationConfig = NotificationService.getSettings();
 
-  const [settings, setSettings] = useState<SettingsState>({
+  // Ensure all settings have default values to prevent undefined errors
+  const defaultSettings: SettingsState = {
     theme: themeConfig.theme,
-    notifications: notificationConfig,
-    api: apiConfig,
+    notifications: {
+      deviceStatus: true,
+      deploymentAlerts: true,
+      systemUpdates: false,
+      securityAlerts: true,
+    },
+    api: {
+      endpoint: apiConfig.endpoint,
+      pollingInterval: 60,
+      timeout: 30,
+    },
     display: {
       compactView: themeConfig.compactView,
       showAdvancedOptions: true,
@@ -69,8 +79,9 @@ const Settings = () => {
       autoLogout: 30,
       requireConfirmation: true,
     }
-  });
-  
+  };
+
+  const [settings, setSettings] = useState<SettingsState>(defaultSettings);
   const [savedSettings, setSavedSettings] = useState<SettingsState | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState<{type: 'success' | 'error', text: string} | null>(null);
@@ -81,17 +92,45 @@ const Settings = () => {
     if (storedSettings) {
       try {
         const parsedSettings = JSON.parse(storedSettings);
-        setSettings(parsedSettings);
-        setSavedSettings(parsedSettings);
         
-        // Apply auto logout settings
-        setupAutoLogout(parsedSettings.security.autoLogout);
+        // Ensure the parsed settings have all required properties with fallbacks
+        const validatedSettings: SettingsState = {
+          theme: parsedSettings.theme || defaultSettings.theme,
+          notifications: {
+            deviceStatus: parsedSettings.notifications?.deviceStatus ?? defaultSettings.notifications.deviceStatus,
+            deploymentAlerts: parsedSettings.notifications?.deploymentAlerts ?? defaultSettings.notifications.deploymentAlerts,
+            systemUpdates: parsedSettings.notifications?.systemUpdates ?? defaultSettings.notifications.systemUpdates,
+            securityAlerts: parsedSettings.notifications?.securityAlerts ?? defaultSettings.notifications.securityAlerts,
+          },
+          api: {
+            endpoint: parsedSettings.api?.endpoint || defaultSettings.api.endpoint,
+            pollingInterval: parsedSettings.api?.pollingInterval || defaultSettings.api.pollingInterval,
+            timeout: parsedSettings.api?.timeout || defaultSettings.api.timeout,
+          },
+          display: {
+            compactView: parsedSettings.display?.compactView ?? defaultSettings.display.compactView,
+            showAdvancedOptions: parsedSettings.display?.showAdvancedOptions ?? defaultSettings.display.showAdvancedOptions,
+            dateFormat: parsedSettings.display?.dateFormat || defaultSettings.display.dateFormat,
+          },
+          security: {
+            autoLogout: parsedSettings.security?.autoLogout || defaultSettings.security.autoLogout,
+            requireConfirmation: parsedSettings.security?.requireConfirmation ?? defaultSettings.security.requireConfirmation,
+          }
+        };
+        
+        setSettings(validatedSettings);
+        setSavedSettings(validatedSettings);
+        
+        // Apply auto logout settings (with fallback)
+        setupAutoLogout(validatedSettings.security.autoLogout);
       } catch (error) {
         console.error('Error parsing stored settings:', error);
+        // If parse error, use default settings
+        setupAutoLogout(defaultSettings.security.autoLogout);
       }
     } else {
-      // If no stored settings, apply defaults
-      setupAutoLogout(settings.security.autoLogout);
+      // If no stored settings, use defaults
+      setupAutoLogout(defaultSettings.security.autoLogout);
     }
     
     // Listen for theme changes
