@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import axios from 'axios';
 import { 
   FiServer, 
   FiCpu, 
@@ -14,9 +13,7 @@ import {
   FiCommand,
   FiHash
 } from 'react-icons/fi';
-
-// Backend API base URL
-const BASE_URL = 'http://localhost:5001';
+import ApiService from '../services/ApiService';
 
 interface ApiHealth {
   status: 'online' | 'offline' | 'degraded';
@@ -68,23 +65,22 @@ const ApiHealthStatus = () => {
       // Get start time for response time calculation
       const startTime = Date.now();
       
-      // Use the direct health endpoint at the root level
-      console.log('Checking API health at:', `${BASE_URL}/health`);
+      // Get the API config for the base URL
+      const apiConfig = ApiService.getConfig();
+      const baseUrl = apiConfig.endpoint.replace('/api', '');
       
-      // Make the API request without authentication
-      const response = await axios.get(`${BASE_URL}/health`, {
-        timeout: 5000
-      });
+      console.log('Checking API health at:', `${baseUrl}/health`);
       
-      console.log('API health response:', response.data);
+      // Make the API request using ApiService
+      const response = await ApiService.get('/health');
       
       // Calculate response time
       const responseTime = Date.now() - startTime;
       
       // Check if we got a valid response
-      if (response.data && response.data.success) {
+      if (response && response.success) {
         // Update the health data with the response from the API
-        const healthData = response.data.data;
+        const healthData = response.data;
         
         setApiHealth({
           ...healthData,
@@ -105,14 +101,8 @@ const ApiHealthStatus = () => {
       console.error('API health check failed:', error);
       
       // Provide detailed error feedback
-      if (axios.isAxiosError(error)) {
-        if (error.code === 'ECONNABORTED') {
-          setErrorMessage('Connection timeout');
-        } else if (!error.response) {
-          setErrorMessage('Cannot connect to server');
-        } else {
-          setErrorMessage(`Server error: ${error.response.status}`);
-        }
+      if (error instanceof Error) {
+        setErrorMessage(`Error: ${error.message}`);
       } else {
         setErrorMessage('Unknown error checking API health');
       }
@@ -132,10 +122,29 @@ const ApiHealthStatus = () => {
     // Check API health on mount
     checkApiHealth();
     
-    // Set up interval to check API health every 60 seconds
-    const interval = setInterval(checkApiHealth, 60000);
+    // Get polling interval from API service config
+    const { pollingInterval } = ApiService.getConfig();
+    const intervalMs = pollingInterval * 1000;
     
-    return () => clearInterval(interval);
+    // Set up interval to check API health based on configured polling interval
+    const interval = setInterval(checkApiHealth, intervalMs);
+    
+    // Event listener for API config changes to update polling interval
+    const handleApiConfigChange = (event: CustomEvent) => {
+      if (event.detail && event.detail.pollingInterval) {
+        // Clear existing interval and create a new one with updated polling interval
+        clearInterval(interval);
+        const newIntervalMs = event.detail.pollingInterval * 1000;
+        setInterval(checkApiHealth, newIntervalMs);
+      }
+    };
+    
+    document.addEventListener('api-config-changed', handleApiConfigChange as EventListener);
+    
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('api-config-changed', handleApiConfigChange as EventListener);
+    };
   }, []);
 
   // Format uptime as days, hours, minutes, seconds

@@ -9,15 +9,13 @@ import {
   FiHardDrive,
   FiWifi
 } from 'react-icons/fi';
-import axios from 'axios';
+import ApiService from '../services/ApiService';
 import { 
   isWebSerialSupported, 
   requestSerialPort, 
   connectToDevice, 
   disconnectFromDevice
 } from '../utils/webSerialUtils';
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001/api';
 
 interface Device {
   id: number;
@@ -70,33 +68,19 @@ const DeviceManagement = () => {
   const fetchDevices = async () => {
     setIsLoading(true);
     setErrorMessage(null);
+    
     try {
-      const token = localStorage.getItem('token');
-      if (!token) {
-        console.error('No authentication token found');
-        window.location.href = '/login';
-        return;
-      }
+      // Use ApiService instead of direct axios call
+      const response = await ApiService.get('/devices');
       
-      const response = await axios.get(`${API_URL}/devices`, {
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
-      });
-      
-      if (response.data && response.data.success) {
-        setDevices(response.data.data || []);
-      } else {
-        setDevices([]);
-        setErrorMessage('Failed to fetch devices. Invalid response format.');
-      }
+      // Adjust the response handling based on ApiService's return structure
+      setDevices(response);
     } catch (error) {
       console.error('Error fetching devices:', error);
-      setErrorMessage('Failed to fetch O.MG Cables. Please check your connection.');
-      setDevices([]);
+      setErrorMessage('Failed to load O.MG Cables. Please try again.');
       
-      // If we get a 401, redirect to login
-      if (axios.isAxiosError(error) && error.response?.status === 401) {
+      // If we get an unauthorized error, redirect to login
+      if (error instanceof Error && error.message.includes('401')) {
         localStorage.removeItem('token');
         window.location.href = '/login';
       }
@@ -186,7 +170,7 @@ const DeviceManagement = () => {
         serialPortId: deviceInfo.info.deviceId || 'unknown'
       };
       
-      const response = await axios.post(`${API_URL}/devices`, deviceData, {
+      const response = await ApiService.post('/devices', deviceData, {
         headers: {
           Authorization: `Bearer ${token}`
         }
@@ -239,7 +223,7 @@ const DeviceManagement = () => {
         connectionType: 'network'
       };
       
-      const response = await axios.post(`${API_URL}/devices`, deviceData, {
+      const response = await ApiService.post('/devices', deviceData, {
         headers: {
           Authorization: `Bearer ${token}`
         }
@@ -265,8 +249,8 @@ const DeviceManagement = () => {
       console.error('Error registering device:', error);
       setErrorMessage(error.response?.data?.message || 'Failed to register O.MG Cable. Please try again.');
       
-      // If we get a 401, redirect to login
-      if (axios.isAxiosError(error) && error.response?.status === 401) {
+      // If we get an unauthorized error, redirect to login
+      if (error instanceof Error && error.message.includes('401')) {
         localStorage.removeItem('token');
         window.location.href = '/login';
       }
@@ -278,23 +262,10 @@ const DeviceManagement = () => {
   const handleUpdateStatus = async (id: number, status: 'online' | 'offline') => {
     setErrorMessage(null);
     try {
-      const token = localStorage.getItem('token');
-      if (!token) {
-        console.error('No authentication token found');
-        window.location.href = '/login';
-        return;
-      }
+      // Use ApiService instead of direct axios call
+      const response = await ApiService.patch(`/devices/${id}`, { status });
       
-      const response = await axios.patch(`${API_URL}/devices/${id}`, 
-        { status },
-        {
-          headers: {
-            Authorization: `Bearer ${token}`
-          }
-        }
-      );
-      
-      if (response.data && response.data.success) {
+      if (response && response.success) {
         setSuccessMessage(`O.MG Cable status updated to ${status}`);
         
         // Update device in state
@@ -302,14 +273,14 @@ const DeviceManagement = () => {
           device.id === id ? { ...device, status } : device
         ));
       } else {
-        setErrorMessage(response.data?.message || 'Failed to update status');
+        setErrorMessage(response?.message || 'Failed to update status');
       }
     } catch (error) {
       console.error('Error updating device status:', error);
       setErrorMessage('Failed to update O.MG Cable status. Please try again.');
       
-      // If we get a 401, redirect to login
-      if (axios.isAxiosError(error) && error.response?.status === 401) {
+      // If we get an unauthorized error, redirect to login
+      if (error instanceof Error && error.message.includes('401')) {
         localStorage.removeItem('token');
         window.location.href = '/login';
       }

@@ -2,6 +2,8 @@ import { Link as RouterLink, Outlet, useLocation } from 'react-router-dom';
 import { FiHome, FiServer, FiCode, FiFileText, FiLogOut, FiShield, FiSettings } from 'react-icons/fi';
 import { useEffect, useState } from 'react';
 import ApiHealthStatus from './ApiHealthStatus';
+import ApiService from '../services/ApiService';
+import NotificationService from '../services/NotificationService';
 
 const Layout = () => {
   const location = useLocation();
@@ -13,23 +15,34 @@ const Layout = () => {
     // Listen for API configuration changes
     const handleApiConfigChange = (event: CustomEvent) => {
       console.log('API configuration updated:', event.detail);
-      // Update any services that depend on API configuration
+      // The ApiService handles this event internally
     };
     
     // Listen for notification settings changes
     const handleNotificationSettingsChange = (event: CustomEvent) => {
       console.log('Notification settings updated:', event.detail);
-      // Update notification subscriptions
+      // The NotificationService handles this event internally
     };
     
     // Add event listeners
     document.addEventListener('api-config-changed', handleApiConfigChange as EventListener);
     document.addEventListener('notification-settings-changed', handleNotificationSettingsChange as EventListener);
     
+    // Initialize services
+    try {
+      // Connect to notification service when layout is mounted
+      NotificationService.connect();
+    } catch (error) {
+      console.error('Error initializing services:', error);
+    }
+    
     // Cleanup
     return () => {
       document.removeEventListener('api-config-changed', handleApiConfigChange as EventListener);
       document.removeEventListener('notification-settings-changed', handleNotificationSettingsChange as EventListener);
+      
+      // Disconnect from notification service when layout is unmounted
+      NotificationService.disconnect();
     };
   }, [location]);
   
