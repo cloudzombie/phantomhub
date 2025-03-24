@@ -1,5 +1,7 @@
 # PhantomHub
 
+**IMPORTANT: This is the master branch - the main development branch for this project.**
+
 PhantomHub is an advanced penetration testing platform designed for managing O.MG Cables and executing DuckyScript payloads for security testing.
 
 ![PhantomHub Dashboard](docs/img/dashboard-screenshot.png)
