@@ -40,3 +40,58 @@
 .read-the-docs {
   color: #888;
 }
+
+/* Base theme styles */
+.app-container {
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* Tailwind doesn't handle CSS variables in utility classes, so we need to add these */
+.bg-primary {
+  background-color: var(--bg-primary) !important;
+}
+
+.bg-secondary {
+  background-color: var(--bg-secondary) !important;
+}
+
+.text-primary {
+  color: var(--text-primary) !important;
+}
+
+.text-secondary {
+  color: var(--text-secondary) !important;
+}
+
+/* Theme-specific overrides */
+.dark-theme .bg-slate-900 {
+  background-color: var(--bg-primary);
+}
+
+.dark-theme .bg-slate-800 {
+  background-color: var(--bg-secondary);
+}
+
+.light-theme .bg-slate-900 {
+  background-color: var(--bg-primary);
+}
+
+.light-theme .bg-slate-800 {
+  background-color: var(--bg-secondary);
+}
+
+/* Ensure text is readable in light mode */
+.light-theme .text-white {
+  color: var(--text-primary);
+}
+
+.light-theme .text-slate-400 {
+  color: var(--text-secondary);
+}
+
+/* Border color adjustments */
+.light-theme .border-slate-700 {
+  border-color: #cbd5e1;
+}
