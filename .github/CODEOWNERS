@@ -1,0 +1,14 @@
+# This is a CODEOWNERS file for the PhantomHub project
+# Note: This project uses the master branch as its main development branch
+
+# Default owners for everything in the repo
+* @cloudzombie
+
+# Frontend code owners
+/frontend/ @cloudzombie
+
+# Backend code owners
+/backend/ @cloudzombie
+
+# Documentation
+/docs/ @cloudzombie 
