@@ -244,14 +244,14 @@ const Settings = () => {
   };
 
   return (
-    <div className="p-6">
+    <div className="p-6 bg-primary text-primary">
       {/* Page Title */}
       <div className="mb-6">
-        <h1 className="text-xl font-semibold text-white flex items-center">
+        <h1 className="text-xl font-semibold text-primary flex items-center">
           <FiSettings className="mr-2 text-green-500" size={20} />
           Settings
         </h1>
-        <p className="text-sm text-slate-400">Configure your PhantomHub preferences</p>
+        <p className="text-sm text-secondary">Configure your PhantomHub preferences</p>
       </div>
 
       {/* Status Messages */}
