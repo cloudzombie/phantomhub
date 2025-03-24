@@ -186,18 +186,19 @@ export const deletePayload = async (req: AuthRequest, res: Response) => {
 // Deploy a payload to a device
 export const deployPayload = async (req: AuthRequest, res: Response) => {
   try {
-    const { payloadId, deviceId } = req.body;
-    const userId = req.user?.id;
+    const { payloadId, deviceId, connectionType } = req.body;
     
-    if (!userId) {
-      return res.status(401).json({
+    // Input validation
+    if (!payloadId || !deviceId) {
+      return res.status(400).json({
         success: false,
-        message: 'User authentication required',
+        message: 'Both payloadId and deviceId are required',
       });
     }
     
     // Find the payload
     const payload = await Payload.findByPk(payloadId);
+    
     if (!payload) {
       return res.status(404).json({
         success: false,
@@ -207,6 +208,7 @@ export const deployPayload = async (req: AuthRequest, res: Response) => {
     
     // Find the device
     const device = await Device.findByPk(deviceId);
+    
     if (!device) {
       return res.status(404).json({
         success: false,
@@ -218,22 +220,19 @@ export const deployPayload = async (req: AuthRequest, res: Response) => {
     if (device.status !== 'online') {
       return res.status(400).json({
         success: false,
-        message: 'Device is offline or busy',
+        message: 'Device is not available for payload deployment',
       });
     }
     
-    // Create a deployment record
+    // Create deployment record
     const deployment = await Deployment.create({
       payloadId,
       deviceId,
-      userId,
+      userId: req.user!.id,
       status: 'pending',
     });
     
     try {
-      // In a real implementation, we would communicate with the actual O.MG Cable
-      // For now, simulate a successful deployment
-      
       // Update device status to 'busy'
       await device.update({ status: 'busy' });
       
@@ -254,39 +253,45 @@ export const deployPayload = async (req: AuthRequest, res: Response) => {
         });
       }
       
-      // Simulate device execution (would be a real API call in production)
-      setTimeout(async () => {
-        try {
-          // Update deployment status to 'completed'
-          await deployment.update({ 
-            status: 'completed',
-            result: JSON.stringify({
-              success: true,
-              executionTime: Math.floor(Math.random() * 5000) + 1000,
-              output: "Command executed successfully",
-              timestamp: new Date()
-            })
-          });
-          
-          // Update device status back to 'online'
-          await device.update({ status: 'online' });
-          
-          // Notify clients via Socket.IO
-          if (io) {
-            io.emit('device_status_changed', {
-              id: device.id,
-              status: 'online'
+      // For USB devices, the frontend will handle the actual communication and update the deployment
+      // For network devices, we handle it here with API calls or simulation
+      if (connectionType !== 'usb') {
+        // For network devices, communicate with the O.MG Cable API (or simulate)
+        
+        // Simulate device execution (would be a real API call in production)
+        setTimeout(async () => {
+          try {
+            // Update deployment status to 'completed'
+            await deployment.update({ 
+              status: 'completed',
+              result: JSON.stringify({
+                success: true,
+                executionTime: Math.floor(Math.random() * 5000) + 1000,
+                output: "Network Command executed successfully",
+                timestamp: new Date()
+              })
             });
             
-            io.emit('deployment_status_changed', {
-              id: deployment.id,
-              status: 'completed'
-            });
+            // Update device status back to 'online'
+            await device.update({ status: 'online' });
+            
+            // Notify clients via Socket.IO
+            if (io) {
+              io.emit('device_status_changed', {
+                id: device.id,
+                status: 'online'
+              });
+              
+              io.emit('deployment_status_changed', {
+                id: deployment.id,
+                status: 'completed'
+              });
+            }
+          } catch (error) {
+            console.error('Error updating deployment after network completion:', error);
           }
-        } catch (error) {
-          console.error('Error updating deployment after completion:', error);
-        }
-      }, 5000); // Simulate a 5-second execution time
+        }, 5000); // 5-second execution time for network devices
+      }
       
       return res.status(200).json({
         success: true,
@@ -294,19 +299,45 @@ export const deployPayload = async (req: AuthRequest, res: Response) => {
         data: deployment,
       });
     } catch (error) {
-      // If deployment fails, update the status
-      await deployment.update({ status: 'failed' });
+      console.error('Error during payload deployment:', error);
+      
+      // Update deployment status to 'failed'
+      await deployment.update({ 
+        status: 'failed',
+        result: JSON.stringify({
+          success: false,
+          error: 'Failed to execute payload',
+          timestamp: new Date()
+        })
+      });
+      
+      // Update device status back to 'online'
+      await device.update({ status: 'online' });
+      
+      // Notify clients
+      const io = req.app.get('io');
+      if (io) {
+        io.emit('device_status_changed', {
+          id: device.id,
+          status: 'online' 
+        });
+        
+        io.emit('deployment_status_changed', {
+          id: deployment.id,
+          status: 'failed'
+        });
+      }
       
       return res.status(500).json({
         success: false,
-        message: 'Failed to deploy payload to device',
+        message: 'Failed to deploy payload',
       });
     }
   } catch (error) {
-    console.error('Error deploying payload:', error);
+    console.error('Error in payload deployment:', error);
     return res.status(500).json({
       success: false,
-      message: 'Failed to deploy payload',
+      message: 'Server error while processing deployment',
     });
   }
 }; 

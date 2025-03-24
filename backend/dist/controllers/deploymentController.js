@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getUserDeployments = exports.getPayloadDeployments = exports.getDeviceDeployments = exports.getDeployment = exports.getAllDeployments = void 0;
+exports.updateDeployment = exports.getUserDeployments = exports.getPayloadDeployments = exports.getDeviceDeployments = exports.getDeployment = exports.getAllDeployments = void 0;
 const Deployment_1 = __importDefault(require("../models/Deployment"));
 const Device_1 = __importDefault(require("../models/Device"));
 const Payload_1 = __importDefault(require("../models/Payload"));
@@ -172,3 +172,74 @@ const getUserDeployments = async (req, res) => {
     }
 };
 exports.getUserDeployments = getUserDeployments;
+// Update deployment status and result
+const updateDeployment = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { status, result } = req.body;
+        // Validate input
+        if (!status || !result) {
+            return res.status(400).json({
+                success: false,
+                message: 'Status and result are required',
+            });
+        }
+        // Find the deployment
+        const deployment = await Deployment_1.default.findByPk(id);
+        if (!deployment) {
+            return res.status(404).json({
+                success: false,
+                message: 'Deployment not found',
+            });
+        }
+        // Make sure the user has permission (is the creator or an admin)
+        if (deployment.userId !== req.user.id && req.user.role !== 'admin') {
+            return res.status(403).json({
+                success: false,
+                message: 'You do not have permission to update this deployment',
+            });
+        }
+        // Update the deployment with real results
+        await deployment.update({
+            status,
+            result: JSON.stringify(result),
+        });
+        // Update the device status based on the deployment status
+        const device = await Device_1.default.findByPk(deployment.deviceId);
+        if (device) {
+            // Only update device if it's still in the 'busy' state related to this deployment
+            if (device.status === 'busy') {
+                await device.update({ status: 'online' });
+                // Notify clients via Socket.IO
+                const io = req.app.get('io');
+                if (io) {
+                    io.emit('device_status_changed', {
+                        id: device.id,
+                        status: 'online'
+                    });
+                }
+            }
+        }
+        // Emit socket event for deployment update
+        const io = req.app.get('io');
+        if (io) {
+            io.emit('deployment_status_changed', {
+                id: deployment.id,
+                status: deployment.status,
+            });
+        }
+        return res.status(200).json({
+            success: true,
+            message: 'Deployment updated successfully',
+            data: deployment,
+        });
+    }
+    catch (error) {
+        console.error('Error updating deployment:', error);
+        return res.status(500).json({
+            success: false,
+            message: 'Failed to update deployment',
+        });
+    }
+};
+exports.updateDeployment = updateDeployment;

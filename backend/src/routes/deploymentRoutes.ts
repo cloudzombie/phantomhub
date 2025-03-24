@@ -4,7 +4,8 @@ import {
   getDeployment, 
   getDeviceDeployments,
   getPayloadDeployments,
-  getUserDeployments
+  getUserDeployments,
+  updateDeployment
 } from '../controllers/deploymentController';
 import { authenticate, authorize } from '../middleware/authMiddleware';
 
@@ -29,5 +30,8 @@ router.get('/payload/:payloadId', authorize(['Administrator', 'Operator']), getP
 
 // GET user's own deployments - All authenticated users
 router.get('/user/me', getUserDeployments);
+
+// PATCH to update deployment status with real results - All authenticated users
+router.patch('/:id', updateDeployment);
 
 export default router; 

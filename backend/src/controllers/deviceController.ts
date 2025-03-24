@@ -48,24 +48,28 @@ export const getDevice = async (req: Request, res: Response) => {
 // Register a new O.MG Cable
 export const createDevice = async (req: Request, res: Response) => {
   try {
-    const { name, ipAddress, firmwareVersion } = req.body;
+    const { name, ipAddress, firmwareVersion, connectionType, serialPortId } = req.body;
     
-    // First, try to communicate with the O.MG Cable to verify it's online
-    try {
-      // NOTE: In a real implementation, we would use the actual O.MG Cable API endpoints
-      await axios.get(`http://${ipAddress}/ping`, { timeout: 5000 });
-    } catch (err) {
-      return res.status(400).json({
-        success: false,
-        message: 'Could not connect to the O.MG Cable at the specified IP address',
-      });
+    // If this is a network device, verify connectivity
+    if (connectionType !== 'usb') {
+      try {
+        // NOTE: In a real implementation, we would use the actual O.MG Cable API endpoints
+        await axios.get(`http://${ipAddress}/ping`, { timeout: 5000 });
+      } catch (err) {
+        return res.status(400).json({
+          success: false,
+          message: 'Could not connect to the O.MG Cable at the specified IP address',
+        });
+      }
     }
     
     const device = await Device.create({
       name,
       ipAddress,
       firmwareVersion,
-      status: 'online', // Since we've verified connectivity, mark as online
+      status: connectionType === 'usb' ? 'online' : 'online', // Mark USB devices as online immediately
+      connectionType: connectionType || 'network',
+      serialPortId: serialPortId || null,
     });
     
     // Notify all connected clients via Socket.IO about the new device

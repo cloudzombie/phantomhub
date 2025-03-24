@@ -1,6 +1,7 @@
 import { Link as RouterLink, Outlet, useLocation } from 'react-router-dom';
 import { FiHome, FiServer, FiCode, FiFileText, FiLogOut, FiShield, FiSettings } from 'react-icons/fi';
 import { useEffect, useState } from 'react';
+import ApiHealthStatus from './ApiHealthStatus';
 
 const Layout = () => {
   const location = useLocation();
@@ -63,15 +64,9 @@ const Layout = () => {
             <NavItem to="/settings" icon={<FiSettings size={14} />}>Settings</NavItem>
           </div>
           
-          {/* System Status */}
+          {/* System Status - replaced with ApiHealthStatus */}
           <div className="p-1 mt-4">
-            <div className="p-2 rounded bg-slate-700/50 border border-slate-600/50">
-              <div className="text-[9px] text-slate-400 flex items-center justify-center">
-                <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse mr-1"></div>
-                <span>System Online</span>
-              </div>
-              <div className="text-[9px] text-center text-slate-500 mt-1 font-mono">v1.0.0 Beta</div>
-            </div>
+            <ApiHealthStatus />
           </div>
           
           {/* Logout Button */}

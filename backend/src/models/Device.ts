@@ -8,6 +8,8 @@ interface DeviceAttributes {
   firmwareVersion: string | null;
   lastCheckIn: Date | null;
   status: 'online' | 'offline' | 'busy';
+  connectionType: 'network' | 'usb';
+  serialPortId: string | null;
 }
 
 interface DeviceCreationAttributes {
@@ -15,6 +17,8 @@ interface DeviceCreationAttributes {
   ipAddress: string;
   firmwareVersion?: string;
   status?: 'online' | 'offline' | 'busy';
+  connectionType?: 'network' | 'usb';
+  serialPortId?: string;
 }
 
 class Device extends Model<DeviceAttributes, DeviceCreationAttributes> implements DeviceAttributes {
@@ -24,6 +28,8 @@ class Device extends Model<DeviceAttributes, DeviceCreationAttributes> implement
   public firmwareVersion!: string | null;
   public lastCheckIn!: Date | null;
   public status!: 'online' | 'offline' | 'busy';
+  public connectionType!: 'network' | 'usb';
+  public serialPortId!: string | null;
 
   public readonly createdAt!: Date;
   public readonly updatedAt!: Date;
@@ -59,6 +65,15 @@ Device.init(
       type: DataTypes.ENUM('online', 'offline', 'busy'),
       allowNull: false,
       defaultValue: 'offline',
+    },
+    connectionType: {
+      type: DataTypes.ENUM('network', 'usb'),
+      allowNull: false,
+      defaultValue: 'network',
+    },
+    serialPortId: {
+      type: DataTypes.STRING(100),
+      allowNull: true,
     },
   },
   {

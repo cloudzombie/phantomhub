@@ -37,6 +37,15 @@ Device.init({
         allowNull: false,
         defaultValue: 'offline',
     },
+    connectionType: {
+        type: sequelize_1.DataTypes.ENUM('network', 'usb'),
+        allowNull: false,
+        defaultValue: 'network',
+    },
+    serialPortId: {
+        type: sequelize_1.DataTypes.STRING(100),
+        allowNull: true,
+    },
 }, {
     sequelize: database_1.default,
     modelName: 'Device',

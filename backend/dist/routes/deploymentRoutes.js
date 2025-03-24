@@ -17,4 +17,6 @@ router.get('/device/:deviceId', (0, authMiddleware_1.authorize)(['Administrator'
 router.get('/payload/:payloadId', (0, authMiddleware_1.authorize)(['Administrator', 'Operator']), deploymentController_1.getPayloadDeployments);
 // GET user's own deployments - All authenticated users
 router.get('/user/me', deploymentController_1.getUserDeployments);
+// PATCH to update deployment status with real results - All authenticated users
+router.patch('/:id', deploymentController_1.updateDeployment);
 exports.default = router;

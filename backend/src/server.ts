@@ -7,12 +7,17 @@ import http from 'http';
 import { Server as SocketIOServer } from 'socket.io';
 import { connectDB } from './config/database';
 import { errorHandler } from './middleware/errorHandler';
+import os from 'os';
+
+// Track when the server started
+const serverStartTime = new Date();
 
 // Import routes
 import authRoutes from './routes/authRoutes';
 import deviceRoutes from './routes/deviceRoutes';
 import payloadRoutes from './routes/payloadRoutes';
 import deploymentRoutes from './routes/deploymentRoutes';
+import systemRoutes from './routes/systemRoutes';
 
 // Load environment variables
 dotenv.config();
@@ -69,11 +74,93 @@ app.get('/', (req, res) => {
   res.send('PHANTOM HUB API is running');
 });
 
+// Simple health endpoint at the root level (no /api prefix)
+app.get('/health', (req, res) => {
+  try {
+    // Calculate uptime in seconds
+    const uptime = Math.floor((new Date().getTime() - serverStartTime.getTime()) / 1000);
+    
+    // Get memory usage (real stats)
+    const totalMemory = os.totalmem();
+    const freeMemory = os.freemem();
+    const usedMemory = totalMemory - freeMemory;
+    
+    // Get CPU usage (more accurate calculation)
+    const cpuUsage = process.cpuUsage();
+    const totalCPUUsage = cpuUsage.user + cpuUsage.system;
+    // Convert from microseconds to percentage with a reasonable scaling factor
+    const cpuLoad = Math.min(Math.round((totalCPUUsage / 1000000) * 5), 100);
+    
+    // Get active connections 
+    let activeConnections = 0;
+    try {
+      if (io && io.sockets && io.sockets.sockets) {
+        const sockets = io.sockets.sockets;
+        // Different Socket.IO versions have different APIs
+        if (typeof sockets.size === 'number') {
+          // Socket.IO v4+
+          activeConnections = sockets.size;
+        } else if (sockets instanceof Map) {
+          // Socket.IO v3 with Map
+          activeConnections = sockets.size;
+        } else {
+          // Socket.IO v2 with object
+          activeConnections = Object.keys(sockets).length;
+        }
+      }
+    } catch (err) {
+      console.error('Error counting active connections:', err);
+    }
+    
+    // System information
+    const hostname = os.hostname();
+    const platform = os.platform();
+    const cpuInfo = os.cpus()[0]?.model || 'Unknown CPU';
+    const loadAvg = os.loadavg();
+    
+    // Put it all together with enriched data
+    const healthData = {
+      status: 'online',
+      version: 'v1.0.0 Beta',
+      uptime,
+      hostname,
+      platform,
+      cpuInfo,
+      loadAvg: loadAvg.map(load => load.toFixed(2)),
+      memory: {
+        used: Math.round(usedMemory / (1024 * 1024)), // in MB
+        total: Math.round(totalMemory / (1024 * 1024)), // in MB
+        percentage: Math.round((usedMemory / totalMemory) * 100)
+      },
+      activeConnections,
+      responseTime: 0, // This will be calculated on the client side
+      cpuLoad,
+      processes: {
+        pid: process.pid,
+        memoryUsage: Math.round(process.memoryUsage().rss / (1024 * 1024)) // in MB
+      },
+      lastChecked: new Date()
+    };
+    
+    return res.status(200).json({
+      success: true,
+      data: healthData
+    });
+  } catch (error) {
+    console.error('Error fetching system health:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to fetch system health data'
+    });
+  }
+});
+
 // Use route handlers
 app.use('/api/auth', authRoutes);
 app.use('/api/devices', deviceRoutes);
 app.use('/api/payloads', payloadRoutes);
 app.use('/api/deployments', deploymentRoutes);
+app.use('/api/system', systemRoutes);
 
 // Error handling middleware
 app.use(errorHandler);
