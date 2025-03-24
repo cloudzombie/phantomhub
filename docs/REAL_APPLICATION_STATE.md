@@ -254,15 +254,15 @@ This document outlines the plan to implement real device management functionalit
 ## 8. Implementation Checklist
 
 ### Phase 1: User-Device Association
-- [ ] Add `userId` field to Device model to associate devices with specific users (a device belongs to a user)
-- [ ] Add foreign key constraint referencing the users table
-- [ ] Create migration to update existing devices
-- [ ] Modify `getAllDevices` to filter by user ID or role (users see only their own devices)
-- [ ] Update `createDevice` to associate with current user when creating devices
-- [ ] Add permissions check for device operations
-- [ ] Update frontend device fetching to include user information
-- [ ] Update device cards/list to show ownership information
-- [ ] Implement device view filtering based on user permissions
+- [x] Add `userId` field to Device model to associate devices with specific users (a device belongs to a user)
+- [x] Add foreign key constraint referencing the users table
+- [x] Create migration to update existing devices
+- [x] Modify `getAllDevices` to filter by user ID or role (users see only their own devices)
+- [x] Update `createDevice` to associate with current user when creating devices
+- [x] Add permissions check for device operations
+- [x] Update frontend device fetching to include user information
+- [x] Update device cards/list to show ownership information
+- [x] Implement device view filtering based on user permissions
 
 ### Phase 2: Real Device Communication
 - [ ] Research and document the O.MG Cable communication API
