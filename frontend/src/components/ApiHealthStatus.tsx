@@ -71,16 +71,20 @@ const ApiHealthStatus = () => {
       
       console.log('Checking API health at:', `${baseUrl}/health`);
       
-      // Make the API request using ApiService
-      const response = await ApiService.get('/health');
+      // Make the API request directly with axios instead of ApiService
+      // since the health endpoint is outside the API path
+      const axios = ApiService.getAxiosInstance();
+      const response = await axios.get(`${baseUrl}/health`, {
+        baseURL: '' // Override the base URL
+      });
       
       // Calculate response time
       const responseTime = Date.now() - startTime;
       
       // Check if we got a valid response
-      if (response && response.success) {
+      if (response.data && response.data.success) {
         // Update the health data with the response from the API
-        const healthData = response.data;
+        const healthData = response.data.data;
         
         setApiHealth({
           ...healthData,
