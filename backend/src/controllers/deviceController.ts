@@ -1,11 +1,38 @@
 import { Request, Response } from 'express';
 import Device from '../models/Device';
 import axios from 'axios';
+import { AuthRequest } from '../middleware/authMiddleware';
+import User from '../models/User';
 
 // Get all O.MG Cables
-export const getAllDevices = async (req: Request, res: Response) => {
+export const getAllDevices = async (req: AuthRequest, res: Response) => {
   try {
-    const devices = await Device.findAll();
+    const userId = req.user?.id;
+    
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: 'Authentication required',
+      });
+    }
+    
+    // Check if user is an admin or operator (can see all devices)
+    const user = await User.findByPk(userId);
+    
+    let devices;
+    if (user && (user.role === 'Administrator' || user.role === 'Operator')) {
+      // Admins and operators can see all devices
+      devices = await Device.findAll({
+        include: [{ model: User, as: 'owner', attributes: ['id', 'username', 'email'] }]
+      });
+    } else {
+      // Regular users can only see their own devices
+      devices = await Device.findAll({
+        where: { userId },
+        include: [{ model: User, as: 'owner', attributes: ['id', 'username', 'email'] }]
+      });
+    }
+    
     return res.status(200).json({
       success: true,
       data: devices,
@@ -20,15 +47,35 @@ export const getAllDevices = async (req: Request, res: Response) => {
 };
 
 // Get a single O.MG Cable
-export const getDevice = async (req: Request, res: Response) => {
+export const getDevice = async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
-    const device = await Device.findByPk(id);
+    const userId = req.user?.id;
+    
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: 'Authentication required',
+      });
+    }
+    
+    const device = await Device.findByPk(id, {
+      include: [{ model: User, as: 'owner', attributes: ['id', 'username', 'email'] }]
+    });
     
     if (!device) {
       return res.status(404).json({
         success: false,
         message: 'O.MG Cable not found',
+      });
+    }
+    
+    // Check if the device belongs to the user or if user is admin/operator
+    const user = await User.findByPk(userId);
+    if (device.userId !== userId && user?.role !== 'Administrator' && user?.role !== 'Operator') {
+      return res.status(403).json({
+        success: false,
+        message: 'You do not have permission to access this device',
       });
     }
     
@@ -46,9 +93,17 @@ export const getDevice = async (req: Request, res: Response) => {
 };
 
 // Register a new O.MG Cable
-export const createDevice = async (req: Request, res: Response) => {
+export const createDevice = async (req: AuthRequest, res: Response) => {
   try {
     const { name, ipAddress, firmwareVersion, connectionType, serialPortId } = req.body;
+    const userId = req.user?.id;
+    
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: 'Authentication required',
+      });
+    }
     
     // If this is a network device, verify connectivity
     if (connectionType !== 'usb') {
@@ -70,6 +125,7 @@ export const createDevice = async (req: Request, res: Response) => {
       status: connectionType === 'usb' ? 'online' : 'online', // Mark USB devices as online immediately
       connectionType: connectionType || 'network',
       serialPortId: serialPortId || null,
+      userId, // Associate device with current user
     });
     
     // Notify all connected clients via Socket.IO about the new device
@@ -93,10 +149,18 @@ export const createDevice = async (req: Request, res: Response) => {
 };
 
 // Update O.MG Cable status
-export const updateDeviceStatus = async (req: Request, res: Response) => {
+export const updateDeviceStatus = async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
     const { status } = req.body;
+    const userId = req.user?.id;
+    
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: 'Authentication required',
+      });
+    }
     
     const device = await Device.findByPk(id);
     
@@ -104,6 +168,15 @@ export const updateDeviceStatus = async (req: Request, res: Response) => {
       return res.status(404).json({
         success: false,
         message: 'O.MG Cable not found',
+      });
+    }
+    
+    // Check if the device belongs to the user or if user is admin/operator
+    const user = await User.findByPk(userId);
+    if (device.userId !== userId && user?.role !== 'Administrator' && user?.role !== 'Operator') {
+      return res.status(403).json({
+        success: false,
+        message: 'You do not have permission to update this device',
       });
     }
     
@@ -152,10 +225,18 @@ export const updateDeviceStatus = async (req: Request, res: Response) => {
 };
 
 // Send payload to O.MG Cable
-export const sendPayload = async (req: Request, res: Response) => {
+export const sendPayload = async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
     const { payloadId } = req.body;
+    const userId = req.user?.id;
+    
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: 'Authentication required',
+      });
+    }
     
     const device = await Device.findByPk(id);
     
@@ -163,6 +244,15 @@ export const sendPayload = async (req: Request, res: Response) => {
       return res.status(404).json({
         success: false,
         message: 'O.MG Cable not found',
+      });
+    }
+    
+    // Check if the device belongs to the user or if user is admin/operator
+    const user = await User.findByPk(userId);
+    if (device.userId !== userId && user?.role !== 'Administrator' && user?.role !== 'Operator') {
+      return res.status(403).json({
+        success: false,
+        message: 'You do not have permission to send payload to this device',
       });
     }
     

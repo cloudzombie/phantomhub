@@ -1,5 +1,6 @@
 import { Model, DataTypes } from 'sequelize';
 import sequelize from '../config/database';
+import User from './User';
 
 interface DeviceAttributes {
   id: number;
@@ -10,11 +11,13 @@ interface DeviceAttributes {
   status: 'online' | 'offline' | 'busy';
   connectionType: 'network' | 'usb';
   serialPortId: string | null;
+  userId: number;
 }
 
 interface DeviceCreationAttributes {
   name: string;
   ipAddress: string;
+  userId: number;
   firmwareVersion?: string;
   status?: 'online' | 'offline' | 'busy';
   connectionType?: 'network' | 'usb';
@@ -30,6 +33,7 @@ class Device extends Model<DeviceAttributes, DeviceCreationAttributes> implement
   public status!: 'online' | 'offline' | 'busy';
   public connectionType!: 'network' | 'usb';
   public serialPortId!: string | null;
+  public userId!: number;
 
   public readonly createdAt!: Date;
   public readonly updatedAt!: Date;
@@ -75,6 +79,14 @@ Device.init(
       type: DataTypes.STRING(100),
       allowNull: true,
     },
+    userId: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      references: {
+        model: 'users',
+        key: 'id',
+      },
+    },
   },
   {
     sequelize,
@@ -82,5 +94,8 @@ Device.init(
     tableName: 'devices',
   }
 );
+
+// Define association with User
+Device.belongsTo(User, { foreignKey: 'userId', as: 'owner' });
 
 export default Device; 

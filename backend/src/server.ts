@@ -18,6 +18,7 @@ import deviceRoutes from './routes/deviceRoutes';
 import payloadRoutes from './routes/payloadRoutes';
 import deploymentRoutes from './routes/deploymentRoutes';
 import systemRoutes from './routes/systemRoutes';
+import userRoutes from './routes/userRoutes';
 
 // Load environment variables
 dotenv.config();
@@ -161,6 +162,7 @@ app.use('/api/devices', deviceRoutes);
 app.use('/api/payloads', payloadRoutes);
 app.use('/api/deployments', deploymentRoutes);
 app.use('/api/system', systemRoutes);
+app.use('/api/users', userRoutes);
 
 // Error handling middleware
 app.use(errorHandler);
