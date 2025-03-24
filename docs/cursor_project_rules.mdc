@@ -1,0 +1,100 @@
+---
+description: Apply these rules when creating the project
+globs:
+alwaysApply: true
+---
+## Project Overview
+
+* **Type:** Web-based Dashboard Application
+* **Description:** Real-time management, deployment, and monitoring of O.MG Cable payloads with an emphasis on security, scalability, and audit trails.
+* **Primary Goal:** To provide a centralized, user-friendly interface for payload creation, deployment, mission tracking, and results analysis.
+
+## Project Structure
+
+### Framework-Specific Routing
+
+* **Directory Rules:**
+
+    * React Router 6: Utilize `src/routes/` with `createBrowserRouter` for client-side routing.
+    * Example: "React Router 6" → Structure: `src/routes/home.jsx`, `src/routes/dashboard.jsx`
+
+### Core Directories
+
+* **Versioned Structure:**
+
+    * Front-End (`src`): Contains React components, views, and assets.
+        * Example: `src/views` → "React components for UI pages with hooks and state management."
+        * Example: `src/components` → "Reusable UI components such as navigation bars, modals, etc."
+    * Back-End (`server`): Houses the Node.js + Express API routes and business logic.
+        * Example: `server/api` → "Express route handlers for payload deployment and device communication."
+        * Example: `server/models` → "Sequelize ORM models for interacting with the Postgres database."
+
+### Key Files
+
+* **Stack-Versioned Patterns:**
+
+    * Front-End: `src/routes/dashboard.jsx` → "React Router 6 route for the Mission Dashboard with real-time updates integration."
+    * Back-End: `server/app.js` → "Express application initialization and middleware integration."
+    * Configuration: `server/config/db.js` → "Sequelize setup for Postgres connectivity and configuration."
+
+## Tech Stack Rules
+
+* **Version Enforcement:**
+
+    * react-router-dom@6: Use `createBrowserRouter` and nested route structures.
+    * node@18: Ensure compatibility with modern JavaScript features and asynchronous patterns.
+    * express@4: Adhere to middleware usage standards for security, error handling, and routing consistency.
+    * postgres (latest) with sequelize: Utilize ORM best practices to enforce security and query integrity.
+
+## PRD Compliance
+
+* **Non-Negotiable:**
+
+    * "The application must be secure, scalable, and provide detailed audit trails." → All implementations must enforce HTTPS, data encryption at rest, and comprehensive logging including audit trails for payload deployments and user actions.
+
+## App Flow Integration
+
+* **Stack-Aligned Flow:**
+
+    * React Router 6 Auth Flow → `src/routes/auth/login.jsx` integrates secure login (using JWT/OAuth) and role-based access control.
+    * Real-Time Dashboard Flow → `src/routes/dashboard.jsx` leverages WebSocket integration for immediate mission updates from O.MG Cables.
+
+## Best Practices
+
+*   React:
+
+    * Use functional components in combination with React Hooks for efficient state and lifecycle management.
+    * Leverage Context API or Redux for predictable and centralized state management.
+    * Ensure component reusability and maintain clear separation of presentation and business logic.
+    * Apply consistent theming with Material-UI or Tailwind CSS, adhering to the dark theme with neon accents.
+
+*   Node.js + Express:
+
+    * Organize middleware to handle errors, authentication, and logging effectively.
+    * Utilize async/await patterns for asynchronous operations with robust error handling.
+    * Maintain clear RESTful endpoints or a well-structured GraphQL schema for API consistency.
+
+*   Postgres + Sequelize:
+
+    * Employ parameterized queries and ORM validations to prevent SQL injection.
+    * Optimize the database schema to handle complex queries and ensure scalability.
+    * Conduct regular migrations, backups, and security audits to safeguard data integrity.
+
+*   WebSocket:
+
+    * Implement efficient event listeners and reconnection strategies for reliable real-time communication.
+    * Ensure proper error handling and cleanup of WebSocket connections.
+
+*   Security (JWT/OAuth):
+
+    * Enforce secure token storage and transmission practices.
+    * Regularly update dependencies and perform security audits to address vulnerabilities.
+    * Use encryption for sensitive data and enforce HTTPS for all communications.
+
+## Rules
+
+* Derive folder/file patterns directly from techStackDoc versions and the project requirements.
+* If using React Router 6 for routing, enforce the use of the `src/routes/` directory with nested route folders.
+* For the Back-End, maintain a clear separation between API routes (in `server/api`) and business logic.
+* Never mix client-side routing (React Router) with server-side routing; keep Express routes exclusively within the Back-End structure.
+* All implementations must comply with the PRD's non-negotiable requirements regarding security, scalability, and audit logging.
