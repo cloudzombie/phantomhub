@@ -68,13 +68,13 @@ This document outlines the plan to implement real device management functionalit
 ### Phase 1: User-Device Association
 
 1. **Update Device Model**:
-   - Add `userId` field to Device schema
-   - Add foreign key constraint to users table
+   - Add `userId` field to Device model to associate devices with specific users (a device belongs to a user)
+   - Add foreign key constraint referencing the users table
    - Create migration to update existing devices
 
 2. **Update Device Controller**:
-   - Modify `getAllDevices` to filter by user ID or role
-   - Update `createDevice` to associate with current user
+   - Modify `getAllDevices` to filter by user ID or role (users see only their own devices)
+   - Update `createDevice` to associate with current user when creating devices
    - Add permissions check for device operations
 
 3. **Update Frontend Components**:
@@ -158,11 +158,11 @@ This document outlines the plan to implement real device management functionalit
 ## 6. Implementation Checklist
 
 ### Phase 1: User-Device Association
-- [ ] Add `userId` field to Device model
-- [ ] Add foreign key constraint to users table
+- [ ] Add `userId` field to Device model to associate devices with specific users (a device belongs to a user)
+- [ ] Add foreign key constraint referencing the users table
 - [ ] Create migration to update existing devices
-- [ ] Modify `getAllDevices` to filter by user ID or role
-- [ ] Update `createDevice` to associate with current user
+- [ ] Modify `getAllDevices` to filter by user ID or role (users see only their own devices)
+- [ ] Update `createDevice` to associate with current user when creating devices
 - [ ] Add permissions check for device operations
 - [ ] Update frontend device fetching to include user information
 - [ ] Update device cards/list to show ownership information
