@@ -2,6 +2,10 @@ import { Link as RouterLink, Outlet, useLocation } from 'react-router-dom';
 import { FiHome, FiServer, FiCode, FiFileText, FiLogOut, FiShield, FiSettings } from 'react-icons/fi';
 import { useEffect, useState } from 'react';
 import ApiHealthStatus from './ApiHealthStatus';
+import ApiService from '../services/ApiService';
+import NotificationService from '../services/NotificationService';
+import ThemeService from '../services/ThemeService';
+import ThemeToggle from './ui/ThemeToggle';
 
 const Layout = () => {
   const location = useLocation();
@@ -9,6 +13,39 @@ const Layout = () => {
   
   useEffect(() => {
     setActiveRoute(location.pathname);
+    
+    // Listen for API configuration changes
+    const handleApiConfigChange = (event: CustomEvent) => {
+      console.log('API configuration updated:', event.detail);
+      // The ApiService handles this event internally
+    };
+    
+    // Listen for notification settings changes
+    const handleNotificationSettingsChange = (event: CustomEvent) => {
+      console.log('Notification settings updated:', event.detail);
+      // The NotificationService handles this event internally
+    };
+    
+    // Add event listeners
+    document.addEventListener('api-config-changed', handleApiConfigChange as EventListener);
+    document.addEventListener('notification-settings-changed', handleNotificationSettingsChange as EventListener);
+    
+    // Initialize services
+    try {
+      // Connect to notification service when layout is mounted
+      NotificationService.connect();
+    } catch (error) {
+      console.error('Error initializing services:', error);
+    }
+    
+    // Cleanup
+    return () => {
+      document.removeEventListener('api-config-changed', handleApiConfigChange as EventListener);
+      document.removeEventListener('notification-settings-changed', handleNotificationSettingsChange as EventListener);
+      
+      // Disconnect from notification service when layout is unmounted
+      NotificationService.disconnect();
+    };
   }, [location]);
   
   const handleLogout = () => {
@@ -92,6 +129,9 @@ const Layout = () => {
             </div>
           </div>
           <div className="flex items-center">
+            <div className="mr-4">
+              <ThemeToggle compact={true} showLabels={false} />
+            </div>
             <div className="text-xs text-slate-400 py-1 px-2 bg-slate-700/50 rounded border border-slate-600/50">
               <span className="text-green-500 font-medium">admin</span>@phantomhub.io
             </div>
