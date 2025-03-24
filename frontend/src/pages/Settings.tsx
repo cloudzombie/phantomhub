@@ -14,11 +14,9 @@ import {
   FiClock,
   FiShield
 } from 'react-icons/fi';
-
-// Import services
+import ThemeService from '../services/ThemeService';
 import ApiService from '../services/ApiService';
 import NotificationService from '../services/NotificationService';
-import ThemeService from '../services/ThemeService';
 
 // Import UI components
 import ThemeToggle from '../components/ui/ThemeToggle';
@@ -87,51 +85,85 @@ const Settings = () => {
   const [message, setMessage] = useState<{type: 'success' | 'error', text: string} | null>(null);
 
   useEffect(() => {
-    // Load settings from localStorage
-    const storedSettings = localStorage.getItem('phantomhub_settings');
-    if (storedSettings) {
+    // Load settings function
+    const loadSettings = async () => {
       try {
-        const parsedSettings = JSON.parse(storedSettings);
+        console.log('Trying to load settings from API...');
+        // Try to get settings from API first
+        const response = await ApiService.get('/users/settings');
+        console.log('API settings response:', response);
         
-        // Ensure the parsed settings have all required properties with fallbacks
-        const validatedSettings: SettingsState = {
-          theme: parsedSettings.theme || defaultSettings.theme,
-          notifications: {
-            deviceStatus: parsedSettings.notifications?.deviceStatus ?? defaultSettings.notifications.deviceStatus,
-            deploymentAlerts: parsedSettings.notifications?.deploymentAlerts ?? defaultSettings.notifications.deploymentAlerts,
-            systemUpdates: parsedSettings.notifications?.systemUpdates ?? defaultSettings.notifications.systemUpdates,
-            securityAlerts: parsedSettings.notifications?.securityAlerts ?? defaultSettings.notifications.securityAlerts,
-          },
-          api: {
-            endpoint: parsedSettings.api?.endpoint || defaultSettings.api.endpoint,
-            pollingInterval: parsedSettings.api?.pollingInterval || defaultSettings.api.pollingInterval,
-            timeout: parsedSettings.api?.timeout || defaultSettings.api.timeout,
-          },
-          display: {
-            compactView: parsedSettings.display?.compactView ?? defaultSettings.display.compactView,
-            showAdvancedOptions: parsedSettings.display?.showAdvancedOptions ?? defaultSettings.display.showAdvancedOptions,
-            dateFormat: parsedSettings.display?.dateFormat || defaultSettings.display.dateFormat,
-          },
-          security: {
-            autoLogout: parsedSettings.security?.autoLogout || defaultSettings.security.autoLogout,
-            requireConfirmation: parsedSettings.security?.requireConfirmation ?? defaultSettings.security.requireConfirmation,
-          }
-        };
-        
-        setSettings(validatedSettings);
-        setSavedSettings(validatedSettings);
-        
-        // Apply auto logout settings (with fallback)
-        setupAutoLogout(validatedSettings.security.autoLogout);
+        if (response && response.success && response.data) {
+          // Apply validated settings from API
+          console.log('Setting state with API settings');
+          setSettings(response.data);
+          setSavedSettings(response.data);
+          
+          // Apply auto logout settings
+          setupAutoLogout(response.data.security.autoLogout);
+        } else {
+          console.log('API settings not found or invalid, falling back to localStorage');
+          // Fall back to localStorage if API fails
+          loadFromLocalStorage();
+        }
       } catch (error) {
-        console.error('Error parsing stored settings:', error);
-        // If parse error, use default settings
+        console.error('Error loading settings from API:', error);
+        // Fall back to localStorage
+        console.log('Falling back to localStorage due to API error');
+        loadFromLocalStorage();
+      }
+    };
+    
+    // Helper function to load from localStorage
+    const loadFromLocalStorage = () => {
+      const storedSettings = localStorage.getItem('phantomhub_settings');
+      if (storedSettings) {
+        try {
+          const parsedSettings = JSON.parse(storedSettings);
+          
+          // Ensure the parsed settings have all required properties with fallbacks
+          const validatedSettings: SettingsState = {
+            theme: parsedSettings.theme || defaultSettings.theme,
+            notifications: {
+              deviceStatus: parsedSettings.notifications?.deviceStatus ?? defaultSettings.notifications.deviceStatus,
+              deploymentAlerts: parsedSettings.notifications?.deploymentAlerts ?? defaultSettings.notifications.deploymentAlerts,
+              systemUpdates: parsedSettings.notifications?.systemUpdates ?? defaultSettings.notifications.systemUpdates,
+              securityAlerts: parsedSettings.notifications?.securityAlerts ?? defaultSettings.notifications.securityAlerts,
+            },
+            api: {
+              endpoint: parsedSettings.api?.endpoint || defaultSettings.api.endpoint,
+              pollingInterval: parsedSettings.api?.pollingInterval || defaultSettings.api.pollingInterval,
+              timeout: parsedSettings.api?.timeout || defaultSettings.api.timeout,
+            },
+            display: {
+              compactView: parsedSettings.display?.compactView ?? defaultSettings.display.compactView,
+              showAdvancedOptions: parsedSettings.display?.showAdvancedOptions ?? defaultSettings.display.showAdvancedOptions,
+              dateFormat: parsedSettings.display?.dateFormat || defaultSettings.display.dateFormat,
+            },
+            security: {
+              autoLogout: parsedSettings.security?.autoLogout || defaultSettings.security.autoLogout,
+              requireConfirmation: parsedSettings.security?.requireConfirmation ?? defaultSettings.security.requireConfirmation,
+            }
+          };
+          
+          setSettings(validatedSettings);
+          setSavedSettings(validatedSettings);
+          
+          // Apply auto logout settings (with fallback)
+          setupAutoLogout(validatedSettings.security.autoLogout);
+        } catch (error) {
+          console.error('Error parsing stored settings:', error);
+          // If parse error, use default settings
+          setupAutoLogout(defaultSettings.security.autoLogout);
+        }
+      } else {
+        // If no stored settings, use defaults
         setupAutoLogout(defaultSettings.security.autoLogout);
       }
-    } else {
-      // If no stored settings, use defaults
-      setupAutoLogout(defaultSettings.security.autoLogout);
-    }
+    };
+    
+    // Start loading process
+    loadSettings();
     
     // Listen for theme changes
     const handleThemeChange = (config: typeof themeConfig) => {
@@ -195,12 +227,27 @@ const Settings = () => {
   };
   
   // Save and apply all settings
-  const handleSaveSettings = () => {
+  const handleSaveSettings = async () => {
     setIsLoading(true);
     setMessage(null);
 
     try {
-      // Save settings to localStorage
+      // First, try to save settings to the API
+      try {
+        console.log('Saving settings to API:', settings);
+        const response = await ApiService.post('/users/settings', settings);
+        console.log('API response:', response);
+        
+        if (!response.success) {
+          console.warn('API save failed, falling back to localStorage only');
+          // We'll continue and save to localStorage as a fallback
+        }
+      } catch (apiError) {
+        console.error('Error saving to API:', apiError);
+        // Continue with localStorage as a fallback
+      }
+      
+      // Always save to localStorage as a fallback
       localStorage.setItem('phantomhub_settings', JSON.stringify(settings));
       setSavedSettings(settings);
       
