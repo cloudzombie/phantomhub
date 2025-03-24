@@ -99,6 +99,14 @@ This document outlines the plan to implement real device management functionalit
    - Implement device information display
    - Add device connection troubleshooting tools
 
+4. **DuckyScript Implementation**:
+   - Implement DuckyScript editor with syntax highlighting
+   - Add DuckyScript validation and payload testing features
+   - Create library of common DuckyScript commands and templates
+   - Support USB HID protocol for keystroke injection
+   - Implement firmware version checking and update process
+   - Add Wi-Fi configuration interface for remote management
+
 ### Phase 3: Real-time Status and Monitoring
 
 1. **Implement Device Status Service**:
@@ -116,7 +124,59 @@ This document outlines the plan to implement real device management functionalit
    - Add detailed device activity logs
    - Implement alert system for device status changes
 
-## 4. Technical Considerations
+## 4. O.MG Cable Protocol Details
+
+### DuckyScript Implementation
+1. **Payload Execution Language**:
+   - O.MG Elite Cable uses DuckyScript as its primary communication language for executing payloads
+   - DuckyScript enables keystroke injection attacks (simulating keyboard inputs on target devices)
+   - The Elite model supports speeds up to 890 keys per second
+   
+2. **DuckyScript Commands**:
+   - Simple, human-readable syntax resembling keyboard commands
+   - Includes delays, special keys (ENTER, CTRL, etc.), and text strings
+   - Example payload actions: opening terminals, typing commands, executing programs
+   
+3. **Payload Development**:
+   - Web-based interface for writing and deploying scripts directly
+   - No recompilation or reprogramming required for payload updates
+   - Our application should support creating, editing, and deploying DuckyScript payloads
+
+### Hardware Communication
+1. **USB Interface**:
+   - O.MG Cable presents itself as a USB HID (Human Interface Device)
+   - Does not use traditional serial communication for the attack vector
+   - Delivers payloads via USB HID reports that mimic keystrokes
+   
+2. **Serial/Debug Connections**:
+   - During firmware updates or advanced configuration, serial connections may be used
+   - The microcontroller (likely ESP8266 or similar) has UART pins that support serial communication
+   - Serial interfaces (via USB-to-serial) might be used when flashing firmware
+   - Typical baud rate: 115200
+   
+3. **Wi-Fi Capabilities**:
+   - Built-in Wi-Fi module for remote command-and-control
+   - Web UI accessible at 192.168.4.1 when in access point mode
+   - Uses HTTP for web interface and can establish encrypted tunnels for remote control
+   - Uses standard networking protocols (TCP/IP) over Wi-Fi
+
+### Integration Requirements
+1. **WebSerial API Implementation**:
+   - Our WebSerial implementation must handle the correct USB HID protocol
+   - Needs proper error handling for connection issues
+   - Should support firmware version detection and updates
+   
+2. **DuckyScript Editor**:
+   - Add support for proper syntax highlighting
+   - Implement payload validation
+   - Include a library of common DuckyScript commands and payloads
+   
+3. **Firmware Updates**:
+   - Support firmware checking via the O.MG Cable's API
+   - Implement secure firmware update process
+   - Handle version compatibility checks
+
+## 5. Technical Considerations
 
 1. **Security**:
    - Ensure device communications are encrypted
@@ -138,7 +198,7 @@ This document outlines the plan to implement real device management functionalit
    - Implement connection queuing for high-demand scenarios
    - Consider database indexing for performance at scale
 
-## 5. Testing Strategy
+## 6. Testing Strategy
 
 1. **Unit Tests**:
    - Test device model associations
@@ -155,7 +215,7 @@ This document outlines the plan to implement real device management functionalit
    - Test complete deployment workflows
    - Verify multi-user scenarios 
 
-## 6. Implementation Checklist
+## 7. Implementation Checklist
 
 ### Phase 1: User-Device Association
 - [ ] Add `userId` field to Device model to associate devices with specific users (a device belongs to a user)
@@ -178,6 +238,12 @@ This document outlines the plan to implement real device management functionalit
 - [ ] Add device firmware updating capabilities
 - [ ] Implement comprehensive device information display
 - [ ] Create device connection troubleshooting tools
+- [ ] Implement DuckyScript editor with syntax highlighting
+- [ ] Add DuckyScript validation and payload testing features
+- [ ] Create library of common DuckyScript commands and templates
+- [ ] Support USB HID protocol for keystroke injection
+- [ ] Implement firmware version checking and update process
+- [ ] Add Wi-Fi configuration interface for remote management
 
 ### Phase 3: Real-time Status and Monitoring
 - [ ] Create background service for polling device status
