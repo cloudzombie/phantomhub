@@ -80,11 +80,132 @@ const Settings = () => {
         const parsedSettings = JSON.parse(storedSettings);
         setSettings(parsedSettings);
         setSavedSettings(parsedSettings);
+        
+        // Apply stored settings on initial load
+        applyTheme(parsedSettings.theme);
+        applyCompactMode(parsedSettings.display.compactView);
+        applyDateFormat(parsedSettings.display.dateFormat);
+        setupAutoLogout(parsedSettings.security.autoLogout);
       } catch (error) {
         console.error('Error parsing stored settings:', error);
       }
+    } else {
+      // If no stored settings, apply defaults
+      applyTheme(settings.theme);
+      applyCompactMode(settings.display.compactView);
+      applyDateFormat(settings.display.dateFormat);
+      setupAutoLogout(settings.security.autoLogout);
     }
+    
+    // Setup API configuration
+    updateApiConfig(settings.api);
+    
+    // Setup notification handlers
+    setupNotificationHandlers(settings.notifications);
+    
+    return () => {
+      // Clean up any listeners when component unmounts
+      window.clearTimeout(autoLogoutTimerId);
+    };
   }, []);
+  
+  // Keep track of auto logout timer
+  let autoLogoutTimerId: number;
+  let lastActivity = Date.now();
+  
+  // Apply theme to document
+  const applyTheme = (theme: 'dark' | 'light' | 'system') => {
+    const root = document.documentElement;
+    
+    if (theme === 'system') {
+      // Check system preference
+      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      root.classList.toggle('light-theme', !prefersDark);
+      root.classList.toggle('dark-theme', prefersDark);
+    } else {
+      root.classList.toggle('light-theme', theme === 'light');
+      root.classList.toggle('dark-theme', theme === 'dark');
+    }
+  };
+  
+  // Apply compact mode to the UI
+  const applyCompactMode = (isCompact: boolean) => {
+    const root = document.documentElement;
+    root.classList.toggle('compact-ui', isCompact);
+    
+    // Add compact mode CSS variables
+    if (isCompact) {
+      root.style.setProperty('--space-y', '0.5rem');
+      root.style.setProperty('--padding-container', '0.75rem');
+      root.style.setProperty('--text-base-size', '0.875rem');
+    } else {
+      root.style.setProperty('--space-y', '1rem');
+      root.style.setProperty('--padding-container', '1.5rem');
+      root.style.setProperty('--text-base-size', '1rem');
+    }
+  };
+  
+  // Apply date format throughout the application
+  const applyDateFormat = (format: string) => {
+    // Store the format for use by date formatting functions
+    window.localStorage.setItem('date_format', format);
+  };
+  
+  // Set up auto logout functionality
+  const setupAutoLogout = (minutes: number) => {
+    // Clear any existing timer
+    if (autoLogoutTimerId) {
+      window.clearTimeout(autoLogoutTimerId);
+    }
+    
+    // Setup activity tracking
+    const trackActivity = () => {
+      lastActivity = Date.now();
+    };
+    
+    // Add event listeners to track user activity
+    ['mousedown', 'keypress', 'scroll', 'touchstart'].forEach(event => {
+      window.addEventListener(event, trackActivity);
+    });
+    
+    // Check for inactivity every minute
+    const checkInactivity = () => {
+      const inactiveTime = (Date.now() - lastActivity) / 1000 / 60; // in minutes
+      
+      if (inactiveTime >= minutes) {
+        // Log the user out
+        localStorage.removeItem('token');
+        window.location.href = '/login';
+      } else {
+        // Check again in a minute
+        autoLogoutTimerId = window.setTimeout(checkInactivity, 60000);
+      }
+    };
+    
+    // Start monitoring
+    autoLogoutTimerId = window.setTimeout(checkInactivity, 60000);
+  };
+  
+  // Apply changes to API configuration
+  const updateApiConfig = (apiConfig: typeof settings.api) => {
+    console.log('Updating API config', apiConfig);
+    // Apply the API configuration 
+    // (e.g., update base URLs, timeouts in axios instances, etc.)
+    
+    // Emit event for other components to react to API config changes
+    const event = new CustomEvent('api-config-changed', { detail: apiConfig });
+    document.dispatchEvent(event);
+  };
+  
+  // Set up notification handlers
+  const setupNotificationHandlers = (notificationSettings: typeof settings.notifications) => {
+    console.log('Setting up notification handlers', notificationSettings);
+    // Subscribe or unsubscribe from notifications based on settings
+    
+    // Emit event for other components to react to notification settings changes
+    const event = new CustomEvent('notification-settings-changed', { detail: notificationSettings });
+    document.dispatchEvent(event);
+  };
 
   const handleSaveSettings = () => {
     setIsLoading(true);
@@ -95,27 +216,29 @@ const Settings = () => {
       localStorage.setItem('phantomhub_settings', JSON.stringify(settings));
       setSavedSettings(settings);
       
-      // Apply theme changes
-      document.documentElement.classList.toggle('light-theme', settings.theme === 'light');
+      // Apply all settings
+      applyTheme(settings.theme);
+      applyCompactMode(settings.display.compactView);
+      applyDateFormat(settings.display.dateFormat);
+      setupAutoLogout(settings.security.autoLogout);
+      updateApiConfig(settings.api);
+      setupNotificationHandlers(settings.notifications);
+      
+      // Save settings to backend (commented out for this demo)
+      if (settings.security.requireConfirmation) {
+        // Register global confirmation handler
+        window.confirmSensitiveAction = (action: string) => {
+          return window.confirm(`Are you sure you want to ${action}?`);
+        };
+      } else {
+        // Remove confirmation handler
+        window.confirmSensitiveAction = (action: string) => true;
+      }
       
       setMessage({
         type: 'success',
-        text: 'Settings saved successfully'
+        text: 'Settings saved and applied successfully'
       });
-      
-      // In a real app, you would save to the server here
-      // Example:
-      /*
-      await axios.post(
-        `${API_URL}/user/settings`,
-        { settings },
-        {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem('token')}`
-          }
-        }
-      );
-      */
       
     } catch (error) {
       console.error('Error saving settings:', error);

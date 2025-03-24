@@ -9,6 +9,28 @@ const Layout = () => {
   
   useEffect(() => {
     setActiveRoute(location.pathname);
+    
+    // Listen for API configuration changes
+    const handleApiConfigChange = (event: CustomEvent) => {
+      console.log('API configuration updated:', event.detail);
+      // Update any services that depend on API configuration
+    };
+    
+    // Listen for notification settings changes
+    const handleNotificationSettingsChange = (event: CustomEvent) => {
+      console.log('Notification settings updated:', event.detail);
+      // Update notification subscriptions
+    };
+    
+    // Add event listeners
+    document.addEventListener('api-config-changed', handleApiConfigChange as EventListener);
+    document.addEventListener('notification-settings-changed', handleNotificationSettingsChange as EventListener);
+    
+    // Cleanup
+    return () => {
+      document.removeEventListener('api-config-changed', handleApiConfigChange as EventListener);
+      document.removeEventListener('notification-settings-changed', handleNotificationSettingsChange as EventListener);
+    };
   }, [location]);
   
   const handleLogout = () => {
