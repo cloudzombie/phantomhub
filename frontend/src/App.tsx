@@ -5,6 +5,7 @@ import Login from './pages/Login';
 import DeviceManagement from './pages/DeviceManagement';
 import PayloadEditor from './pages/PayloadEditor';
 import ResultsViewer from './pages/ResultsViewer';
+import Settings from './pages/Settings';
 import { useEffect, useState } from 'react';
 
 // Create a simple authentication context
@@ -58,6 +59,7 @@ function App() {
         <Route path="devices" element={<DeviceManagement />} />
         <Route path="payload-editor" element={<PayloadEditor />} />
         <Route path="results" element={<ResultsViewer />} />
+        <Route path="settings" element={<Settings />} />
       </Route>
     </Routes>
   );
