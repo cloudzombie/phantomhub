@@ -316,3 +316,52 @@ This document outlines the plan to implement real device management functionalit
 - [ ] Simulate real device connections
 - [ ] Test complete deployment workflows
 - [ ] Verify multi-user scenarios 
+
+## 9. Pre-Hardware Testing Plan
+
+Since the actual O.MG Elite cable will not be available for physical testing until Monday next week, we need to implement a thorough testing strategy to ensure everything works correctly when the hardware arrives.
+
+### Additional Verification Steps
+
+1. **Thorough Backend Testing**:
+   - [ ] Create unit tests for the user-device association
+   - [ ] Test all permission scenarios (regular user, operator, admin)
+   - [ ] Verify error handling for unauthorized access
+   - [ ] Test the migration on a test database
+
+2. **Mock Device Testing**:
+   - [ ] Implement a mock O.MG Cable server that simulates cable responses
+   - [ ] Test device connectivity without actual hardware
+   - [ ] Verify the WebSerial API implementation works with mock devices
+
+3. **Edge Case Handling**:
+   - [ ] Test error recovery when device connection is lost
+   - [ ] Ensure proper handling of firmware version differences
+   - [ ] Test with different DuckyScript payloads to ensure compatibility
+
+4. **Documentation**:
+   - [ ] Document the actual O.MG Elite Cable protocol details for implementation
+   - [ ] Create troubleshooting guide for common connectivity issues
+   - [ ] Ensure setup instructions are clear for when the device arrives
+
+### Priority Tasks Before Hardware Arrival
+
+1. **Complete Phase 2 (Real Device Communication)**:
+   - High priority: WebSerial utilities with proper O.MG Cable protocol
+   - Critical: Error handling based on known cable behavior
+   - Required: Mock device responses for testing
+
+2. **Improve DuckyScript Support**:
+   - Expand the library of common DuckyScript commands
+   - Test various payload scenarios
+   - Ensure command validation is comprehensive
+
+3. **Add Comprehensive Logging**:
+   - Implement detailed logging for all device interactions
+   - Create debug mode for troubleshooting connection issues
+   - Add logging for all critical operations
+
+4. **Setup Guide for First Use**:
+   - Create a step-by-step guide for connecting the first O.MG Cable
+   - Document the expected behavior during connection
+   - Prepare troubleshooting tips for common issues 
