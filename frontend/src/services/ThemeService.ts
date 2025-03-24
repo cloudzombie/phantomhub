@@ -73,25 +73,15 @@ class ThemeService {
     if (this.config.theme === 'system') {
       // Check system preference
       const prefersDark = this.systemPreferenceMediaQuery.matches;
-      root.classList.toggle('light-theme', !prefersDark);
-      root.classList.toggle('dark-theme', prefersDark);
+      root.classList.remove('light-theme', 'dark-theme');
+      root.classList.add(prefersDark ? 'dark-theme' : 'light-theme');
     } else {
-      root.classList.toggle('light-theme', this.config.theme === 'light');
-      root.classList.toggle('dark-theme', this.config.theme === 'dark');
+      root.classList.remove('light-theme', 'dark-theme');
+      root.classList.add(this.config.theme === 'light' ? 'light-theme' : 'dark-theme');
     }
     
-    // Add CSS variables based on theme
-    if (root.classList.contains('dark-theme')) {
-      root.style.setProperty('--bg-primary', '#0f172a');
-      root.style.setProperty('--bg-secondary', '#1e293b');
-      root.style.setProperty('--text-primary', '#f8fafc');
-      root.style.setProperty('--text-secondary', '#94a3b8');
-    } else {
-      root.style.setProperty('--bg-primary', '#f8fafc');
-      root.style.setProperty('--bg-secondary', '#e2e8f0');
-      root.style.setProperty('--text-primary', '#0f172a');
-      root.style.setProperty('--text-secondary', '#64748b');
-    }
+    // Log the theme change for debugging
+    console.log('Theme applied:', root.classList.contains('dark-theme') ? 'dark' : 'light');
   }
 
   private applyCompactMode(): void {

@@ -12,6 +12,30 @@
   --color-gray-850: #0F1520;
   --color-brand: #00F260;
   --color-accent: #0575E6;
+  
+  /* Theme variables */
+  --bg-primary: #0f172a;
+  --bg-secondary: #1e293b;
+  --text-primary: #f8fafc;
+  --text-secondary: #94a3b8;
+}
+
+/* Dark theme (default) */
+.dark-theme {
+  --bg-primary: #0f172a;
+  --bg-secondary: #1e293b;
+  --text-primary: #f8fafc;
+  --text-secondary: #94a3b8;
+  color-scheme: dark;
+}
+
+/* Light theme */
+.light-theme {
+  --bg-primary: #f8fafc;
+  --bg-secondary: #e2e8f0;
+  --text-primary: #0f172a;
+  --text-secondary: #64748b;
+  color-scheme: light;
 }
 
 /* Reset CSS */
@@ -23,8 +47,8 @@
 
 html, body, #root, .app-root {
   font-family: 'Inter', system-ui, sans-serif;
-  background-color: var(--color-darker);
-  color: white;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
   height: 100%;
   width: 100%;
   margin: 0;
@@ -38,9 +62,10 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   background: 
-    radial-gradient(circle at 50% 50%, rgba(10, 14, 20, 0.8) 0%, rgba(7, 10, 15, 0.95) 100%),
+    radial-gradient(circle at 50% 50%, var(--bg-primary) 0%, var(--bg-secondary) 100%),
     linear-gradient(180deg, rgba(0, 242, 96, 0.05) 0%, rgba(0, 0, 0, 0) 100%);
   background-attachment: fixed;
+  transition: background-color 0.3s ease;
 }
 
 table {
