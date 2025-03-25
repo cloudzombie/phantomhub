@@ -299,7 +299,7 @@ const PayloadEditor = () => {
     }
   };
   
-  const deletePayload = async (id: string) => {
+  const deletePayload = async (payloadId: string) => {
     try {
       setIsLoading(true);
       
@@ -310,7 +310,7 @@ const PayloadEditor = () => {
         return;
       }
       
-      const response = await axios.delete(`${API_URL}/payloads/${id}`, {
+      const response = await axios.delete(`${API_URL}/payloads/${payloadId}`, {
         headers: {
           Authorization: `Bearer ${token}`
         }
@@ -319,13 +319,19 @@ const PayloadEditor = () => {
       if (response.data && response.data.success) {
         setMessage({
           type: 'success',
-          text: 'Payload deleted successfully!'
+          text: 'Payload deleted successfully'
         });
-        fetchPayloads();
         
-        // If we deleted the currently selected payload, reset to a new one
-        if (selectedPayload && selectedPayload.id === id) {
-          createNewPayload();
+        // Remove the deleted payload from the state
+        setPayloads(prevPayloads => prevPayloads.filter(payload => payload.id !== payloadId));
+        
+        // If the deleted payload was selected, clear the selection
+        if (selectedPayload && selectedPayload.id === payloadId) {
+          setSelectedPayload(null);
+          setPayloadName('New Payload');
+          if (editorRef.current) {
+            editorRef.current.setValue('REM DuckyScript Payload Template\nREM Replace with your own commands\n\nDELAY 1000\nSTRING Your payload commands here\nENTER');
+          }
         }
       } else {
         setMessage({
@@ -347,6 +353,14 @@ const PayloadEditor = () => {
       }
     } finally {
       setIsLoading(false);
+    }
+  };
+  
+  const handleDeleteClick = (payload: Payload, e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent triggering the payload selection
+    
+    if (window.confirm(`Are you sure you want to delete "${payload.name}"? This action cannot be undone.`)) {
+      deletePayload(payload.id);
     }
   };
   
@@ -1030,7 +1044,53 @@ const PayloadEditor = () => {
           </div>
         </div>
         
-        {/* Payload List */}
+        {/* Payload Grid */}
+        <div className="mb-4">
+          <h3 className="text-sm font-medium text-slate-300 mb-2">Saved Payloads</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            {payloads.length > 0 ? (
+              payloads.map(payload => (
+                <div 
+                  key={payload.id}
+                  className={`border border-slate-700 rounded-md bg-slate-800 hover:bg-slate-700/30 ${
+                    selectedPayload?.id === payload.id ? 'border-blue-500/50 bg-blue-500/5' : ''
+                  }`}
+                >
+                  <div className="p-3">
+                    <div className="flex justify-between items-start mb-2">
+                      <h4 
+                        className="font-medium text-white cursor-pointer hover:text-blue-400 truncate max-w-[80%]" 
+                        onClick={() => loadPayload(payload)}
+                        title={payload.name}
+                      >
+                        {payload.name}
+                      </h4>
+                      <button
+                        onClick={(e) => handleDeleteClick(payload, e)}
+                        className="p-1 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded"
+                        title="Delete Payload"
+                      >
+                        <FiTrash2 size={14} />
+                      </button>
+                    </div>
+                    {payload.description && (
+                      <div className="text-xs text-slate-400 mb-2 line-clamp-2">{payload.description}</div>
+                    )}
+                    <div className="text-xs text-slate-500">
+                      Last updated: {new Date(payload.updatedAt).toLocaleString()}
+                    </div>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="col-span-3 text-center p-4 border border-slate-700 rounded-md bg-slate-800/50">
+                <p className="text-slate-400">No payloads saved yet. Create and save a payload to get started.</p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Payload List (Hidden by default, shown when "Payloads" button is clicked) */}
         {showPayloadList && (
           <div className="bg-slate-800 border border-slate-700 rounded-md shadow-sm mb-4 overflow-hidden">
             <div className="border-b border-slate-700 px-4 py-2 font-medium text-white">Saved Payloads</div>
@@ -1040,14 +1100,22 @@ const PayloadEditor = () => {
                   <li
                     key={payload.id}
                     className="border-b border-slate-700 last:border-none hover:bg-slate-700/30 cursor-pointer"
-                    onClick={() => loadPayload(payload)}
                   >
-                    <div className="px-4 py-2">
-                      <div className="font-medium text-white">{payload.name}</div>
-                      {payload.description && (
-                        <div className="text-xs text-slate-400 mt-1">{payload.description}</div>
-                      )}
-                      <div className="text-xs text-slate-500 mt-1">Last updated: {new Date(payload.updatedAt).toLocaleString()}</div>
+                    <div className="px-4 py-2 flex justify-between items-center">
+                      <div onClick={() => loadPayload(payload)} className="flex-1 cursor-pointer">
+                        <div className="font-medium text-white">{payload.name}</div>
+                        {payload.description && (
+                          <div className="text-xs text-slate-400 mt-1">{payload.description}</div>
+                        )}
+                        <div className="text-xs text-slate-500 mt-1">Last updated: {new Date(payload.updatedAt).toLocaleString()}</div>
+                      </div>
+                      <button
+                        onClick={(e) => handleDeleteClick(payload, e)}
+                        className="p-2 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded"
+                        title="Delete Payload"
+                      >
+                        <FiTrash2 size={16} />
+                      </button>
                     </div>
                   </li>
                 ))
@@ -1057,7 +1125,7 @@ const PayloadEditor = () => {
             </ul>
           </div>
         )}
-
+        
         {/* Script List */}
         {showScriptList && (
           <div className="bg-slate-800 border border-slate-700 rounded-md shadow-sm mb-4 overflow-hidden">
