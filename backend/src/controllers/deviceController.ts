@@ -4,23 +4,41 @@ import axios from 'axios';
 import { AuthRequest } from '../middleware/auth';
 import User from '../models/User';
 import logger from '../utils/logger';
+import DeviceConnectionPool from '../services/deviceConnectionPool';
 
 // API timeout for device communication (milliseconds)
 const API_TIMEOUT = 5000;
 
-// Helper function to check device connectivity
+// Helper function to check device connectivity using the connection pool
 const checkDeviceConnectivity = async (device: Device): Promise<boolean> => {
   try {
     if (device.connectionType === 'network') {
-      // For network devices, try to ping the device
-      await axios.get(`http://${device.ipAddress}/api/ping`, { timeout: API_TIMEOUT });
-      return true;
+      // For network devices, use the connection pool
+      const connectionPool = DeviceConnectionPool.getInstance();
+      const client = await connectionPool.acquireConnection(device);
+      
+      if (!client) {
+        logger.error(`Failed to acquire connection for device ${device.id}`);
+        return false;
+      }
+      
+      try {
+        // Use the pooled connection to ping the device
+        await client.get('/ping');
+        return true;
+      } catch (error) {
+        logger.error(`Failed to ping device ${device.id}:`, error);
+        return false;
+      } finally {
+        // Always release the connection back to the pool
+        connectionPool.releaseConnection(device.id);
+      }
     } else {
       // For USB devices, we'll return true as connectivity is managed from the frontend via WebSerial
       return true;
     }
   } catch (error) {
-    logger.error(`Failed to connect to device at ${device.ipAddress}:`, error);
+    logger.error(`Failed to connect to device ${device.name} (${device.id}):`, error);
     return false;
   }
 };
@@ -180,14 +198,22 @@ export const createDevice = async (req: AuthRequest, res: Response) => {
     // If this is a network device, verify connectivity
     if (connectionType === 'network') {
       try {
-        // Use the actual O.MG Cable API endpoint for connectivity check
-        const response = await axios.get(`http://${ipAddress}/api/ping`, { timeout: API_TIMEOUT });
+        // Create device object for connectivity check
+        const tempDevice = {
+          id: 'temp-' + Date.now(),
+          name,
+          connectionType,
+          ipAddress,
+          userId
+        } as Device;
         
-        // Only proceed if the device responds with a successful status
-        if (response.status !== 200) {
+        // Use the connection pool to verify connectivity
+        const isConnected = await checkDeviceConnectivity(tempDevice);
+        
+        if (!isConnected) {
           return res.status(400).json({
             success: false,
-            message: 'Could not communicate with the O.MG Cable at the specified IP address',
+            message: 'Could not connect to the O.MG Cable at the specified IP address',
           });
         }
       } catch (err) {

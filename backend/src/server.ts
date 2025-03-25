@@ -9,6 +9,8 @@ import { initializeDatabase } from './config/database';
 import { errorHandler } from './middleware/errorHandler';
 import os from 'os';
 import { sequelize } from './config/database';
+import DeviceConnectionPool from './services/deviceConnectionPool';
+import logger from './utils/logger';
 
 // Track when the server started
 const serverStartTime = new Date();
@@ -230,6 +232,17 @@ const startServer = async () => {
   try {
     // Initialize database first
     await initializeDatabase();
+    
+    // Initialize device connection pool
+    const connectionPool = DeviceConnectionPool.getInstance({
+      maxConnections: process.env.CONNECTION_POOL_MAX_CONNECTIONS ? 
+        parseInt(process.env.CONNECTION_POOL_MAX_CONNECTIONS) : 20,
+      connectionTTL: process.env.CONNECTION_POOL_TTL ? 
+        parseInt(process.env.CONNECTION_POOL_TTL) : 5 * 60 * 1000,
+      idleTimeout: process.env.CONNECTION_POOL_IDLE_TIMEOUT ? 
+        parseInt(process.env.CONNECTION_POOL_IDLE_TIMEOUT) : 60 * 1000
+    });
+    logger.info('Device connection pool initialized');
     
     // Start server
     server.listen(PORT, () => {
