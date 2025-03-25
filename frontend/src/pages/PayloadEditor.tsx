@@ -926,8 +926,8 @@ const PayloadEditor = () => {
         </div>
         
         <div className="mt-4 flex flex-col lg:flex-row gap-4">
-          <div className="flex flex-col lg:flex-row gap-2 lg:items-center">
-            <div className="relative flex-1 min-w-[300px]">
+          <div className="flex flex-col lg:flex-row gap-2 lg:items-center flex-1">
+            <div className="relative flex-1 min-w-[250px]">
               <div className="border border-slate-600 rounded-md p-2 flex items-center space-x-2 bg-slate-800">
                 <FiCode className="text-slate-400" size={16} />
                 <input
@@ -940,62 +940,96 @@ const PayloadEditor = () => {
               </div>
             </div>
             
-            <div className="flex items-center space-x-2">
-              <button
-                onClick={savePayload}
-                disabled={isLoading}
-                className="flex items-center px-3 py-2 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/30 rounded-md text-blue-500 text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            <div className="relative min-w-[200px]">
+              <select
+                value={selectedDevice}
+                onChange={(e) => setSelectedDevice(e.target.value)}
+                className="w-full px-3 py-2 border bg-slate-800 border-slate-600 rounded-md text-white focus:outline-none"
               >
-                {isLoading ? <FiRefreshCw className="mr-2 animate-spin" size={16} /> : <FiSave className="mr-2" size={16} />}
-                Save
-              </button>
-              
-              <button
-                onClick={() => setShowPayloadList(!showPayloadList)}
-                disabled={isLoading}
-                className="flex items-center px-3 py-2 bg-slate-700 hover:bg-slate-600 border border-slate-600 rounded-md text-white text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <FiCode className="mr-2" size={16} />
-                Payloads
-              </button>
-              
-              <button
-                onClick={deployToDevice}
-                disabled={isLoading}
-                className="flex items-center px-3 py-2 bg-green-500/10 hover:bg-green-500/20 border border-green-500/30 rounded-md text-green-500 text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {isLoading ? <FiRefreshCw className="mr-2 animate-spin" size={16} /> : <FiZap className="mr-2" size={16} />}
-                Deploy to Device
-              </button>
+                <option value="" disabled>Select a device</option>
+                {devices.filter(d => d.status === 'online').map(device => (
+                  <option key={device.id} value={device.id.toString()}>
+                    {getDeviceDisplayName(device)}
+                  </option>
+                ))}
+                {devices.filter(d => d.status === 'online').length === 0 && (
+                  <option value="" disabled>No online devices available</option>
+                )}
+              </select>
             </div>
           </div>
           
-          {selectedDevice && (
-            <div className="flex items-center justify-between lg:justify-end px-3 py-1 bg-slate-700/30 rounded-md">
-              <div className="flex items-center">
-                {(() => {
-                  const device = devices.find(d => d.id.toString() === selectedDevice);
-                  return (
-                    <>
-                      <div className={`w-2 h-2 rounded-full mr-2 ${device?.status === 'online' ? 'bg-green-500' : 'bg-red-500'}`}></div>
-                      <span className="text-sm text-slate-300">{getDeviceDisplayName(device!)}</span>
-                    </>
-                  );
-                })()}
-              </div>
-              
-              <button
-                onClick={() => setSelectedDevice('')}
-                className="ml-2 text-slate-400 hover:text-white"
-              >
-                <FiX size={14} />
-              </button>
-            </div>
-          )}
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={savePayload}
+              disabled={isLoading}
+              className="flex items-center px-3 py-2 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/30 rounded-md text-blue-500 text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isLoading ? <FiRefreshCw className="mr-2 animate-spin" size={16} /> : <FiSave className="mr-2" size={16} />}
+              Save
+            </button>
+            
+            <button
+              onClick={() => setShowPayloadList(!showPayloadList)}
+              disabled={isLoading}
+              className="flex items-center px-3 py-2 bg-slate-700 hover:bg-slate-600 border border-slate-600 rounded-md text-white text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <FiCode className="mr-2" size={16} />
+              Payloads
+            </button>
+            
+            <button
+              onClick={deployToDevice}
+              disabled={isLoading || !selectedDevice}
+              className="flex items-center px-3 py-2 bg-green-500/10 hover:bg-green-500/20 border border-green-500/30 rounded-md text-green-500 text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isLoading ? <FiRefreshCw className="mr-2 animate-spin" size={16} /> : <FiZap className="mr-2" size={16} />}
+              Deploy
+            </button>
+          </div>
         </div>
+        
+        {/* Selected Device Indicator */}
+        {selectedDevice && (
+          <div className="mt-2 flex items-center px-3 py-1.5 bg-slate-700/30 rounded-md w-fit">
+            <div className="flex items-center">
+              {(() => {
+                const device = devices.find(d => d.id.toString() === selectedDevice);
+                return device ? (
+                  <>
+                    <div className={`w-2 h-2 rounded-full mr-2 ${device.status === 'online' ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                    <span className="text-sm text-slate-300">Selected: {getDeviceDisplayName(device)}</span>
+                  </>
+                ) : null;
+              })()}
+            </div>
+          </div>
+        )}
       </div>
       
       <div className="flex-1 flex flex-col min-h-0">
+        {/* Script Management Row - Placed directly under the header */}
+        <div className="flex justify-between items-center mb-4">
+          <div className="text-lg font-semibold text-white">Payload Library</div>
+          <div className="flex space-x-2">
+            <button
+              onClick={() => setShowScriptList(!showScriptList)}
+              className="flex items-center px-3 py-2 bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/30 rounded-md text-purple-400 text-sm font-medium transition-colors"
+            >
+              <FiList className="mr-2" size={16} />
+              {showScriptList ? 'Hide Scripts' : 'Manage Scripts'}
+            </button>
+            
+            <button
+              onClick={() => setShowScriptModal(true)}
+              className="flex items-center px-3 py-2 bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/30 rounded-md text-indigo-400 text-sm font-medium transition-colors"
+            >
+              <FiPlusCircle className="mr-2" size={16} />
+              New Script
+            </button>
+          </div>
+        </div>
+        
         {/* Payload List */}
         {showPayloadList && (
           <div className="bg-slate-800 border border-slate-700 rounded-md shadow-sm mb-4 overflow-hidden">
@@ -1024,28 +1058,6 @@ const PayloadEditor = () => {
           </div>
         )}
 
-        {/* Script Management Row - Moved above the editor */}
-        <div className="flex justify-between items-center mb-4">
-          <div className="text-lg font-semibold text-white">Payload Library</div>
-          <div className="flex space-x-2">
-            <button
-              onClick={() => setShowScriptList(!showScriptList)}
-              className="flex items-center px-3 py-2 bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/30 rounded-md text-purple-400 text-sm font-medium transition-colors"
-            >
-              <FiList className="mr-2" size={16} />
-              {showScriptList ? 'Hide Scripts' : 'Manage Scripts'}
-            </button>
-            
-            <button
-              onClick={() => setShowScriptModal(true)}
-              className="flex items-center px-3 py-2 bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/30 rounded-md text-indigo-400 text-sm font-medium transition-colors"
-            >
-              <FiPlusCircle className="mr-2" size={16} />
-              New Script
-            </button>
-          </div>
-        </div>
-        
         {/* Script List */}
         {showScriptList && (
           <div className="bg-slate-800 border border-slate-700 rounded-md shadow-sm mb-4 overflow-hidden">
