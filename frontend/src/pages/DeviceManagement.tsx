@@ -21,7 +21,13 @@ import {
 import DeviceInfoPanel from '../components/DeviceInfoPanel';
 
 // We need to define SerialPort interface here since we're using it only for type casting
+interface SerialPortInfo {
+  usbVendorId?: number;
+  usbProductId?: number;
+}
+
 interface SerialPort {
+  getInfo(): SerialPortInfo;
   open: (options: any) => Promise<void>;
   close: () => Promise<void>;
   readable: ReadableStream<Uint8Array> | null;
@@ -310,7 +316,12 @@ const DeviceManagement = () => {
     }
   };
   
-  const getStatusBadge = (status: string) => {
+  const getStatusBadge = (status: string, device: Device) => {
+    // For test devices, always show as offline unless explicitly set to online
+    if (device.name.toLowerCase().includes('test') && status !== 'online') {
+      return <span className="px-2 py-1 text-xs font-medium rounded-full bg-red-500/20 text-red-400 border border-red-500/30">Offline</span>;
+    }
+    
     switch (status) {
       case 'online':
         return <span className="px-2 py-1 text-xs font-medium rounded-full bg-green-500/20 text-green-400 border border-green-500/30">Online</span>;
@@ -474,7 +485,7 @@ const DeviceManagement = () => {
                       {device.owner ? device.owner.username : 'Unknown'}
                     </td>
                     <td className="px-4 py-3 text-slate-300 text-sm">{formatDateTime(device.lastCheckIn)}</td>
-                    <td className="px-4 py-3">{getStatusBadge(device.status)}</td>
+                    <td className="px-4 py-3">{getStatusBadge(device.status, device)}</td>
                     <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                       <div className="flex space-x-1">
                         <button
