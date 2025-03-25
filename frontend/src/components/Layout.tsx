@@ -10,7 +10,7 @@ import ThemeToggle from './ui/ThemeToggle';
 const Layout = () => {
   const location = useLocation();
   const [activeRoute, setActiveRoute] = useState('/');
-  const [currentUser, setCurrentUser] = useState<{name?: string, email?: string, role?: string} | null>(null);
+  const [currentUser, setCurrentUser] = useState<{name?: string, email?: string, role?: string, id?: string} | null>(null);
   
   useEffect(() => {
     setActiveRoute(location.pathname);
@@ -61,8 +61,19 @@ const Layout = () => {
   }, [location]);
   
   const handleLogout = () => {
+    // Clear user-specific settings before logout
+    if (currentUser && currentUser.id) {
+      localStorage.removeItem(`phantomhub_settings_${currentUser.id}`);
+    }
+    
+    // Use the ApiService to clear settings properly
+    ApiService.clearUserSettings();
+    
+    // Remove auth data
     localStorage.removeItem('token');
     localStorage.removeItem('user');
+    
+    // Redirect to login page
     window.location.href = '/login';
   };
   

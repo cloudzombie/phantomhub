@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { FiLogIn, FiShield, FiAlertCircle, FiCheckCircle } from 'react-icons/fi';
 import axios from 'axios';
+import ApiService from '../services/ApiService';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001/api';
 
@@ -18,13 +19,16 @@ const Login = () => {
     setSuccessMessage('');
 
     try {
+      // Clear any previous user's settings to ensure fresh start
+      ApiService.clearUserSettings();
+      
       const response = await axios.post(`${API_URL}/auth/login`, {
         email,
         password
       });
 
       if (response.data && response.data.token) {
-        // Store token in localStorage
+        // Store token and user data in localStorage
         localStorage.setItem('token', response.data.token);
         localStorage.setItem('user', JSON.stringify(response.data.user));
         

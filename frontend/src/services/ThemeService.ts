@@ -42,9 +42,27 @@ class ThemeService {
     return ThemeService.instance;
   }
 
+  private getCurrentUserId(): string | null {
+    try {
+      const userData = localStorage.getItem('user');
+      if (userData) {
+        const user = JSON.parse(userData);
+        return user.id || null;
+      }
+    } catch (error) {
+      console.error('Error getting current user ID:', error);
+    }
+    return null;
+  }
+
+  private getSettingsKey(): string {
+    const userId = this.getCurrentUserId();
+    return userId ? `phantomhub_settings_${userId}` : 'phantomhub_settings';
+  }
+
   private loadStoredConfig(): void {
     try {
-      const storedSettings = localStorage.getItem('phantomhub_settings');
+      const storedSettings = localStorage.getItem(this.getSettingsKey());
       if (storedSettings) {
         const settings = JSON.parse(storedSettings);
         if (settings.theme) {
@@ -149,7 +167,8 @@ class ThemeService {
   // Method to save theme changes to localStorage within the full settings object
   public saveToSettings(): void {
     try {
-      const storedSettings = localStorage.getItem('phantomhub_settings');
+      const settingsKey = this.getSettingsKey();
+      const storedSettings = localStorage.getItem(settingsKey);
       if (storedSettings) {
         const settings = JSON.parse(storedSettings);
         settings.theme = this.config.theme;
@@ -158,7 +177,7 @@ class ThemeService {
         }
         settings.display.compactView = this.config.compactView;
         settings.display.dateFormat = this.config.dateFormat;
-        localStorage.setItem('phantomhub_settings', JSON.stringify(settings));
+        localStorage.setItem(settingsKey, JSON.stringify(settings));
       } else {
         // Create new settings object if none exists
         const newSettings = {
@@ -169,7 +188,7 @@ class ThemeService {
             showAdvancedOptions: true
           }
         };
-        localStorage.setItem('phantomhub_settings', JSON.stringify(newSettings));
+        localStorage.setItem(settingsKey, JSON.stringify(newSettings));
       }
     } catch (error) {
       console.error('Error saving theme settings to localStorage:', error);

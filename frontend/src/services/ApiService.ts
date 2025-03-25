@@ -51,9 +51,27 @@ class ApiService {
     return ApiService.instance;
   }
 
+  private getCurrentUserId(): string | null {
+    try {
+      const userData = localStorage.getItem('user');
+      if (userData) {
+        const user = JSON.parse(userData);
+        return user.id || null;
+      }
+    } catch (error) {
+      console.error('Error getting current user ID:', error);
+    }
+    return null;
+  }
+
+  private getSettingsKey(): string {
+    const userId = this.getCurrentUserId();
+    return userId ? `phantomhub_settings_${userId}` : 'phantomhub_settings';
+  }
+
   private loadStoredConfig(): void {
     try {
-      const storedSettings = localStorage.getItem('phantomhub_settings');
+      const storedSettings = localStorage.getItem(this.getSettingsKey());
       if (storedSettings) {
         const settings = JSON.parse(storedSettings);
         if (settings.api) {
@@ -63,6 +81,14 @@ class ApiService {
     } catch (error) {
       console.error('Error loading stored API configuration:', error);
     }
+  }
+
+  public clearUserSettings(): void {
+    const userId = this.getCurrentUserId();
+    if (userId) {
+      localStorage.removeItem(`phantomhub_settings_${userId}`);
+    }
+    localStorage.removeItem('phantomhub_settings'); // Remove legacy settings as well
   }
 
   private handleConfigChange = (event: CustomEvent<ApiConfig>): void => {

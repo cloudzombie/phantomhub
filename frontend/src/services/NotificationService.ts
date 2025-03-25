@@ -41,9 +41,27 @@ class NotificationService {
     return NotificationService.instance;
   }
 
+  private getCurrentUserId(): string | null {
+    try {
+      const userData = localStorage.getItem('user');
+      if (userData) {
+        const user = JSON.parse(userData);
+        return user.id || null;
+      }
+    } catch (error) {
+      console.error('Error getting current user ID:', error);
+    }
+    return null;
+  }
+
+  private getSettingsKey(): string {
+    const userId = this.getCurrentUserId();
+    return userId ? `phantomhub_settings_${userId}` : 'phantomhub_settings';
+  }
+
   private loadStoredSettings(): void {
     try {
-      const storedSettings = localStorage.getItem('phantomhub_settings');
+      const storedSettings = localStorage.getItem(this.getSettingsKey());
       if (storedSettings) {
         const settings = JSON.parse(storedSettings);
         if (settings.notifications) {

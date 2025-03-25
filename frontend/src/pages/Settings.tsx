@@ -84,6 +84,26 @@ const Settings = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState<{type: 'success' | 'error', text: string} | null>(null);
 
+  // Helper function to get current user ID
+  const getCurrentUserId = (): string | null => {
+    try {
+      const userData = localStorage.getItem('user');
+      if (userData) {
+        const user = JSON.parse(userData);
+        return user.id || null;
+      }
+    } catch (error) {
+      console.error('Error getting current user ID:', error);
+    }
+    return null;
+  };
+
+  // Helper function to get settings key
+  const getSettingsKey = (): string => {
+    const userId = getCurrentUserId();
+    return userId ? `phantomhub_settings_${userId}` : 'phantomhub_settings';
+  };
+
   useEffect(() => {
     // Load settings function
     const loadSettings = async () => {
@@ -116,7 +136,8 @@ const Settings = () => {
     
     // Helper function to load from localStorage
     const loadFromLocalStorage = () => {
-      const storedSettings = localStorage.getItem('phantomhub_settings');
+      const settingsKey = getSettingsKey();
+      const storedSettings = localStorage.getItem(settingsKey);
       if (storedSettings) {
         try {
           const parsedSettings = JSON.parse(storedSettings);
@@ -213,8 +234,15 @@ const Settings = () => {
       const inactiveTime = (Date.now() - lastActivity) / 1000 / 60; // in minutes
       
       if (inactiveTime >= minutes) {
+        // Clear user-specific settings before logout
+        const userId = getCurrentUserId();
+        if (userId) {
+          localStorage.removeItem(`phantomhub_settings_${userId}`);
+        }
+        
         // Log the user out
         localStorage.removeItem('token');
+        localStorage.removeItem('user');
         window.location.href = '/login';
       } else {
         // Check again in a minute
@@ -248,54 +276,45 @@ const Settings = () => {
       }
       
       // Always save to localStorage as a fallback
-      localStorage.setItem('phantomhub_settings', JSON.stringify(settings));
-      setSavedSettings(settings);
+      const settingsKey = getSettingsKey();
+      localStorage.setItem(settingsKey, JSON.stringify(settings));
       
-      // Apply all settings using services
+      // Apply theme settings
       ThemeService.setTheme(settings.theme);
       ThemeService.setCompactView(settings.display.compactView);
       ThemeService.setDateFormat(settings.display.dateFormat);
       
-      // Update API configuration
-      const event = new CustomEvent('api-config-changed', { detail: settings.api });
-      document.dispatchEvent(event);
+      // Update API service config
+      const apiConfigChangeEvent = new CustomEvent('api-config-changed', {
+        detail: settings.api
+      });
+      document.dispatchEvent(apiConfigChangeEvent);
       
       // Update notification settings
-      const notifyEvent = new CustomEvent('notification-settings-changed', { detail: settings.notifications });
-      document.dispatchEvent(notifyEvent);
+      const notificationSettingsChangeEvent = new CustomEvent('notification-settings-changed', {
+        detail: settings.notifications
+      });
+      document.dispatchEvent(notificationSettingsChangeEvent);
       
-      // Update auto logout
+      // Apply auto logout settings
       setupAutoLogout(settings.security.autoLogout);
       
-      // Save settings to backend (commented out for this demo)
-      if (settings.security.requireConfirmation) {
-        // Register global confirmation handler
-        window.confirmSensitiveAction = (action: string) => {
-          return window.confirm(`Are you sure you want to ${action}?`);
-        };
-      } else {
-        // Remove confirmation handler
-        window.confirmSensitiveAction = (action: string) => true;
-      }
+      // Update saved state reference
+      setSavedSettings({...settings});
       
+      // Show success message
       setMessage({
         type: 'success',
-        text: 'Settings saved and applied successfully'
+        text: 'Settings saved successfully'
       });
-      
     } catch (error) {
       console.error('Error saving settings:', error);
       setMessage({
         type: 'error',
-        text: 'Failed to save settings. Please try again.'
+        text: 'Failed to save settings'
       });
     } finally {
       setIsLoading(false);
-      
-      // Clear success message after 3 seconds
-      if (message?.type === 'success') {
-        setTimeout(() => setMessage(null), 3000);
-      }
     }
   };
 
