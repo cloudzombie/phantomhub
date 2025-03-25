@@ -940,6 +940,58 @@ const PayloadEditor = () => {
     }
   };
   
+  // Add a new function to delete a script
+  const deleteScript = async (scriptId: string) => {
+    try {
+      setIsLoading(true);
+      
+      const token = localStorage.getItem('token');
+      if (!token) {
+        console.error('No authentication token found');
+        return;
+      }
+      
+      const response = await axios.delete(`${API_URL}/scripts/${scriptId}`, {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+      
+      if (response.data && response.data.success) {
+        // Remove the deleted script from state
+        setScripts(scripts.filter(script => script.id !== scriptId));
+        
+        // Also remove from selected scripts if it was selected
+        if (selectedScripts.includes(scriptId)) {
+          setSelectedScripts(selectedScripts.filter(id => id !== scriptId));
+        }
+        
+        setMessage({
+          type: 'success',
+          text: 'Script deleted successfully'
+        });
+      }
+    } catch (error) {
+      console.error('Error deleting script:', error);
+      setMessage({
+        type: 'error',
+        text: 'Failed to delete script'
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Function to handle the delete confirmation
+  const handleScriptDeleteClick = (scriptId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    
+    // Show confirmation dialog
+    if (window.confirm('Are you sure you want to delete this script? This action cannot be undone.')) {
+      deleteScript(scriptId);
+    }
+  };
+  
   return (
     <div className="flex flex-col h-full p-6">
       <div className="border-b border-slate-700 pb-6 mb-6">
@@ -1155,6 +1207,13 @@ const PayloadEditor = () => {
                                 <FiLink size={16} />
                               </button>
                             )}
+                            <button
+                              onClick={(e) => handleScriptDeleteClick(script.id, e)}
+                              className="p-1 text-red-400 hover:text-red-300"
+                              title="Delete script"
+                            >
+                              <FiTrash2 size={16} />
+                            </button>
                           </div>
                         </td>
                       </tr>
