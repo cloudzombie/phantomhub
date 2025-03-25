@@ -165,10 +165,10 @@ const Layout = () => {
             <div className="mr-4">
               <ThemeToggle compact={true} showLabels={false} />
             </div>
-            <div className="flex items-center py-1 px-2 rounded bg-slate-800/80 border border-slate-700/50">
-              <FiUser size={14} className="mr-2 text-green-500" />
+            <div className="flex items-center py-1 px-2 rounded bg-purple-500/10 border border-purple-500/30">
+              <FiUser size={14} className="mr-2 text-purple-500" />
               {currentUser ? (
-                <span className="text-xs text-green-500 font-medium">{currentUser.email || 'User'}</span>
+                <span className="text-xs text-purple-500 font-medium">{currentUser.email || 'User'}</span>
               ) : (
                 <span className="text-xs text-slate-400">Not logged in</span>
               )}
