@@ -365,3 +365,126 @@ Since the actual O.MG Elite cable will not be available for physical testing unt
    - Create a step-by-step guide for connecting the first O.MG Cable
    - Document the expected behavior during connection
    - Prepare troubleshooting tips for common issues 
+
+## 10. Enhanced Feature Roadmap
+
+This section outlines additional features that would enhance the user experience and make the application more powerful for security professionals using O.MG cables.
+
+### Script Execution Features
+
+1. **Script Testing Environment**:
+   - Add a "Test Script" button to execute scripts in the sandbox directly from the UI
+   - Show real-time logs and output when testing scripts
+   - Allow simulated callbacks for testing exfiltration scripts
+
+2. **Script Templates Library**:
+   - Provide pre-built script templates for common scenarios (data collection, callback formats)
+   - Allow users to save their own templates for future use
+   - Include documentation on each template explaining its purpose and usage
+
+3. **Script Version Control**:
+   - Track script revisions and allow users to revert to previous versions
+   - Provide diff views to compare script changes between versions
+   - Auto-save feature with revision history
+
+### Payload Management Improvements
+
+1. **Payload Categories and Tags**:
+   - Allow users to organize payloads with categories and tags
+   - Implement filters and search functionality for the payload library
+   - Add sorting options (most used, recently updated, alphabetical)
+
+2. **Payload Cloning**:
+   - Add ability to duplicate and modify existing payloads
+   - Include a "Save As New" option when editing payloads
+   - Allow copying payload+script associations between payloads
+
+3. **Batch Operations**:
+   - Select multiple payloads for batch actions (delete, export, deploy)
+   - Bulk script association to multiple payloads
+   - Mass update of payload properties
+
+### Device Integration Features
+
+1. **Device Grouping**:
+   - Allow creation of device groups for deployment targets
+   - Schedule payloads to deploy to groups of devices
+   - Save favorite device selections for quick access
+
+2. **Deployment Scheduling**:
+   - Schedule payload deployments for specific times
+   - Create recurring deployment schedules
+   - Set conditions for deployments (e.g., when device connects)
+
+3. **Deployment Chaining**:
+   - Create sequences of payloads to deploy in order
+   - Set condition-based flow between payloads (if/then deployment logic)
+   - Visual workflow builder for complex deployment scenarios
+
+### Advanced Scripting Capabilities
+
+1. **Script Parameterization**:
+   - Add support for variables/parameters in scripts
+   - Allow setting parameters at deployment time
+   - Create reusable scripts with different parameter sets
+
+2. **Script Dependencies**:
+   - Define dependencies between scripts
+   - Automatically include required scripts when deploying
+   - Visualize script dependency relationships
+
+3. **Script Libraries**:
+   - Import external script libraries
+   - Package multiple scripts together as a collection
+   - Share script libraries between team members
+
+### Analytics and Monitoring
+
+1. **Execution Analytics**:
+   - Dashboard showing script execution statistics
+   - Visual graphs of most used scripts and success rates
+   - Alerts for script execution failures
+
+2. **Callback Visualization**:
+   - Interactive timeline of callback events
+   - Geographic visualization of callback sources
+   - Data aggregation from multiple callbacks
+
+3. **Execution Logs**:
+   - Detailed logs of all script executions
+   - Filtering and search capabilities for logs
+   - Export logs for compliance and reporting
+
+### Security and Collaboration
+
+1. **Script Approval Workflow**:
+   - Add review and approval process for scripts
+   - Multi-level permissions for script deployment
+   - Audit trails for script changes and approvals
+
+2. **Team Collaboration**:
+   - Comments and discussions on scripts
+   - Shared script libraries with team-specific access
+   - Notifications for script changes and updates
+
+3. **Role-Based Script Access**:
+   - Granular permissions for script operations
+   - Custom roles for script management
+   - Time-limited access to sensitive scripts
+
+### Integration and Export
+
+1. **Script Import/Export**:
+   - Support for importing scripts from various formats
+   - Export scripts and payloads as packages
+   - Bulk import/export functionality
+
+2. **API Integration**:
+   - Webhook notifications for script events
+   - Improved callback URL configuration with templates
+   - Integration with external security tools
+
+3. **Documentation Generator**:
+   - Auto-generate documentation for scripts
+   - Create deployment runbooks from scripts
+   - Export script collections as documentation 
