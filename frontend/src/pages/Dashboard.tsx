@@ -1,20 +1,21 @@
 import { useEffect, useState } from 'react';
-import { FiServer, FiCode, FiActivity, FiCheckCircle, FiInfo, FiAlertCircle, FiRefreshCw } from 'react-icons/fi';
+import { FiServer, FiCode, FiActivity, FiCheckCircle, FiInfo, FiAlertCircle, FiRefreshCw, FiX } from 'react-icons/fi';
 import axios from 'axios';
-import { io } from 'socket.io-client';
+import { io, Socket } from 'socket.io-client';
+import DeviceInfoPanel from '../components/DeviceInfoPanel';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001/api';
 const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:5001';
 
 interface Device {
-  id: number;
+  id: string;
   name: string;
-  ipAddress: string;
-  status: string;
+  status: 'online' | 'offline' | 'busy' | 'maintenance';
   lastCheckIn: string | null;
-  firmwareVersion: string;
-  createdAt: string;
-  updatedAt: string;
+  firmwareVersion: string | null;
+  connectionType: 'usb' | 'network';
+  serialPortId?: string;
+  ipAddress?: string;
 }
 
 interface Deployment {
@@ -55,6 +56,7 @@ interface Stats {
 const Dashboard = () => {
   const [devices, setDevices] = useState<Device[]>([]);
   const [recentDeployments, setRecentDeployments] = useState<Deployment[]>([]);
+  const [selectedDevice, setSelectedDevice] = useState<Device | null>(null);
   const [stats, setStats] = useState<Stats>({
     activeDevices: 0,
     totalPayloads: 0,
@@ -189,6 +191,14 @@ const Dashboard = () => {
     });
   };
 
+  const handleViewDeviceDetails = (device: Device) => {
+    setSelectedDevice(device);
+  };
+  
+  const handleCloseDeviceDetails = () => {
+    setSelectedDevice(null);
+  };
+
   return (
     <div className="p-6">
       {/* Page Title */}
@@ -286,7 +296,11 @@ const Dashboard = () => {
         ) : (
           <div className="divide-y divide-slate-700/50">
             {devices.map(device => (
-              <div key={device.id} className="flex items-center justify-between px-4 py-3 hover:bg-slate-700/10">
+              <div 
+                key={device.id} 
+                className="flex items-center justify-between px-4 py-3 hover:bg-slate-700/10 cursor-pointer"
+                onClick={() => handleViewDeviceDetails(device)}
+              >
                 <div className="flex items-center">
                   <div className={`w-2 h-2 rounded-full mr-3 ${
                     (device.name.toLowerCase().includes('test') && !device.lastCheckIn) 
@@ -431,6 +445,46 @@ const Dashboard = () => {
           </div>
         </div>
       </div>
+
+      {/* Device Info Panel Modal */}
+      {selectedDevice && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-slate-800 border border-slate-700 rounded-lg shadow-lg w-full max-w-4xl p-6 relative max-h-[90vh] overflow-y-auto">
+            <button 
+              onClick={handleCloseDeviceDetails}
+              className="absolute top-3 right-3 text-slate-400 hover:text-white"
+            >
+              <FiX size={18} />
+            </button>
+            <div className="mb-5">
+              <h2 className="text-lg font-medium text-white">{selectedDevice.name} Details</h2>
+              <p className="text-sm text-slate-400">View detailed information about this O.MG Cable</p>
+            </div>
+            
+            <DeviceInfoPanel 
+              deviceInfo={{
+                port: {} as any, // Mock SerialPort object
+                reader: null,
+                writer: null,
+                connectionStatus: selectedDevice.status === 'online' ? 'connected' : 'disconnected',
+                info: {
+                  name: selectedDevice.name,
+                  firmwareVersion: selectedDevice.firmwareVersion,
+                  deviceId: selectedDevice.id.toString(),
+                  capabilities: {
+                    usbHid: true,
+                    wifi: selectedDevice.connectionType === 'network',
+                    bluetooth: false,
+                    storage: "4MB",
+                    supportedFeatures: ['DuckyScript', 'Payloads']
+                  }
+                }
+              }} 
+              onRefresh={() => fetchData()}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 };
