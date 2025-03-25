@@ -317,11 +317,15 @@ const PayloadEditor = () => {
         return;
       }
       
+      console.log(`Deleting payload with ID: ${payloadId}`);
+      
       const response = await axios.delete(`${API_URL}/payloads/${payloadId}`, {
         headers: {
           Authorization: `Bearer ${token}`
         }
       });
+      
+      console.log('Delete payload response:', response.data);
       
       if (response.data && response.data.success) {
         setMessage({
@@ -337,7 +341,7 @@ const PayloadEditor = () => {
           setSelectedPayload(null);
           setPayloadName('New Payload');
           if (editorRef.current) {
-            editorRef.current.setValue('REM DuckyScript Payload Template\nREM Replace with your own commands\n\nDELAY 1000\nSTRING Your payload commands here\nENTER');
+            editorRef.current.setValue(DEFAULT_DUCKY_SCRIPT);
           }
         }
       } else {
@@ -958,11 +962,15 @@ const PayloadEditor = () => {
         return;
       }
       
+      console.log(`Deleting script with ID: ${scriptId}`);
+      
       const response = await axios.delete(`${API_URL}/scripts/${scriptId}`, {
         headers: {
           Authorization: `Bearer ${token}`
         }
       });
+      
+      console.log('Delete script response:', response.data);
       
       if (response.data && response.data.success) {
         // Remove the deleted script from state

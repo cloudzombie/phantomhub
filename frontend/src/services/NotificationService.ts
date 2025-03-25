@@ -17,6 +17,8 @@ class NotificationService {
   private settings: NotificationSettings;
   private subscribers: Map<NotificationType, Set<NotificationCallback>> = new Map();
   private isConnected: boolean = false;
+  private connectionAttempts: number = 0;
+  private maxConnectionAttempts: number = 5;
 
   private constructor() {
     // Default settings
@@ -101,34 +103,83 @@ class NotificationService {
 
   public connect(): void {
     if (this.socket) {
-      return; // Already connected or connecting
+      // If we already have a socket but it's not connected, try to reconnect
+      if (!this.isConnected) {
+        this.socket.connect();
+      }
+      return;
     }
 
-    const apiConfig = ApiService.getConfig();
-    const socketUrl = apiConfig.endpoint.replace('/api', ''); // Remove /api from the endpoint
+    // Get API endpoint from environment variable directly
+    const socketUrl = import.meta.env.VITE_SOCKET_URL || 'http://localhost:5001';
     
     console.log('NotificationService: Connecting to socket server at', socketUrl);
     
     this.socket = io(socketUrl, {
-      reconnectionAttempts: 5,
+      reconnectionAttempts: this.maxConnectionAttempts,
       reconnectionDelay: 1000,
-      autoConnect: true
+      autoConnect: true,
+      transports: ['polling', 'websocket'] // Try polling first, then websocket
     });
 
     this.socket.on('connect', () => {
       console.log('NotificationService: Socket connected');
       this.isConnected = true;
+      this.connectionAttempts = 0;
+      
+      // Authenticate the socket connection
+      this.authenticateSocket();
+      
+      // Configure notifications after successful connection
       this.configureNotifications();
     });
 
-    this.socket.on('disconnect', () => {
-      console.log('NotificationService: Socket disconnected');
+    this.socket.on('connect_error', (error) => {
+      console.error('NotificationService: Connection error', error);
+      this.connectionAttempts++;
+      
+      if (this.connectionAttempts >= this.maxConnectionAttempts) {
+        console.warn('NotificationService: Max connection attempts reached, falling back to polling mode');
+        // We've already configured the socket to use polling as fallback
+      }
+    });
+
+    this.socket.on('disconnect', (reason) => {
+      console.log('NotificationService: Socket disconnected', reason);
       this.isConnected = false;
+      
+      // If the server disconnected us, try to reconnect
+      if (reason === 'io server disconnect') {
+        this.socket?.connect();
+      }
     });
 
     this.socket.on('error', (error) => {
       console.error('NotificationService: Socket error', error);
     });
+    
+    this.socket.on('auth_error', (error) => {
+      console.error('NotificationService: Authentication error', error);
+      // Retry authentication after delay
+      setTimeout(() => this.authenticateSocket(), 3000);
+    });
+    
+    this.socket.on('authenticated', () => {
+      console.log('NotificationService: Socket authenticated successfully');
+    });
+  }
+
+  private authenticateSocket(): void {
+    if (!this.socket || !this.isConnected) return;
+    
+    const token = localStorage.getItem('token');
+    if (!token) {
+      console.warn('NotificationService: No token available for socket authentication');
+      return;
+    }
+    
+    console.log('NotificationService: Authenticating socket connection');
+    this.socket.emit('authenticate', { token });
   }
 
   public disconnect(): void {
@@ -144,26 +195,31 @@ class NotificationService {
       return;
     }
 
+    // Remove all existing listeners first
+    this.socket.off('device_status_changed');
+    this.socket.off('deployment_status_changed');
+    this.socket.off('payload_status_update');
+    this.socket.off('system_update_available');
+    this.socket.off('security_alert');
+
     // Set up device status notifications
     if (this.settings.deviceStatus) {
       this.socket.on('device_status_changed', (data) => {
+        console.log('Received device status update:', data);
         this.notifySubscribers('device_status', data);
       });
-    } else {
-      this.socket.off('device_status_changed');
     }
 
     // Set up deployment notifications
     if (this.settings.deploymentAlerts) {
       this.socket.on('deployment_status_changed', (data) => {
+        console.log('Received deployment status update:', data);
         this.notifySubscribers('deployment', data);
       });
       this.socket.on('payload_status_update', (data) => {
+        console.log('Received payload status update:', data);
         this.notifySubscribers('deployment', data);
       });
-    } else {
-      this.socket.off('deployment_status_changed');
-      this.socket.off('payload_status_update');
     }
 
     // Set up system update notifications
@@ -171,8 +227,6 @@ class NotificationService {
       this.socket.on('system_update_available', (data) => {
         this.notifySubscribers('system_update', data);
       });
-    } else {
-      this.socket.off('system_update_available');
     }
 
     // Set up security notifications
@@ -180,8 +234,6 @@ class NotificationService {
       this.socket.on('security_alert', (data) => {
         this.notifySubscribers('security', data);
       });
-    } else {
-      this.socket.off('security_alert');
     }
   }
 
