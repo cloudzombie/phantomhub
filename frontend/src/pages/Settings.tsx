@@ -1,11 +1,9 @@
 import { useState, useEffect } from 'react';
-import axios from 'axios';
 import { 
   FiSave, 
   FiCheckCircle, 
   FiAlertCircle, 
   FiToggleLeft, 
-  FiToggleRight, 
   FiSettings, 
   FiMoon,
   FiSun,
@@ -16,8 +14,15 @@ import {
   FiClock,
   FiShield
 } from 'react-icons/fi';
+import ThemeService from '../services/ThemeService';
+import ApiService from '../services/ApiService';
+import NotificationService from '../services/NotificationService';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001/api';
+// Import UI components
+import ThemeToggle from '../components/ui/ThemeToggle';
+import ToggleSwitch from '../components/ui/ToggleSwitch';
+import SettingItem from '../components/ui/SettingItem';
+import SettingsGroup from '../components/ui/SettingsGroup';
 
 interface SettingsState {
   theme: 'dark' | 'light' | 'system';
@@ -44,8 +49,14 @@ interface SettingsState {
 }
 
 const Settings = () => {
-  const [settings, setSettings] = useState<SettingsState>({
-    theme: 'dark',
+  // Initialize settings state from services
+  const themeConfig = ThemeService.getConfig();
+  const apiConfig = ApiService.getConfig();
+  const notificationConfig = NotificationService.getSettings();
+
+  // Ensure all settings have default values to prevent undefined errors
+  const defaultSettings: SettingsState = {
+    theme: themeConfig.theme,
     notifications: {
       deviceStatus: true,
       deploymentAlerts: true,
@@ -53,103 +64,132 @@ const Settings = () => {
       securityAlerts: true,
     },
     api: {
-      endpoint: API_URL,
+      endpoint: apiConfig.endpoint,
       pollingInterval: 60,
       timeout: 30,
     },
     display: {
-      compactView: false,
+      compactView: themeConfig.compactView,
       showAdvancedOptions: true,
-      dateFormat: 'MM/DD/YYYY',
+      dateFormat: themeConfig.dateFormat,
     },
     security: {
       autoLogout: 30,
       requireConfirmation: true,
     }
-  });
-  
+  };
+
+  const [settings, setSettings] = useState<SettingsState>(defaultSettings);
   const [savedSettings, setSavedSettings] = useState<SettingsState | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState<{type: 'success' | 'error', text: string} | null>(null);
 
   useEffect(() => {
-    // Load settings from localStorage
-    const storedSettings = localStorage.getItem('phantomhub_settings');
-    if (storedSettings) {
+    // Load settings function
+    const loadSettings = async () => {
       try {
-        const parsedSettings = JSON.parse(storedSettings);
-        setSettings(parsedSettings);
-        setSavedSettings(parsedSettings);
+        console.log('Trying to load settings from API...');
+        // Try to get settings from API first
+        const response = await ApiService.get('/users/settings');
+        console.log('API settings response:', response);
         
-        // Apply stored settings on initial load
-        applyTheme(parsedSettings.theme);
-        applyCompactMode(parsedSettings.display.compactView);
-        applyDateFormat(parsedSettings.display.dateFormat);
-        setupAutoLogout(parsedSettings.security.autoLogout);
+        if (response && response.success && response.data) {
+          // Apply validated settings from API
+          console.log('Setting state with API settings');
+          setSettings(response.data);
+          setSavedSettings(response.data);
+          
+          // Apply auto logout settings
+          setupAutoLogout(response.data.security.autoLogout);
+        } else {
+          console.log('API settings not found or invalid, falling back to localStorage');
+          // Fall back to localStorage if API fails
+          loadFromLocalStorage();
+        }
       } catch (error) {
-        console.error('Error parsing stored settings:', error);
+        console.error('Error loading settings from API:', error);
+        // Fall back to localStorage
+        console.log('Falling back to localStorage due to API error');
+        loadFromLocalStorage();
       }
-    } else {
-      // If no stored settings, apply defaults
-      applyTheme(settings.theme);
-      applyCompactMode(settings.display.compactView);
-      applyDateFormat(settings.display.dateFormat);
-      setupAutoLogout(settings.security.autoLogout);
-    }
+    };
     
-    // Setup API configuration
-    updateApiConfig(settings.api);
+    // Helper function to load from localStorage
+    const loadFromLocalStorage = () => {
+      const storedSettings = localStorage.getItem('phantomhub_settings');
+      if (storedSettings) {
+        try {
+          const parsedSettings = JSON.parse(storedSettings);
+          
+          // Ensure the parsed settings have all required properties with fallbacks
+          const validatedSettings: SettingsState = {
+            theme: parsedSettings.theme || defaultSettings.theme,
+            notifications: {
+              deviceStatus: parsedSettings.notifications?.deviceStatus ?? defaultSettings.notifications.deviceStatus,
+              deploymentAlerts: parsedSettings.notifications?.deploymentAlerts ?? defaultSettings.notifications.deploymentAlerts,
+              systemUpdates: parsedSettings.notifications?.systemUpdates ?? defaultSettings.notifications.systemUpdates,
+              securityAlerts: parsedSettings.notifications?.securityAlerts ?? defaultSettings.notifications.securityAlerts,
+            },
+            api: {
+              endpoint: parsedSettings.api?.endpoint || defaultSettings.api.endpoint,
+              pollingInterval: parsedSettings.api?.pollingInterval || defaultSettings.api.pollingInterval,
+              timeout: parsedSettings.api?.timeout || defaultSettings.api.timeout,
+            },
+            display: {
+              compactView: parsedSettings.display?.compactView ?? defaultSettings.display.compactView,
+              showAdvancedOptions: parsedSettings.display?.showAdvancedOptions ?? defaultSettings.display.showAdvancedOptions,
+              dateFormat: parsedSettings.display?.dateFormat || defaultSettings.display.dateFormat,
+            },
+            security: {
+              autoLogout: parsedSettings.security?.autoLogout || defaultSettings.security.autoLogout,
+              requireConfirmation: parsedSettings.security?.requireConfirmation ?? defaultSettings.security.requireConfirmation,
+            }
+          };
+          
+          setSettings(validatedSettings);
+          setSavedSettings(validatedSettings);
+          
+          // Apply auto logout settings (with fallback)
+          setupAutoLogout(validatedSettings.security.autoLogout);
+        } catch (error) {
+          console.error('Error parsing stored settings:', error);
+          // If parse error, use default settings
+          setupAutoLogout(defaultSettings.security.autoLogout);
+        }
+      } else {
+        // If no stored settings, use defaults
+        setupAutoLogout(defaultSettings.security.autoLogout);
+      }
+    };
     
-    // Setup notification handlers
-    setupNotificationHandlers(settings.notifications);
+    // Start loading process
+    loadSettings();
+    
+    // Listen for theme changes
+    const handleThemeChange = (config: typeof themeConfig) => {
+      setSettings(prev => ({
+        ...prev,
+        theme: config.theme,
+        display: {
+          ...prev.display,
+          compactView: config.compactView,
+          dateFormat: config.dateFormat
+        }
+      }));
+    };
+    
+    ThemeService.addListener(handleThemeChange);
     
     return () => {
-      // Clean up any listeners when component unmounts
+      // Clean up when component unmounts
       window.clearTimeout(autoLogoutTimerId);
+      ThemeService.removeListener(handleThemeChange);
     };
   }, []);
   
-  // Keep track of auto logout timer
+  // Auto logout timer
   let autoLogoutTimerId: number;
   let lastActivity = Date.now();
-  
-  // Apply theme to document
-  const applyTheme = (theme: 'dark' | 'light' | 'system') => {
-    const root = document.documentElement;
-    
-    if (theme === 'system') {
-      // Check system preference
-      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-      root.classList.toggle('light-theme', !prefersDark);
-      root.classList.toggle('dark-theme', prefersDark);
-    } else {
-      root.classList.toggle('light-theme', theme === 'light');
-      root.classList.toggle('dark-theme', theme === 'dark');
-    }
-  };
-  
-  // Apply compact mode to the UI
-  const applyCompactMode = (isCompact: boolean) => {
-    const root = document.documentElement;
-    root.classList.toggle('compact-ui', isCompact);
-    
-    // Add compact mode CSS variables
-    if (isCompact) {
-      root.style.setProperty('--space-y', '0.5rem');
-      root.style.setProperty('--padding-container', '0.75rem');
-      root.style.setProperty('--text-base-size', '0.875rem');
-    } else {
-      root.style.setProperty('--space-y', '1rem');
-      root.style.setProperty('--padding-container', '1.5rem');
-      root.style.setProperty('--text-base-size', '1rem');
-    }
-  };
-  
-  // Apply date format throughout the application
-  const applyDateFormat = (format: string) => {
-    // Store the format for use by date formatting functions
-    window.localStorage.setItem('date_format', format);
-  };
   
   // Set up auto logout functionality
   const setupAutoLogout = (minutes: number) => {
@@ -186,43 +226,46 @@ const Settings = () => {
     autoLogoutTimerId = window.setTimeout(checkInactivity, 60000);
   };
   
-  // Apply changes to API configuration
-  const updateApiConfig = (apiConfig: typeof settings.api) => {
-    console.log('Updating API config', apiConfig);
-    // Apply the API configuration 
-    // (e.g., update base URLs, timeouts in axios instances, etc.)
-    
-    // Emit event for other components to react to API config changes
-    const event = new CustomEvent('api-config-changed', { detail: apiConfig });
-    document.dispatchEvent(event);
-  };
-  
-  // Set up notification handlers
-  const setupNotificationHandlers = (notificationSettings: typeof settings.notifications) => {
-    console.log('Setting up notification handlers', notificationSettings);
-    // Subscribe or unsubscribe from notifications based on settings
-    
-    // Emit event for other components to react to notification settings changes
-    const event = new CustomEvent('notification-settings-changed', { detail: notificationSettings });
-    document.dispatchEvent(event);
-  };
-
-  const handleSaveSettings = () => {
+  // Save and apply all settings
+  const handleSaveSettings = async () => {
     setIsLoading(true);
     setMessage(null);
 
     try {
-      // Save settings to localStorage
+      // First, try to save settings to the API
+      try {
+        console.log('Saving settings to API:', settings);
+        const response = await ApiService.post('/users/settings', settings);
+        console.log('API response:', response);
+        
+        if (!response.success) {
+          console.warn('API save failed, falling back to localStorage only');
+          // We'll continue and save to localStorage as a fallback
+        }
+      } catch (apiError) {
+        console.error('Error saving to API:', apiError);
+        // Continue with localStorage as a fallback
+      }
+      
+      // Always save to localStorage as a fallback
       localStorage.setItem('phantomhub_settings', JSON.stringify(settings));
       setSavedSettings(settings);
       
-      // Apply all settings
-      applyTheme(settings.theme);
-      applyCompactMode(settings.display.compactView);
-      applyDateFormat(settings.display.dateFormat);
+      // Apply all settings using services
+      ThemeService.setTheme(settings.theme);
+      ThemeService.setCompactView(settings.display.compactView);
+      ThemeService.setDateFormat(settings.display.dateFormat);
+      
+      // Update API configuration
+      const event = new CustomEvent('api-config-changed', { detail: settings.api });
+      document.dispatchEvent(event);
+      
+      // Update notification settings
+      const notifyEvent = new CustomEvent('notification-settings-changed', { detail: settings.notifications });
+      document.dispatchEvent(notifyEvent);
+      
+      // Update auto logout
       setupAutoLogout(settings.security.autoLogout);
-      updateApiConfig(settings.api);
-      setupNotificationHandlers(settings.notifications);
       
       // Save settings to backend (commented out for this demo)
       if (settings.security.requireConfirmation) {
@@ -256,13 +299,6 @@ const Settings = () => {
     }
   };
 
-  const handleThemeChange = (theme: 'dark' | 'light' | 'system') => {
-    setSettings(prev => ({
-      ...prev,
-      theme
-    }));
-  };
-
   const handleToggle = (section: keyof SettingsState, key: string) => {
     setSettings(prev => {
       const sectionData = prev[section] as Record<string, unknown>;
@@ -293,72 +329,15 @@ const Settings = () => {
     return JSON.stringify(settings) !== JSON.stringify(savedSettings);
   };
 
-  // UI Components
-  const ToggleSwitch = ({ checked, onChange }: { checked: boolean, onChange: () => void }) => (
-    <button
-      onClick={onChange}
-      className={`relative inline-flex h-5 w-10 items-center rounded-full transition-colors focus:outline-none ${
-        checked ? 'bg-green-500' : 'bg-slate-700'
-      }`}
-    >
-      <span
-        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-          checked ? 'translate-x-5' : 'translate-x-1'
-        }`}
-      />
-    </button>
-  );
-
-  const SettingItem = ({ 
-    icon, 
-    title, 
-    description, 
-    children 
-  }: { 
-    icon: React.ReactNode, 
-    title: string, 
-    description: string, 
-    children: React.ReactNode 
-  }) => (
-    <div className="flex items-start justify-between p-4 border-b border-slate-700/50">
-      <div className="flex items-start">
-        <div className="mt-0.5 mr-3 p-2 bg-slate-700/30 rounded-md text-slate-400">
-          {icon}
-        </div>
-        <div>
-          <h3 className="text-sm font-medium text-white">{title}</h3>
-          <p className="text-xs text-slate-400">{description}</p>
-        </div>
-      </div>
-      <div className="ml-4">
-        {children}
-      </div>
-    </div>
-  );
-
-  const SettingsGroup = ({ title, icon, children }: { title: string, icon: React.ReactNode, children: React.ReactNode }) => (
-    <div className="mb-6 bg-slate-800 border border-slate-700 rounded-md overflow-hidden">
-      <div className="flex items-center px-4 py-3 bg-slate-700/30 border-b border-slate-700">
-        <div className="mr-2 text-green-500">
-          {icon}
-        </div>
-        <h2 className="text-sm font-medium text-white">{title}</h2>
-      </div>
-      <div>
-        {children}
-      </div>
-    </div>
-  );
-
   return (
-    <div className="p-6">
+    <div className="p-6 bg-primary text-primary">
       {/* Page Title */}
       <div className="mb-6">
-        <h1 className="text-xl font-semibold text-white flex items-center">
+        <h1 className="text-xl font-semibold text-primary flex items-center">
           <FiSettings className="mr-2 text-green-500" size={20} />
           Settings
         </h1>
-        <p className="text-sm text-slate-400">Configure your PhantomHub preferences</p>
+        <p className="text-sm text-secondary">Configure your PhantomHub preferences</p>
       </div>
 
       {/* Status Messages */}
@@ -384,41 +363,7 @@ const Settings = () => {
           <SettingsGroup title="Appearance" icon={<FiMoon size={16} />}>
             <div className="p-4 border-b border-slate-700/50">
               <h3 className="text-sm font-medium text-white mb-3">Theme</h3>
-              <div className="flex space-x-2">
-                <button
-                  onClick={() => handleThemeChange('dark')}
-                  className={`px-3 py-2 rounded flex items-center justify-center ${
-                    settings.theme === 'dark'
-                      ? 'bg-green-500/20 text-green-500 border-green-500/30'
-                      : 'bg-slate-700/30 text-slate-400 border-slate-600/30'
-                  } border`}
-                >
-                  <FiMoon size={14} className="mr-2" />
-                  <span className="text-xs font-medium">Dark</span>
-                </button>
-                <button
-                  onClick={() => handleThemeChange('light')}
-                  className={`px-3 py-2 rounded flex items-center justify-center ${
-                    settings.theme === 'light'
-                      ? 'bg-green-500/20 text-green-500 border-green-500/30'
-                      : 'bg-slate-700/30 text-slate-400 border-slate-600/30'
-                  } border`}
-                >
-                  <FiSun size={14} className="mr-2" />
-                  <span className="text-xs font-medium">Light</span>
-                </button>
-                <button
-                  onClick={() => handleThemeChange('system')}
-                  className={`px-3 py-2 rounded flex items-center justify-center ${
-                    settings.theme === 'system'
-                      ? 'bg-green-500/20 text-green-500 border-green-500/30'
-                      : 'bg-slate-700/30 text-slate-400 border-slate-600/30'
-                  } border`}
-                >
-                  <FiGlobe size={14} className="mr-2" />
-                  <span className="text-xs font-medium">System</span>
-                </button>
-              </div>
+              <ThemeToggle />
             </div>
 
             <SettingItem

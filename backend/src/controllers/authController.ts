@@ -1,11 +1,17 @@
 import { Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
-import { User, UserRole } from '../models/User';
+import User from '../models/User';
+import logger from '../utils/logger';
+
+// Extend Request type to include user
+interface AuthenticatedRequest extends Request {
+  user?: User;
+}
 
 // Register a new user
 export const register = async (req: Request, res: Response): Promise<Response> => {
   try {
-    const { username, email, password, role } = req.body;
+    const { name, email, password, role } = req.body;
 
     // Check if user already exists
     const existingUser = await User.findOne({ where: { email } });
@@ -16,18 +22,23 @@ export const register = async (req: Request, res: Response): Promise<Response> =
       });
     }
 
-    // Create new user
+    // Create new user with validated role
     const user = await User.create({
-      username,
+      name,
       email,
       password,
-      role: role || UserRole.VIEWER,
+      role: role || 'user',
+      isActive: true,
+      failedLoginAttempts: 0,
+      mfaEnabled: false,
+      sessionTimeout: 3600,
+      requirePasswordChange: true
     });
 
     // Generate JWT token
     const secret = process.env.JWT_SECRET || 'default_secret';
     const token = jwt.sign(
-      { id: user.id, role: user.role },
+      { id: user.id, email: user.email, role: user.role },
       secret,
       { expiresIn: '7d' }
     );
@@ -38,13 +49,13 @@ export const register = async (req: Request, res: Response): Promise<Response> =
       token,
       user: {
         id: user.id,
-        username: user.username,
+        name: user.name,
         email: user.email,
         role: user.role,
       },
     });
   } catch (error) {
-    console.error('Registration error:', error);
+    logger.error('Registration error:', error);
     return res.status(500).json({
       success: false,
       message: 'Error registering user',
@@ -56,10 +67,12 @@ export const register = async (req: Request, res: Response): Promise<Response> =
 export const login = async (req: Request, res: Response): Promise<Response> => {
   try {
     const { email, password } = req.body;
+    logger.debug(`Login attempt for email: ${email}`);
 
     // Find user by email
     const user = await User.findOne({ where: { email } });
     if (!user) {
+      logger.debug(`No user found with email: ${email}`);
       return res.status(401).json({
         success: false,
         message: 'Invalid credentials',
@@ -69,6 +82,7 @@ export const login = async (req: Request, res: Response): Promise<Response> => {
     // Verify password
     const isMatch = await user.comparePassword(password);
     if (!isMatch) {
+      logger.debug(`Invalid password for user: ${email}`);
       return res.status(401).json({
         success: false,
         message: 'Invalid credentials',
@@ -82,48 +96,56 @@ export const login = async (req: Request, res: Response): Promise<Response> => {
     // Generate JWT token
     const secret = process.env.JWT_SECRET || 'default_secret';
     const token = jwt.sign(
-      { id: user.id, role: user.role },
+      { id: user.id, email: user.email, role: user.role },
       secret,
       { expiresIn: '7d' }
     );
 
+    logger.debug(`Login successful for user: ${email}`);
     return res.status(200).json({
       success: true,
       message: 'Login successful',
       token,
       user: {
         id: user.id,
-        username: user.username,
+        name: user.name,
         email: user.email,
         role: user.role,
       },
     });
   } catch (error) {
-    console.error('Login error:', error);
+    logger.error('Login error:', error);
     return res.status(500).json({
       success: false,
       message: 'Error during login',
+      error: error instanceof Error ? error.message : 'Unknown error',
     });
   }
 };
 
 // Get current user
-export const getCurrentUser = async (req: Request, res: Response): Promise<Response> => {
+export const getCurrentUser = async (req: AuthenticatedRequest, res: Response): Promise<Response> => {
   try {
     const user = req.user;
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        message: 'User not authenticated',
+      });
+    }
 
     return res.status(200).json({
       success: true,
       user: {
         id: user.id,
-        username: user.username,
+        name: user.name,
         email: user.email,
         role: user.role,
         lastLogin: user.lastLogin,
       },
     });
   } catch (error) {
-    console.error('Get current user error:', error);
+    logger.error('Get current user error:', error);
     return res.status(500).json({
       success: false,
       message: 'Error fetching user data',

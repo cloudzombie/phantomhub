@@ -7,15 +7,26 @@ import {
   FiCheck, 
   FiX, 
   FiHardDrive,
-  FiWifi
+  FiWifi,
+  FiEye
 } from 'react-icons/fi';
 import ApiService from '../services/ApiService';
 import { 
   isWebSerialSupported, 
   requestSerialPort, 
   connectToDevice, 
-  disconnectFromDevice
+  disconnectFromDevice,
+  type SerialConnectionStatus
 } from '../utils/webSerialUtils';
+import DeviceInfoPanel from '../components/DeviceInfoPanel';
+
+// We need to define SerialPort interface here since we're using it only for type casting
+interface SerialPort {
+  open: (options: any) => Promise<void>;
+  close: () => Promise<void>;
+  readable: ReadableStream<Uint8Array> | null;
+  writable: WritableStream<Uint8Array> | null;
+}
 
 interface Device {
   id: number;
@@ -28,6 +39,12 @@ interface Device {
   updatedAt: string;
   connectionType?: 'network' | 'usb';
   serialPortId?: string;
+  userId: number;
+  owner?: {
+    id: number;
+    username: string;
+    email: string;
+  };
 }
 
 const DeviceManagement = () => {
@@ -37,6 +54,7 @@ const DeviceManagement = () => {
   const [isUsbModalOpen, setIsUsbModalOpen] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [selectedDevice, setSelectedDevice] = useState<Device | null>(null);
   const [formData, setFormData] = useState({
     name: '',
     ipAddress: '',
@@ -328,6 +346,14 @@ const DeviceManagement = () => {
     });
   };
   
+  const handleViewDeviceDetails = (device: Device) => {
+    setSelectedDevice(device);
+  };
+  
+  const handleCloseDeviceDetails = () => {
+    setSelectedDevice(null);
+  };
+  
   return (
     <div className="p-6">
       {/* Page Title */}
@@ -420,6 +446,7 @@ const DeviceManagement = () => {
                   <th className="px-4 py-2 text-xs font-medium text-slate-400">Connection</th>
                   <th className="px-4 py-2 text-xs font-medium text-slate-400">IP/Port</th>
                   <th className="px-4 py-2 text-xs font-medium text-slate-400">Firmware</th>
+                  <th className="px-4 py-2 text-xs font-medium text-slate-400">Owner</th>
                   <th className="px-4 py-2 text-xs font-medium text-slate-400">Last Check-in</th>
                   <th className="px-4 py-2 text-xs font-medium text-slate-400">Status</th>
                   <th className="px-4 py-2 text-xs font-medium text-slate-400">Actions</th>
@@ -427,16 +454,23 @@ const DeviceManagement = () => {
               </thead>
               <tbody className="divide-y divide-slate-700/50">
                 {devices.map(device => (
-                  <tr key={device.id} className="hover:bg-slate-700/10 transition-colors">
+                  <tr 
+                    key={device.id} 
+                    className="hover:bg-slate-700/10 transition-colors cursor-pointer"
+                    onClick={() => handleViewDeviceDetails(device)}
+                  >
                     <td className="px-4 py-3 text-white text-sm">{device.name}</td>
                     <td className="px-4 py-3">{getConnectionTypeBadge(device.connectionType)}</td>
                     <td className="px-4 py-3 text-slate-300 text-sm font-mono">
                       {device.ipAddress === 'usb-connection' ? device.serialPortId || 'USB' : device.ipAddress}
                     </td>
                     <td className="px-4 py-3 text-slate-300 text-sm">{device.firmwareVersion || 'Unknown'}</td>
+                    <td className="px-4 py-3 text-slate-300 text-sm">
+                      {device.owner ? device.owner.username : 'Unknown'}
+                    </td>
                     <td className="px-4 py-3 text-slate-300 text-sm">{formatDateTime(device.lastCheckIn)}</td>
                     <td className="px-4 py-3">{getStatusBadge(device.status)}</td>
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                       <div className="flex space-x-1">
                         <button
                           onClick={() => handleUpdateStatus(device.id, 'online')}
@@ -461,6 +495,16 @@ const DeviceManagement = () => {
                           title="Set Offline"
                         >
                           <FiX size={16} />
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleViewDeviceDetails(device);
+                          }}
+                          className="p-1 rounded text-xs text-blue-500 hover:bg-blue-500/10 hover:border-blue-500/30"
+                          title="View Details"
+                        >
+                          <FiEye size={16} />
                         </button>
                       </div>
                     </td>
@@ -642,6 +686,46 @@ const DeviceManagement = () => {
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Device Info Panel Modal */}
+      {selectedDevice && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-slate-800 border border-slate-700 rounded-lg shadow-lg w-full max-w-4xl p-6 relative max-h-[90vh] overflow-y-auto">
+            <button 
+              onClick={handleCloseDeviceDetails}
+              className="absolute top-3 right-3 text-slate-400 hover:text-white"
+            >
+              <FiX size={18} />
+            </button>
+            <div className="mb-5">
+              <h2 className="text-lg font-medium text-white">{selectedDevice.name} Details</h2>
+              <p className="text-sm text-slate-400">View detailed information about this O.MG Cable</p>
+            </div>
+            
+            <DeviceInfoPanel 
+              deviceInfo={{
+                port: {} as SerialPort, // Mock SerialPort object
+                reader: null,
+                writer: null,
+                connectionStatus: selectedDevice.status === 'online' ? 'connected' : 'disconnected',
+                info: {
+                  name: selectedDevice.name,
+                  firmwareVersion: selectedDevice.firmwareVersion,
+                  deviceId: selectedDevice.id.toString(),
+                  capabilities: {
+                    usbHid: true,
+                    wifi: selectedDevice.connectionType === 'network',
+                    bluetooth: false,
+                    storage: "4MB",
+                    supportedFeatures: ['DuckyScript', 'Payloads']
+                  }
+                }
+              }} 
+              onRefresh={() => fetchDevices()}
+            />
           </div>
         </div>
       )}

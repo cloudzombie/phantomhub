@@ -5,7 +5,7 @@ import morgan from 'morgan';
 import dotenv from 'dotenv';
 import http from 'http';
 import { Server as SocketIOServer } from 'socket.io';
-import { connectDB } from './config/database';
+import { initializeDatabase } from './config/database';
 import { errorHandler } from './middleware/errorHandler';
 import os from 'os';
 
@@ -18,6 +18,7 @@ import deviceRoutes from './routes/deviceRoutes';
 import payloadRoutes from './routes/payloadRoutes';
 import deploymentRoutes from './routes/deploymentRoutes';
 import systemRoutes from './routes/systemRoutes';
+import userRoutes from './routes/userRoutes';
 
 // Load environment variables
 dotenv.config();
@@ -161,6 +162,7 @@ app.use('/api/devices', deviceRoutes);
 app.use('/api/payloads', payloadRoutes);
 app.use('/api/deployments', deploymentRoutes);
 app.use('/api/system', systemRoutes);
+app.use('/api/users', userRoutes);
 
 // Error handling middleware
 app.use(errorHandler);
@@ -201,20 +203,20 @@ io.on('connection', (socket) => {
   });
 });
 
-// Start the server
-async function startServer() {
+// Initialize database and start server
+const startServer = async () => {
   try {
-    // Connect to database
-    await connectDB();
-    console.log('Database connected');
+    // Initialize database first
+    await initializeDatabase();
     
+    // Start server
     server.listen(PORT, () => {
-      console.log(`Server running on port ${PORT}`);
+      console.log(`🚀 Starting server on port ${PORT}...`);
     });
   } catch (error) {
     console.error('Failed to start server:', error);
     process.exit(1);
   }
-}
+};
 
 startServer(); 

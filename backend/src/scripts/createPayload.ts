@@ -1,19 +1,19 @@
-import { connectDB } from '../config/database';
+import { initializeDatabase } from '../config/database';
 import Payload from '../models/Payload';
 import User from '../models/User';
 
 async function createPayload() {
   try {
-    // Connect to database
-    await connectDB();
+    // Initialize database
+    await initializeDatabase();
     console.log('Database connected for creating payload');
 
     // Find the admin user
-    const adminUser = await User.findOne({
+    const admin = await User.findOne({
       where: { email: 'admin@phantomhub.com' }
     });
 
-    if (!adminUser) {
+    if (!admin) {
       console.error('Admin user not found. Please run the seedDatabase script first.');
       process.exit(1);
     }
@@ -34,7 +34,7 @@ ENTER`;
         name: 'Hello World Example',
         script: duckyscript,
         description: 'A simple payload that types "Hello, World!" and a message',
-        userId: adminUser.id
+        userId: admin.id
       }
     });
 

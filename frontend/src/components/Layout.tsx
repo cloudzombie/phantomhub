@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react';
 import ApiHealthStatus from './ApiHealthStatus';
 import ApiService from '../services/ApiService';
 import NotificationService from '../services/NotificationService';
+import ThemeService from '../services/ThemeService';
+import ThemeToggle from './ui/ThemeToggle';
 
 const Layout = () => {
   const location = useLocation();
@@ -127,6 +129,9 @@ const Layout = () => {
             </div>
           </div>
           <div className="flex items-center">
+            <div className="mr-4">
+              <ThemeToggle compact={true} showLabels={false} />
+            </div>
             <div className="text-xs text-slate-400 py-1 px-2 bg-slate-700/50 rounded border border-slate-600/50">
               <span className="text-green-500 font-medium">admin</span>@phantomhub.io
             </div>

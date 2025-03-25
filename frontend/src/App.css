@@ -40,3 +40,106 @@
 .read-the-docs {
   color: #888;
 }
+
+/* Base theme styles */
+.app-container {
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* Tailwind doesn't handle CSS variables in utility classes, so we need to add these */
+.bg-primary {
+  background-color: var(--bg-primary) !important;
+}
+
+.bg-secondary {
+  background-color: var(--bg-secondary) !important;
+}
+
+.text-primary {
+  color: var(--text-primary) !important;
+}
+
+.text-secondary {
+  color: var(--text-secondary) !important;
+}
+
+/* Theme-specific overrides */
+.dark-theme .bg-slate-900 {
+  background-color: var(--bg-primary);
+}
+
+.dark-theme .bg-slate-800 {
+  background-color: var(--bg-secondary);
+}
+
+.light-theme .bg-slate-900 {
+  background-color: var(--bg-primary);
+}
+
+.light-theme .bg-slate-800 {
+  background-color: var(--bg-secondary);
+}
+
+/* Ensure text is readable in light mode */
+.light-theme .text-white {
+  color: var(--text-primary);
+}
+
+.light-theme .text-slate-400 {
+  color: var(--text-secondary);
+}
+
+/* Border color adjustments */
+.light-theme .border-slate-700 {
+  border-color: #cbd5e1;
+}
+
+/* Override styles for Settings page */
+.bg-slate-900,
+.bg-slate-800,
+.bg-slate-700 {
+  background-color: var(--bg-secondary) !important;
+  color: var(--text-primary) !important;
+}
+
+/* Fix Settings page */
+.light-theme .p-6 {
+  background-color: var(--bg-primary) !important;
+  color: var(--text-primary) !important;
+}
+
+.light-theme .bg-slate-800, 
+.light-theme .bg-slate-700 {
+  background-color: var(--bg-secondary) !important;
+}
+
+.light-theme .border-slate-800, 
+.light-theme .border-slate-700, 
+.light-theme .border-slate-600 {
+  border-color: rgba(203, 213, 225, 0.5) !important;
+}
+
+.light-theme .text-white,
+.light-theme .text-slate-200,
+.light-theme .text-slate-300 {
+  color: var(--text-primary) !important;
+}
+
+/* Preserve green color for highlights */
+.text-green-500 {
+  color: #00F260 !important;
+}
+
+.light-theme .bg-green-500\/20 {
+  background-color: rgba(0, 242, 96, 0.1) !important;
+}
+
+/* Fix app container */
+#root {
+  max-width: 100% !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  text-align: left !important;
+}

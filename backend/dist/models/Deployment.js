@@ -4,7 +4,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const sequelize_1 = require("sequelize");
-const database_1 = __importDefault(require("../config/database"));
+const database_1 = require("../config/database");
 const Payload_1 = __importDefault(require("./Payload"));
 const Device_1 = __importDefault(require("./Device"));
 const User_1 = __importDefault(require("./User"));
@@ -12,31 +12,31 @@ class Deployment extends sequelize_1.Model {
 }
 Deployment.init({
     id: {
-        type: sequelize_1.DataTypes.INTEGER,
-        autoIncrement: true,
+        type: sequelize_1.DataTypes.UUID,
+        defaultValue: sequelize_1.DataTypes.UUIDV4,
         primaryKey: true,
     },
     payloadId: {
-        type: sequelize_1.DataTypes.INTEGER,
+        type: sequelize_1.DataTypes.UUID,
         allowNull: false,
         references: {
-            model: 'payloads',
+            model: Payload_1.default,
             key: 'id',
         },
     },
     deviceId: {
-        type: sequelize_1.DataTypes.INTEGER,
+        type: sequelize_1.DataTypes.UUID,
         allowNull: false,
         references: {
-            model: 'devices',
+            model: Device_1.default,
             key: 'id',
         },
     },
     userId: {
-        type: sequelize_1.DataTypes.INTEGER,
+        type: sequelize_1.DataTypes.UUID,
         allowNull: false,
         references: {
-            model: 'users',
+            model: User_1.default,
             key: 'id',
         },
     },
@@ -50,9 +50,9 @@ Deployment.init({
         allowNull: true,
     },
 }, {
-    sequelize: database_1.default,
+    sequelize: database_1.sequelize,
     modelName: 'Deployment',
-    tableName: 'deployments',
+    tableName: 'deployments'
 });
 // Define associations
 Deployment.belongsTo(Payload_1.default, { foreignKey: 'payloadId', as: 'payload' });

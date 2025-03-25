@@ -207,8 +207,8 @@ const updateDeployment = async (req, res) => {
         // Update the device status based on the deployment status
         const device = await Device_1.default.findByPk(deployment.deviceId);
         if (device) {
-            // Only update device if it's still in the 'busy' state related to this deployment
-            if (device.status === 'busy') {
+            // Only update device if it's still in the 'maintenance' state related to this deployment
+            if (device.status === 'maintenance') {
                 await device.update({ status: 'online' });
                 // Notify clients via Socket.IO
                 const io = req.app.get('io');
