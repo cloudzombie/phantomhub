@@ -1,5 +1,5 @@
 import { Link as RouterLink, Outlet, useLocation } from 'react-router-dom';
-import { FiHome, FiServer, FiCode, FiFileText, FiLogOut, FiShield, FiSettings } from 'react-icons/fi';
+import { FiHome, FiServer, FiCode, FiFileText, FiLogOut, FiShield, FiSettings, FiUser } from 'react-icons/fi';
 import { useEffect, useState } from 'react';
 import ApiHealthStatus from './ApiHealthStatus';
 import ApiService from '../services/ApiService';
@@ -165,11 +165,12 @@ const Layout = () => {
             <div className="mr-4">
               <ThemeToggle compact={true} showLabels={false} />
             </div>
-            <div className="text-xs py-1 px-2 rounded border border-slate-600/50 bg-slate-700/80 dark-theme:bg-slate-700/50 light-theme:bg-slate-900/90 light-theme:border-slate-400/30">
+            <div className="flex items-center py-1 px-2 rounded bg-slate-800/80 border border-slate-700/50">
+              <FiUser size={14} className="mr-2 text-green-500" />
               {currentUser ? (
-                <span className="dark-theme:text-green-500 light-theme:text-green-600 font-medium">{currentUser.email || 'User'}</span>
+                <span className="text-xs text-green-500 font-medium">{currentUser.email || 'User'}</span>
               ) : (
-                <span className="text-slate-400">Not logged in</span>
+                <span className="text-xs text-slate-400">Not logged in</span>
               )}
             </div>
           </div>
