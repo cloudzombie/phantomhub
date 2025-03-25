@@ -12,6 +12,8 @@ import { sequelize } from './config/database';
 import DeviceConnectionPool from './services/deviceConnectionPool';
 import logger from './utils/logger';
 import { globalRateLimiter } from './middleware/rateLimiter';
+import { SocketService } from './services/socketService';
+import jwt from 'jsonwebtoken';
 
 // Track when the server started
 const serverStartTime = new Date();
@@ -52,8 +54,12 @@ const io = new SocketIOServer(server, {
   }
 });
 
-// Make io available to our routes
+// Initialize SocketService
+const socketService = new SocketService(server);
+
+// Make socketService available to our routes
 app.set('io', io);
+app.set('socketService', socketService);
 
 // Middleware
 app.use(express.json());
@@ -199,31 +205,88 @@ app.use(errorHandler);
 io.on('connection', (socket) => {
   console.log('User connected:', socket.id);
   
-  // Listen for device status updates
-  socket.on('device_status_update', (data) => {
-    // Broadcast device status update to all connected clients
-    io.emit('device_status_changed', data);
+  // Authentication for Socket.IO
+  socket.on('authenticate', (data) => {
+    try {
+      const { token } = data;
+      if (!token) {
+        socket.emit('auth_error', { message: 'No token provided' });
+        return;
+      }
+      
+      // Verify the token
+      const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key');
+      if (!decoded || !decoded.id) {
+        socket.emit('auth_error', { message: 'Invalid token' });
+        return;
+      }
+      
+      // Store user ID and join user-specific room
+      (socket as any).userId = decoded.id;
+      socket.join(decoded.id);
+      socket.emit('authenticated', { success: true });
+      
+      logger.info(`Socket ${socket.id} authenticated as user ${decoded.id}`);
+    } catch (error) {
+      logger.error('Socket authentication error:', error);
+      socket.emit('auth_error', { message: 'Authentication failed' });
+    }
   });
   
-  // Listen for payload execution events
+  // Listen for device status updates - use socketService to properly scope events
+  socket.on('device_status_update', (data) => {
+    if (!(socket as any).userId) {
+      socket.emit('error', { message: 'Authentication required' });
+      return;
+    }
+    
+    // Use socketService for proper scoping
+    socketService.emitDeviceStatus(data.deviceId, data);
+  });
+  
+  // Listen for payload execution events - use socketService to properly scope events
   socket.on('payload_executing', (data) => {
-    io.emit('payload_status_update', {
+    if (!(socket as any).userId) {
+      socket.emit('error', { message: 'Authentication required' });
+      return;
+    }
+    
+    // Use socketService for proper scoping
+    const status = {
       ...data,
       status: 'executing'
-    });
+    };
+    
+    // Find relevant users and emit to them
+    socketService.emitToDeviceSubscribers(data.deviceId, 'payload_status_update', status);
   });
   
-  // Listen for payload completion events
+  // Listen for payload completion events - use socketService to properly scope events
   socket.on('payload_completed', (data) => {
-    io.emit('payload_status_update', {
+    if (!(socket as any).userId) {
+      socket.emit('error', { message: 'Authentication required' });
+      return;
+    }
+    
+    // Use socketService for proper scoping
+    const status = {
       ...data,
       status: 'completed'
-    });
+    };
+    
+    // Find relevant users and emit to them
+    socketService.emitToDeviceSubscribers(data.deviceId, 'payload_status_update', status);
   });
   
-  // Listen for deployment status updates
+  // Listen for deployment status updates - use socketService to properly scope events
   socket.on('deployment_status_update', (data) => {
-    io.emit('deployment_status_changed', data);
+    if (!(socket as any).userId) {
+      socket.emit('error', { message: 'Authentication required' });
+      return;
+    }
+    
+    // Use socketService for proper scoping
+    socketService.emitToDeviceSubscribers(data.deviceId, 'deployment_status_changed', data);
   });
   
   socket.on('disconnect', () => {

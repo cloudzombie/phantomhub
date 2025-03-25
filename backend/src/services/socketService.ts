@@ -149,4 +149,16 @@ export class SocketService {
   public getUserSubscriptions(userId: string): string[] {
     return Array.from(this.userSubscriptions.get(userId) || []);
   }
+
+  // Emit event to all subscribers of a device
+  public emitToDeviceSubscribers(deviceId: string, eventName: string, data: any) {
+    const subscribers = this.deviceSubscriptions.get(deviceId);
+    if (!subscribers) return;
+
+    subscribers.forEach(userId => {
+      this.io.to(userId).emit(eventName, data);
+    });
+
+    logger.debug(`Emitted ${eventName} for device ${deviceId} to ${subscribers.size} subscribers`);
+  }
 } 

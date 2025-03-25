@@ -34,6 +34,7 @@ class NotificationService {
     document.addEventListener('notification-settings-changed', this.handleSettingsChange as EventListener);
   }
 
+  // Static method to get the singleton instance
   public static getInstance(): NotificationService {
     if (!NotificationService.instance) {
       NotificationService.instance = new NotificationService();

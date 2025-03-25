@@ -5,6 +5,8 @@ import { AuthRequest } from '../middleware/auth';
 import User from '../models/User';
 import logger from '../utils/logger';
 import DeviceConnectionPool from '../services/deviceConnectionPool';
+import Activity from '../models/Activity';
+import { Op } from 'sequelize';
 
 // API timeout for device communication (milliseconds)
 const API_TIMEOUT = 5000;
@@ -578,6 +580,105 @@ export const getDevices = async (req: AuthRequest, res: Response) => {
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch devices',
+    });
+  }
+};
+
+// Get device activities
+export const getDeviceActivities = async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user?.id;
+    
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: 'Authentication required',
+      });
+    }
+    
+    const device = await Device.findByPk(id);
+    
+    if (!device) {
+      return res.status(404).json({
+        success: false,
+        message: 'Device not found',
+      });
+    }
+    
+    // Check if the device belongs to the user or if user is admin/operator
+    const user = await User.findByPk(userId);
+    if (device.userId !== userId && user?.role !== 'admin' && user?.role !== 'operator') {
+      return res.status(403).json({
+        success: false,
+        message: 'You do not have permission to view this device\'s activities',
+      });
+    }
+    
+    // Parse query parameters
+    const limit = parseInt(req.query.limit as string) || 50;
+    const types = req.query.types ? 
+      Array.isArray(req.query.types) ? 
+        req.query.types : 
+        [req.query.types] 
+      : undefined;
+    const dateFrom = req.query.dateFrom ? new Date(req.query.dateFrom as string) : undefined;
+    const dateTo = req.query.dateTo ? new Date(req.query.dateTo as string) : undefined;
+    
+    // Build the query
+    const whereClause: any = { deviceId: id };
+    
+    if (types && types.length > 0) {
+      whereClause.type = { [Op.in]: types };
+    }
+    
+    if (dateFrom || dateTo) {
+      whereClause.createdAt = {};
+      
+      if (dateFrom) {
+        whereClause.createdAt[Op.gte] = dateFrom;
+      }
+      
+      if (dateTo) {
+        whereClause.createdAt[Op.lte] = dateTo;
+      }
+    }
+    
+    // Get activities with user info
+    const activities = await Activity.findAll({
+      where: whereClause,
+      include: [
+        {
+          model: User,
+          as: 'user',
+          attributes: ['id', 'name', 'email'],
+        }
+      ],
+      order: [['createdAt', 'DESC']],
+      limit: Math.min(limit, 100) // Cap at 100 to prevent excessive queries
+    });
+    
+    // Format the response
+    const formattedActivities = activities.map(activity => ({
+      id: activity.id,
+      deviceId: activity.deviceId,
+      type: activity.type,
+      description: activity.description,
+      metadata: activity.metadata,
+      createdAt: activity.createdAt,
+      userId: activity.userId,
+      userName: activity.user ? activity.user.name : undefined
+    }));
+    
+    return res.status(200).json({
+      success: true,
+      data: formattedActivities,
+    });
+  } catch (error) {
+    logger.error('Error retrieving device activities:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to retrieve device activities',
     });
   }
 }; 
