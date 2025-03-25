@@ -18,16 +18,7 @@ export const getAllScripts = async (req: AuthRequest, res: Response) => {
     if (req.user?.role === 'admin') {
       scripts = await Script.findAll({
         include: [
-          { 
-            model: User, 
-            as: 'creator', 
-            attributes: ['id', 'username', 'email'] 
-          },
-          {
-            model: Payload,
-            as: 'payloads',
-            through: { attributes: [] }
-          }
+          { association: 'creator', attributes: ['id', 'name', 'email'] }
         ]
       });
     } else {
@@ -40,16 +31,7 @@ export const getAllScripts = async (req: AuthRequest, res: Response) => {
           ]
         },
         include: [
-          { 
-            model: User, 
-            as: 'creator', 
-            attributes: ['id', 'username', 'email'] 
-          },
-          {
-            model: Payload,
-            as: 'payloads',
-            through: { attributes: [] }
-          }
+          { association: 'creator', attributes: ['id', 'name', 'email'] }
         ]
       });
     }
@@ -75,16 +57,7 @@ export const getScript = async (req: AuthRequest, res: Response) => {
     
     const script = await Script.findByPk(id, {
       include: [
-        { 
-          model: User, 
-          as: 'creator', 
-          attributes: ['id', 'username', 'email'] 
-        },
-        {
-          model: Payload,
-          as: 'payloads',
-          through: { attributes: ['executionOrder'] }
-        }
+        { association: 'creator', attributes: ['id', 'name', 'email'] }
       ]
     });
     
@@ -458,15 +431,9 @@ export const getScriptsForPayload = async (req: AuthRequest, res: Response) => {
     const { payloadId } = req.params;
     const userId = req.user?.id;
     
-    if (!userId) {
-      return res.status(401).json({
-        success: false,
-        message: 'Authentication required'
-      });
-    }
-    
     // Check if payload exists
     const payload = await Payload.findByPk(payloadId);
+    
     if (!payload) {
       return res.status(404).json({
         success: false,
@@ -474,11 +441,11 @@ export const getScriptsForPayload = async (req: AuthRequest, res: Response) => {
       });
     }
     
-    // Check if user has permission to view this payload's scripts
+    // Check if user has access to this payload
     if (payload.userId !== userId && req.user?.role !== 'admin') {
       return res.status(403).json({
         success: false,
-        message: 'You do not have permission to view scripts for this payload'
+        message: 'You do not have permission to view this payload\'s scripts'
       });
     }
     
@@ -489,13 +456,9 @@ export const getScriptsForPayload = async (req: AuthRequest, res: Response) => {
           model: Payload,
           as: 'payloads',
           where: { id: payloadId },
-          through: { attributes: ['executionOrder'] }
+          through: { attributes: [] }
         },
-        {
-          model: User,
-          as: 'creator',
-          attributes: ['id', 'username', 'email']
-        }
+        { association: 'creator', attributes: ['id', 'name', 'email'] }
       ]
     });
     

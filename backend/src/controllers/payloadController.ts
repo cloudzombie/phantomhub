@@ -23,16 +23,14 @@ export const getAllPayloads = async (req: AuthRequest, res: Response) => {
     if (req.user?.role === 'admin') {
       payloads = await Payload.findAll({
         include: [
-          { association: 'creator', attributes: ['id', 'name', 'email'] },
-          { association: 'scripts', through: { attributes: [] } }
+          { association: 'creator', attributes: ['id', 'name', 'email'] }
         ]
       });
     } else {
       payloads = await Payload.findAll({
         where: { userId },
         include: [
-          { association: 'creator', attributes: ['id', 'name', 'email'] },
-          { association: 'scripts', through: { attributes: [] } }
+          { association: 'creator', attributes: ['id', 'name', 'email'] }
         ]
       });
     }
