@@ -795,7 +795,7 @@ const PayloadEditor = () => {
       const scriptsToAdd = selectedScripts.filter(id => !currentScriptIds.includes(id));
       
       // Scripts to remove (current but not in selected)
-      const scriptsToRemove = currentScriptIds.filter(id => !selectedScripts.includes(id));
+      const scriptsToRemove = currentScriptIds.filter((id: string) => !selectedScripts.includes(id));
       
       // Add new associations
       for (const scriptId of scriptsToAdd) {

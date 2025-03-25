@@ -6,11 +6,36 @@ import { AuthRequest } from '../middleware/auth';
 import axios from 'axios';
 
 // Get all payloads
-export const getAllPayloads = async (req: Request, res: Response) => {
+export const getAllPayloads = async (req: AuthRequest, res: Response) => {
   try {
-    const payloads = await Payload.findAll({
-      include: [{ association: 'creator', attributes: ['id', 'username', 'email'] }]
-    });
+    const userId = req.user?.id;
+    let payloads;
+    
+    // If no user is authenticated, return unauthorized
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: 'User authentication required',
+      });
+    }
+    
+    // Admin can see all payloads, others only see their own
+    if (req.user?.role === 'admin') {
+      payloads = await Payload.findAll({
+        include: [
+          { association: 'creator', attributes: ['id', 'name', 'email'] },
+          { association: 'scripts', through: { attributes: [] } }
+        ]
+      });
+    } else {
+      payloads = await Payload.findAll({
+        where: { userId },
+        include: [
+          { association: 'creator', attributes: ['id', 'name', 'email'] },
+          { association: 'scripts', through: { attributes: [] } }
+        ]
+      });
+    }
     
     return res.status(200).json({
       success: true,
@@ -30,7 +55,7 @@ export const getPayload = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const payload = await Payload.findByPk(id, {
-      include: [{ association: 'creator', attributes: ['id', 'username', 'email'] }]
+      include: [{ association: 'creator', attributes: ['id', 'name', 'email'] }]
     });
     
     if (!payload) {
