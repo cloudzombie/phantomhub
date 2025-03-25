@@ -27,8 +27,14 @@ const ThemeToggle = ({ compact = false, showLabels = true }: ThemeToggleProps) =
 
   const handleThemeChange = (newTheme: ThemeType) => {
     console.log('ThemeToggle: Changing theme to', newTheme);
+    
+    // Set the theme in ThemeService
     ThemeService.setTheme(newTheme);
+    
+    // Save the theme to localStorage settings
     ThemeService.saveToSettings();
+    
+    console.log('ThemeToggle: Theme change completed, saved to settings');
   };
 
   if (compact) {

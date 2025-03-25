@@ -193,6 +193,7 @@ class ThemeService {
         settings.display.compactView = this.config.compactView;
         settings.display.dateFormat = this.config.dateFormat;
         localStorage.setItem(settingsKey, JSON.stringify(settings));
+        console.log('ThemeService: Saved theme settings to localStorage', settings);
       } else {
         // Create new settings object if none exists
         const newSettings = {
@@ -204,6 +205,7 @@ class ThemeService {
           }
         };
         localStorage.setItem(settingsKey, JSON.stringify(newSettings));
+        console.log('ThemeService: Created new settings in localStorage', newSettings);
       }
     } catch (error) {
       console.error('Error saving theme settings to localStorage:', error);

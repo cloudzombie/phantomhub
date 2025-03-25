@@ -348,6 +348,22 @@ const Settings = () => {
     return JSON.stringify(settings) !== JSON.stringify(savedSettings);
   };
 
+  // Add a debug function to check localStorage settings for the current user
+  const getStoredSettings = () => {
+    try {
+      const userId = getCurrentUserId();
+      const key = getSettingsKey();
+      const stored = localStorage.getItem(key);
+      if (stored) {
+        return JSON.parse(stored);
+      }
+      return null;
+    } catch (error) {
+      console.error('Error getting stored settings:', error);
+      return null;
+    }
+  };
+
   return (
     <div className="p-6 bg-primary text-primary">
       {/* Page Title */}
@@ -558,34 +574,47 @@ const Settings = () => {
           </SettingsGroup>
 
           {/* Save Button */}
-          <div className="mt-6">
+          <div className="mt-6 flex justify-end">
             <button
               onClick={handleSaveSettings}
               disabled={isLoading || !hasChanges()}
-              className={`w-full flex items-center justify-center py-2 px-4 rounded font-medium ${
-                !hasChanges()
-                  ? 'bg-slate-700/50 text-slate-500 cursor-not-allowed'
-                  : 'bg-green-500 text-black hover:bg-green-400 shadow-glow-green'
-              }`}
+              className={`px-4 py-2 rounded flex items-center ${
+                hasChanges()
+                  ? 'bg-green-500/10 text-green-500 border-green-500/30 hover:bg-green-500/20'
+                  : 'bg-slate-700/30 text-slate-500 border-slate-600/30 cursor-not-allowed'
+              } border transition-colors`}
             >
               {isLoading ? (
                 <>
-                  <svg className="animate-spin -ml-1 mr-2 h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                  <span>Saving...</span>
+                  <span className="animate-pulse">Saving...</span>
                 </>
               ) : (
                 <>
-                  <FiSave className="mr-2" size={16} />
-                  <span>Save Settings</span>
+                  <FiSave size={16} className="mr-2" />
+                  Save Changes
                 </>
               )}
             </button>
           </div>
         </div>
       </div>
+
+      {/* Debug Info - Hidden in production */}
+      {process.env.NODE_ENV !== 'production' && (
+        <div className="mt-12 p-4 border border-dashed border-slate-700 rounded text-slate-500 text-xs">
+          <h3 className="font-medium mb-2">Debug Info</h3>
+          <p>User ID: {getCurrentUserId() || 'Not logged in'}</p>
+          <p>Settings Key: {getSettingsKey()}</p>
+          <p>Current Theme: {settings.theme}</p>
+          <p>ThemeService Theme: {ThemeService.getConfig().theme}</p>
+          <details>
+            <summary className="cursor-pointer">Stored Settings</summary>
+            <pre className="mt-2 p-2 bg-slate-800 rounded overflow-auto max-h-48">
+              {JSON.stringify(getStoredSettings(), null, 2)}
+            </pre>
+          </details>
+        </div>
+      )}
     </div>
   );
 };
