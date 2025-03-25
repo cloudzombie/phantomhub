@@ -21,18 +21,18 @@ import {
   getLatestFirmwareInfo, 
   isNewerFirmwareVersion,
   updateFirmware,
-  type OMGDeviceInfo,
   checkWebSerialConnection
 } from '../utils/webSerialUtils';
+import { DeviceInfo } from '../types/device';
 
 interface DeviceInfoPanelProps {
-  deviceInfo: OMGDeviceInfo | null;
+  deviceInfo: DeviceInfo | null;
   onRefresh?: () => void;
 }
 
 const DeviceInfoPanel: React.FC<DeviceInfoPanelProps> = ({ deviceInfo, onRefresh }) => {
   const [loading, setLoading] = useState(false);
-  const [detailedInfo, setDetailedInfo] = useState<OMGDeviceInfo | null>(null);
+  const [detailedInfo, setDetailedInfo] = useState<DeviceInfo | null>(null);
   const [diagnosticResults, setDiagnosticResults] = useState<any>(null);
   const [diagnosticRunning, setDiagnosticRunning] = useState(false);
   const [firmwareInfo, setFirmwareInfo] = useState<{
@@ -56,17 +56,17 @@ const DeviceInfoPanel: React.FC<DeviceInfoPanelProps> = ({ deviceInfo, onRefresh
         setLoading(true);
         try {
           // Use optional chaining and nullish coalescing for type safety
-          const connectionType = deviceInfo.connectionType || 'wifi';
+          const connectionType = deviceInfo?.connectionType ?? 'wifi';
           
           // For USB devices, check WebSerial connection
-          if (connectionType === 'usb' && deviceInfo.serialPortId) {
+          if (connectionType === 'usb' && deviceInfo?.serialPortId) {
             const isConnected = await checkWebSerialConnection(deviceInfo.serialPortId);
-            deviceInfo.connectionStatus = isConnected ? 'connected' : 'disconnected';
+            if (deviceInfo) deviceInfo.connectionStatus = isConnected ? 'connected' : 'disconnected';
           }
           // For network devices, status is managed by the backend
           else {
-            const status = deviceInfo.status || 'offline';
-            deviceInfo.connectionStatus = status === 'online' ? 'connected' : 'disconnected';
+            const status = deviceInfo?.status ?? 'offline';
+            if (deviceInfo) deviceInfo.connectionStatus = status === 'online' ? 'connected' : 'disconnected';
           }
 
           const enhancedInfo = await getDeviceCapabilities(deviceInfo);

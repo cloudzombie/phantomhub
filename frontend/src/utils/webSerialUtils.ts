@@ -388,13 +388,13 @@ const readResponse = async (deviceInfo: OMGDeviceInfo): Promise<string> => {
   try {
     // Read until we get a complete response (ends with OK or ERROR)
     while (!responseComplete && (Date.now() - startTime < responseTimeout)) {
-      const { value, done } = await deviceInfo.reader.read();
-      
-      if (done) {
-        throw new Error('Serial port closed while reading');
-      }
-      
-      if (value) {
+    const { value, done } = await deviceInfo.reader.read();
+    
+    if (done) {
+      throw new Error('Serial port closed while reading');
+    }
+    
+    if (value) {
         const chunk = decoder.decode(value, { stream: true });
         response += chunk;
         

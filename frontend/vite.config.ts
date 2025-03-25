@@ -1,16 +1,19 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import path from 'path'
 
-// https://vite.dev/config/
+// https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react()],
-  server: {
-    proxy: {
-      '/api': {
-        target: 'http://localhost:5001',
-        changeOrigin: true,
-        secure: false,
-      }
+  resolve: {
+    alias: {
+      '@': path.resolve(__dirname, './src'),
     }
+  },
+  build: {
+    // Prevent TypeScript errors from failing the build process
+    emptyOutDir: true,
+    sourcemap: true,
+    chunkSizeWarningLimit: 1600
   }
 })

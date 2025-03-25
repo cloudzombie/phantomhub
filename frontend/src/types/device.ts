@@ -1,5 +1,4 @@
-export interface OMGDeviceInfo {
-  id?: string;
+export interface DeviceInfo {
   name: string;
   type?: string;
   status?: 'online' | 'offline' | 'error';

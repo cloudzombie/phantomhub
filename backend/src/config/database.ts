@@ -13,6 +13,30 @@ import path from 'path';
 
 dotenv.config();
 
+// Parse DATABASE_URL for Heroku deployment
+const parseDbUrl = () => {
+  if (process.env.DATABASE_URL) {
+    try {
+      // Parse Heroku's DATABASE_URL
+      const dbUrl = new URL(process.env.DATABASE_URL);
+      return {
+        DB_NAME: dbUrl.pathname.substring(1),
+        DB_USER: dbUrl.username,
+        DB_PASSWORD: dbUrl.password,
+        DB_HOST: dbUrl.hostname,
+        DB_PORT: dbUrl.port,
+        DB_SSL: 'true'
+      };
+    } catch (error) {
+      logger.error('Error parsing DATABASE_URL:', error);
+    }
+  }
+  return {};
+};
+
+// Merge environment variables with parsed DATABASE_URL
+const dbEnv = { ...process.env, ...parseDbUrl() };
+
 const {
   DB_NAME = 'phantomhub',
   DB_USER = 'joshuafisher',
@@ -28,7 +52,7 @@ const {
   DB_POOL_IDLE = '10000',
   DB_RETRY_ATTEMPTS = '5',
   DB_RETRY_DELAY = '5000'
-} = process.env;
+} = dbEnv;
 
 // SSL configuration for production
 const getSslConfig = () => {

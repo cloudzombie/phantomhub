@@ -140,13 +140,14 @@ const DeviceDetails: React.FC = () => {
         {/* Device Info Panel */}
         <DeviceInfoPanel 
           deviceInfo={{
-            id: device.id,
             name: device.name,
-            connectionType: device.connectionType,
-            ipAddress: device.ipAddress,
+            type: 'omg',
+            status: device.status as 'online' | 'offline' | 'error',
+            connectionType: device.connectionType as 'usb' | 'wifi' | 'ethernet' | 'bluetooth',
             serialPortId: device.serialPortId,
+            ipAddress: device.ipAddress,
             firmwareVersion: device.firmwareVersion,
-            connectionStatus: device.status === 'online' ? 'connected' : 'disconnected'
+            lastSeen: device.lastCheckIn ? new Date(device.lastCheckIn) : undefined
           }} 
           onRefresh={refreshDevice} 
         />

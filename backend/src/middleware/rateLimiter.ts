@@ -11,14 +11,31 @@ import { Redis } from 'ioredis';
 import rateLimit from 'express-rate-limit';
 import logger from '../utils/logger';
 
+// Import parse REDIS_URL function
+// Parse REDIS_URL if available (Heroku provides this)
+const getRedisConfig = () => {
+  if (process.env.REDIS_URL) {
+    try {
+      const redisUrl = new URL(process.env.REDIS_URL);
+      return {
+        host: redisUrl.hostname,
+        port: Number(redisUrl.port),
+        password: redisUrl.password,
+        tls: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : undefined
+      };
+    } catch (error) {
+      console.error('Error parsing REDIS_URL:', error);
+    }
+  }
+  return {
+    host: process.env.REDIS_HOST || 'localhost',
+    port: Number(process.env.REDIS_PORT || 6379),
+    password: process.env.REDIS_PASSWORD || undefined
+  };
+};
+
 // Initialize Redis client for rate limiting
-const redis = new Redis({
-  host: process.env.REDIS_HOST || 'localhost',
-  port: Number(process.env.REDIS_PORT || 6379),
-  password: process.env.REDIS_PASSWORD || undefined,
-  enableReadyCheck: true,
-  maxRetriesPerRequest: 3
-});
+const redis = new Redis(getRedisConfig());
 
 // Type for API routes
 export type ApiEndpoint = 'auth' | 'devices' | 'payloads' | 'deployments' | 'system' | 'users' | 'scripts';
