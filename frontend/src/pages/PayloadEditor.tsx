@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, ChangeEvent } from 'react';
-import { FiSave, FiCode, FiZap, FiInfo, FiAlertCircle, FiCheckCircle, FiRefreshCw, FiHardDrive, FiWifi, FiUpload, FiLink, FiList, FiFile, FiTrash2, FiPlusCircle, FiX } from 'react-icons/fi';
+import { FiSave, FiCode, FiZap, FiInfo, FiAlertCircle, FiCheckCircle, FiRefreshCw, FiHardDrive, FiWifi, FiUpload, FiLink, FiList, FiFile, FiTrash2, FiPlusCircle, FiX, FiEdit2, FiEdit, FiCheck } from 'react-icons/fi';
 import axios from 'axios';
 import * as monaco from 'monaco-editor';
 import { registerDuckyScriptLanguage } from '../utils/duckyScriptLanguage';
@@ -86,6 +86,13 @@ const PayloadEditor = () => {
   });
   const [fileContent, setFileContent] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  // Add this near the other state declarations
+  const [editingScript, setEditingScript] = useState<Script | null>(null);
+  const [showScriptEditorModal, setShowScriptEditorModal] = useState(false);
+  const [scriptEditorContent, setScriptEditorContent] = useState('');
+  const [renamePayloadId, setRenamePayloadId] = useState<string | null>(null);
+  const [newPayloadName, setNewPayloadName] = useState('');
   
   useEffect(() => {
     // Check if WebSerial is supported
@@ -992,6 +999,182 @@ const PayloadEditor = () => {
     }
   };
   
+  const openScriptEditor = async (script: Script) => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        console.error('No authentication token found');
+        window.location.href = '/login';
+        return;
+      }
+      
+      // Fetch the script content if needed
+      const response = await axios.get(`${API_URL}/scripts/${script.id}`, {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+      
+      if (response.data && response.data.success) {
+        const scriptData = response.data.data;
+        setEditingScript(scriptData);
+        setScriptEditorContent(scriptData.content || '');
+        setShowScriptEditorModal(true);
+      } else {
+        setMessage({
+          type: 'error',
+          text: response.data?.message || 'Failed to load script'
+        });
+      }
+    } catch (error) {
+      console.error('Error loading script:', error);
+      setMessage({
+        type: 'error',
+        text: 'Failed to load script. Please try again.'
+      });
+      
+      // If we get a 401, redirect to login
+      if (axios.isAxiosError(error) && error.response?.status === 401) {
+        localStorage.removeItem('token');
+        window.location.href = '/login';
+      }
+    }
+  };
+
+  const saveScriptChanges = async () => {
+    try {
+      if (!editingScript) return;
+      
+      setIsLoading(true);
+      
+      const token = localStorage.getItem('token');
+      if (!token) {
+        console.error('No authentication token found');
+        window.location.href = '/login';
+        return;
+      }
+      
+      const scriptData = {
+        ...editingScript,
+        content: scriptEditorContent
+      };
+      
+      const response = await axios.put(`${API_URL}/scripts/${editingScript.id}`, scriptData, {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+      
+      if (response.data && response.data.success) {
+        setMessage({
+          type: 'success',
+          text: `Script "${editingScript.name}" updated successfully!`
+        });
+        
+        // Close the modal and refresh scripts
+        setShowScriptEditorModal(false);
+        fetchScripts();
+      } else {
+        setMessage({
+          type: 'error',
+          text: response.data?.message || 'Failed to update script'
+        });
+      }
+    } catch (error) {
+      console.error('Error updating script:', error);
+      setMessage({
+        type: 'error',
+        text: 'Failed to update script. Please try again.'
+      });
+      
+      // If we get a 401, redirect to login
+      if (axios.isAxiosError(error) && error.response?.status === 401) {
+        localStorage.removeItem('token');
+        window.location.href = '/login';
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const startPayloadRename = (payload: Payload, e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent triggering the payload selection
+    setRenamePayloadId(payload.id);
+    setNewPayloadName(payload.name);
+  };
+
+  const savePayloadRename = async (payloadId: string) => {
+    try {
+      if (!newPayloadName.trim()) {
+        setMessage({
+          type: 'error',
+          text: 'Payload name cannot be empty'
+        });
+        return;
+      }
+      
+      setIsLoading(true);
+      
+      const token = localStorage.getItem('token');
+      if (!token) {
+        console.error('No authentication token found');
+        window.location.href = '/login';
+        return;
+      }
+      
+      // Get the current payload
+      const payload = payloads.find(p => p.id === payloadId);
+      if (!payload) return;
+      
+      const payloadData = {
+        ...payload,
+        name: newPayloadName
+      };
+      
+      const response = await axios.put(`${API_URL}/payloads/${payloadId}`, payloadData, {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+      
+      if (response.data && response.data.success) {
+        setMessage({
+          type: 'success',
+          text: 'Payload renamed successfully'
+        });
+        
+        // Update the local payloads list
+        setPayloads(prevPayloads => 
+          prevPayloads.map(p => 
+            p.id === payloadId ? { ...p, name: newPayloadName } : p
+          )
+        );
+        
+        // Update selected payload if it's the one being renamed
+        if (selectedPayload && selectedPayload.id === payloadId) {
+          setSelectedPayload({ ...selectedPayload, name: newPayloadName });
+          setPayloadName(newPayloadName);
+        }
+        
+        // Clear rename state
+        setRenamePayloadId(null);
+      } else {
+        setMessage({
+          type: 'error',
+          text: response.data?.message || 'Failed to rename payload'
+        });
+      }
+    } catch (error) {
+      console.error('Error renaming payload:', error);
+      setMessage({
+        type: 'error',
+        text: 'Failed to rename payload. Please try again.'
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  
   return (
     <div className="flex flex-col h-full p-6">
       <div className="border-b border-slate-700 pb-6 mb-6">
@@ -1113,23 +1296,64 @@ const PayloadEditor = () => {
                 payloads.map((payload) => (
                   <li
                     key={payload.id}
-                    className="border-b border-slate-700 last:border-none hover:bg-slate-700/30 cursor-pointer"
+                    className="border-b border-slate-700 last:border-none hover:bg-slate-700/30"
                   >
                     <div className="px-4 py-2 flex justify-between items-center">
-                      <div onClick={() => loadPayload(payload)} className="flex-1 cursor-pointer">
-                        <div className="font-medium text-white">{payload.name}</div>
-                        {payload.description && (
-                          <div className="text-xs text-slate-400 mt-1">{payload.description}</div>
-                        )}
-                        <div className="text-xs text-slate-500 mt-1">Last updated: {new Date(payload.updatedAt).toLocaleString()}</div>
-                      </div>
-                      <button
-                        onClick={(e) => handleDeleteClick(payload, e)}
-                        className="p-2 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded"
-                        title="Delete Payload"
-                      >
-                        <FiTrash2 size={16} />
-                      </button>
+                      {renamePayloadId === payload.id ? (
+                        <div className="flex items-center" onClick={e => e.stopPropagation()}>
+                          <input
+                            type="text"
+                            value={newPayloadName}
+                            onChange={e => setNewPayloadName(e.target.value)}
+                            className="font-medium bg-slate-700 text-white px-2 py-1 rounded w-full"
+                            autoFocus
+                            onKeyDown={e => {
+                              if (e.key === 'Enter') savePayloadRename(payload.id);
+                              if (e.key === 'Escape') setRenamePayloadId(null);
+                            }}
+                          />
+                          <button
+                            onClick={() => savePayloadRename(payload.id)}
+                            className="ml-2 p-1 text-green-400 hover:text-green-300 hover:bg-green-500/10 rounded"
+                            title="Save"
+                          >
+                            <FiCheck size={16} />
+                          </button>
+                          <button
+                            onClick={() => setRenamePayloadId(null)}
+                            className="ml-1 p-1 text-slate-400 hover:text-slate-300 hover:bg-slate-500/10 rounded"
+                            title="Cancel"
+                          >
+                            <FiX size={16} />
+                          </button>
+                        </div>
+                      ) : (
+                        <>
+                          <div onClick={() => loadPayload(payload)} className="flex-1 cursor-pointer">
+                            <div className="font-medium text-white">{payload.name}</div>
+                            {payload.description && (
+                              <div className="text-xs text-slate-400 mt-1">{payload.description}</div>
+                            )}
+                            <div className="text-xs text-slate-500 mt-1">Last updated: {new Date(payload.updatedAt).toLocaleString()}</div>
+                          </div>
+                          <div className="flex items-center">
+                            <button
+                              onClick={(e) => startPayloadRename(payload, e)}
+                              className="p-2 text-blue-400 hover:text-blue-300 hover:bg-blue-500/10 rounded mr-1"
+                              title="Rename Payload"
+                            >
+                              <FiEdit2 size={16} />
+                            </button>
+                            <button
+                              onClick={(e) => handleDeleteClick(payload, e)}
+                              className="p-2 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded"
+                              title="Delete Payload"
+                            >
+                              <FiTrash2 size={16} />
+                            </button>
+                          </div>
+                        </>
+                      )}
                     </div>
                   </li>
                 ))
@@ -1192,6 +1416,13 @@ const PayloadEditor = () => {
                         <td className="px-4 py-2">{new Date(script.createdAt).toLocaleDateString()}</td>
                         <td className="px-4 py-2 text-right">
                           <div className="flex justify-end space-x-2">
+                            <button
+                              onClick={() => openScriptEditor(script)}
+                              className="p-1 text-blue-400 hover:text-blue-300"
+                              title="Edit script"
+                            >
+                              <FiEdit size={16} />
+                            </button>
                             {script.endpoint && (
                               <button
                                 onClick={() => {
@@ -1403,6 +1634,49 @@ const PayloadEditor = () => {
                   >
                     {isLoading ? <FiRefreshCw className="mr-2 animate-spin" size={14} /> : <FiSave className="mr-2" size={14} />}
                     Create Script
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Script Editor Modal */}
+        {showScriptEditorModal && editingScript && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+            <div className="bg-slate-800 border border-slate-700 rounded-lg shadow-lg w-full max-w-3xl p-6 relative" style={{ height: '80vh' }}>
+              <button 
+                onClick={() => setShowScriptEditorModal(false)}
+                className="absolute top-3 right-3 text-slate-400 hover:text-white"
+              >
+                <FiX size={18} />
+              </button>
+              <div className="mb-5">
+                <h2 className="text-lg font-medium text-white">Edit Script: {editingScript.name}</h2>
+                <p className="text-sm text-slate-400">{editingScript.type} script</p>
+              </div>
+              
+              <div className="flex flex-col h-full" style={{ height: 'calc(100% - 100px)' }}>
+                <textarea
+                  value={scriptEditorContent}
+                  onChange={(e) => setScriptEditorContent(e.target.value)}
+                  className="w-full flex-1 px-4 py-3 bg-slate-900 text-white font-mono text-sm rounded-md border border-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4"
+                  style={{ minHeight: '300px' }}
+                />
+                
+                <div className="flex justify-end space-x-3">
+                  <button
+                    onClick={() => setShowScriptEditorModal(false)}
+                    className="px-4 py-2 bg-slate-700 text-white rounded hover:bg-slate-600"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={saveScriptChanges}
+                    disabled={isLoading}
+                    className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isLoading ? <FiRefreshCw className="animate-spin" size={16} /> : 'Save Changes'}
                   </button>
                 </div>
               </div>
