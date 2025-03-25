@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef } from 'react';
-import { FiSave, FiCode, FiZap, FiInfo, FiAlertCircle, FiCheckCircle, FiRefreshCw, FiHardDrive, FiWifi } from 'react-icons/fi';
+import { useState, useEffect, useRef, ChangeEvent } from 'react';
+import { FiSave, FiCode, FiZap, FiInfo, FiAlertCircle, FiCheckCircle, FiRefreshCw, FiHardDrive, FiWifi, FiUpload, FiLink, FiList, FiFile, FiTrash2, FiPlusCircle } from 'react-icons/fi';
 import axios from 'axios';
 import * as monaco from 'monaco-editor';
 import { registerDuckyScriptLanguage } from '../utils/duckyScriptLanguage';
@@ -39,6 +39,21 @@ interface Payload {
   updatedAt: string;
 }
 
+interface Script {
+  id: string;
+  name: string;
+  content: string;
+  type: 'callback' | 'exfiltration' | 'command' | 'custom';
+  description: string | null;
+  isPublic: boolean;
+  endpoint: string | null;
+  callbackUrl: string | null;
+  lastExecuted: string | null;
+  executionCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
 const PayloadEditor = () => {
   const [payloadName, setPayloadName] = useState('New Payload');
   const [payloads, setPayloads] = useState<Payload[]>([]);
@@ -52,6 +67,22 @@ const PayloadEditor = () => {
   const [usbDevices, setUsbDevices] = useState<OMGDeviceInfo[]>([]);
   const editorContainerRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
+  
+  // Scripts state
+  const [scripts, setScripts] = useState<Script[]>([]);
+  const [selectedScripts, setSelectedScripts] = useState<string[]>([]);
+  const [showScriptList, setShowScriptList] = useState(false);
+  const [showScriptModal, setShowScriptModal] = useState(false);
+  const [scriptFormData, setScriptFormData] = useState({
+    name: '',
+    type: 'callback',
+    description: '',
+    content: '',
+    isPublic: false,
+    callbackUrl: ''
+  });
+  const [fileContent, setFileContent] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   
   useEffect(() => {
     // Check if WebSerial is supported
@@ -96,6 +127,9 @@ const PayloadEditor = () => {
         checkUsbDevices();
       }
     }, 5000);
+    
+    // Fetch available scripts
+    fetchScripts();
     
     // Cleanup
     return () => {
@@ -187,12 +221,69 @@ const PayloadEditor = () => {
     }
   };
   
+  const fetchScripts = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        console.error('No authentication token found');
+        window.location.href = '/login';
+        return;
+      }
+      
+      const response = await axios.get(`${API_URL}/scripts`, {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+      
+      if (response.data && response.data.success) {
+        setScripts(response.data.data || []);
+      }
+    } catch (error) {
+      console.error('Error fetching scripts:', error);
+      
+      // If we get a 401, redirect to login
+      if (axios.isAxiosError(error) && error.response?.status === 401) {
+        localStorage.removeItem('token');
+        window.location.href = '/login';
+      }
+    }
+  };
+  
+  const fetchScriptsForPayload = async (payloadId: string) => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        console.error('No authentication token found');
+        window.location.href = '/login';
+        return;
+      }
+      
+      const response = await axios.get(`${API_URL}/scripts/payload/${payloadId}`, {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+      
+      if (response.data && response.data.success) {
+        const payloadScripts = response.data.data || [];
+        // Set the selected scripts based on what's associated with this payload
+        setSelectedScripts(payloadScripts.map((script: Script) => script.id));
+      }
+    } catch (error) {
+      console.error('Error fetching scripts for payload:', error);
+    }
+  };
+  
   const loadPayload = (payload: Payload) => {
     if (editorRef.current) {
       setPayloadName(payload.name);
       editorRef.current.setValue(payload.script);
       setSelectedPayload(payload);
       setShowPayloadList(false);
+      
+      // Fetch scripts associated with this payload
+      fetchScriptsForPayload(payload.id);
     }
   };
   
@@ -539,6 +630,212 @@ const PayloadEditor = () => {
     }
     return `${device.name} (WiFi)`;
   };
+
+  // Create a new script
+  const createScript = async () => {
+    try {
+      setIsLoading(true);
+      
+      const token = localStorage.getItem('token');
+      if (!token) {
+        console.error('No authentication token found');
+        window.location.href = '/login';
+        return;
+      }
+      
+      // If file was uploaded, use its content instead of the form content
+      const finalContent = fileContent || scriptFormData.content;
+      
+      if (!scriptFormData.name || !finalContent) {
+        setMessage({
+          type: 'error',
+          text: 'Script name and content are required'
+        });
+        setIsLoading(false);
+        return;
+      }
+      
+      const scriptData = {
+        name: scriptFormData.name,
+        content: finalContent,
+        type: scriptFormData.type,
+        description: scriptFormData.description || null,
+        isPublic: scriptFormData.isPublic,
+        callbackUrl: scriptFormData.callbackUrl || null
+      };
+      
+      const response = await axios.post(`${API_URL}/scripts`, scriptData, {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+      
+      if (response.data && response.data.success) {
+        setMessage({
+          type: 'success',
+          text: `Script "${scriptFormData.name}" created successfully!`
+        });
+        
+        // Reset the form
+        setScriptFormData({
+          name: '',
+          type: 'callback',
+          description: '',
+          content: '',
+          isPublic: false,
+          callbackUrl: ''
+        });
+        setFileContent(null);
+        if (fileInputRef.current) {
+          fileInputRef.current.value = '';
+        }
+        
+        // Close the modal and refresh scripts
+        setShowScriptModal(false);
+        fetchScripts();
+      } else {
+        setMessage({
+          type: 'error',
+          text: response.data?.message || 'Failed to create script'
+        });
+      }
+    } catch (error) {
+      console.error('Error creating script:', error);
+      setMessage({
+        type: 'error',
+        text: 'Failed to create script. Please try again.'
+      });
+      
+      // If we get a 401, redirect to login
+      if (axios.isAxiosError(error) && error.response?.status === 401) {
+        localStorage.removeItem('token');
+        window.location.href = '/login';
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Handle file upload
+  const handleFileUpload = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const content = e.target?.result as string;
+      setFileContent(content);
+    };
+    reader.readAsText(file);
+  };
+
+  // Handle script form input changes
+  const handleScriptInputChange = (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+    const { name, value } = e.target;
+    setScriptFormData(prev => ({
+      ...prev,
+      [name]: value
+    }));
+  };
+
+  // Handle checkbox changes
+  const handleCheckboxChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const { name, checked } = e.target;
+    setScriptFormData(prev => ({
+      ...prev,
+      [name]: checked
+    }));
+  };
+
+  // Toggle script selection
+  const toggleScriptSelection = (scriptId: string) => {
+    setSelectedScripts(prev => {
+      if (prev.includes(scriptId)) {
+        return prev.filter(id => id !== scriptId);
+      } else {
+        return [...prev, scriptId];
+      }
+    });
+  };
+
+  // Associate selected scripts with the current payload
+  const associateScriptsWithPayload = async () => {
+    if (!selectedPayload) {
+      setMessage({
+        type: 'error',
+        text: 'Please save the payload first'
+      });
+      return;
+    }
+    
+    setIsLoading(true);
+    
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        console.error('No authentication token found');
+        window.location.href = '/login';
+        return;
+      }
+      
+      // Get the scripts currently associated with this payload
+      const currentScripts = await axios.get(`${API_URL}/scripts/payload/${selectedPayload.id}`, {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+      
+      const currentScriptIds = currentScripts.data.success ? 
+        currentScripts.data.data.map((script: Script) => script.id) : [];
+      
+      // Scripts to add (selected but not in current)
+      const scriptsToAdd = selectedScripts.filter(id => !currentScriptIds.includes(id));
+      
+      // Scripts to remove (current but not in selected)
+      const scriptsToRemove = currentScriptIds.filter(id => !selectedScripts.includes(id));
+      
+      // Add new associations
+      for (const scriptId of scriptsToAdd) {
+        await axios.post(`${API_URL}/scripts/associate`, {
+          scriptId,
+          payloadId: selectedPayload.id,
+          executionOrder: 0 // Default execution order
+        }, {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        });
+      }
+      
+      // Remove old associations
+      for (const scriptId of scriptsToRemove) {
+        await axios.post(`${API_URL}/scripts/disassociate`, {
+          scriptId,
+          payloadId: selectedPayload.id
+        }, {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        });
+      }
+      
+      setMessage({
+        type: 'success',
+        text: 'Scripts associated with payload successfully!'
+      });
+      
+      // Close the script list
+      setShowScriptList(false);
+    } catch (error) {
+      console.error('Error associating scripts with payload:', error);
+      setMessage({
+        type: 'error',
+        text: 'Failed to associate scripts with payload'
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
   
   return (
     <div className="p-6 h-full flex flex-col">
@@ -732,6 +1029,254 @@ const PayloadEditor = () => {
           <li>Special keys like <code className="bg-slate-700/50 px-1 rounded">CTRL</code>, <code className="bg-slate-700/50 px-1 rounded">ALT</code>, <code className="bg-slate-700/50 px-1 rounded">GUI</code> can be combined</li>
         </ul>
       </div>
+      
+      {/* Script Management Button */}
+      <div className="flex space-x-2">
+        <button
+          onClick={() => setShowScriptList(!showScriptList)}
+          className="flex items-center px-3 py-2 bg-slate-700 hover:bg-slate-600 border border-slate-600 rounded-md text-white text-sm font-medium transition-colors"
+        >
+          <FiList className="mr-2" size={16} />
+          {showScriptList ? 'Hide Scripts' : 'Manage Scripts'}
+        </button>
+        
+        <button
+          onClick={() => setShowScriptModal(true)}
+          className="flex items-center px-3 py-2 bg-slate-700 hover:bg-slate-600 border border-slate-600 rounded-md text-white text-sm font-medium transition-colors"
+        >
+          <FiPlusCircle className="mr-2" size={16} />
+          New Script
+        </button>
+      </div>
+
+      {/* Script List */}
+      {showScriptList && (
+        <div className="bg-slate-800 border border-slate-700 rounded-md shadow-sm mb-4 overflow-hidden">
+          <div className="border-b border-slate-700 px-4 py-2 font-medium text-white flex justify-between items-center">
+            <span>Script Library</span>
+            <button
+              onClick={associateScriptsWithPayload}
+              disabled={isLoading || !selectedPayload}
+              className="px-3 py-1 text-xs bg-green-500/10 border border-green-500/30 rounded text-green-500 hover:bg-green-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isLoading ? <FiRefreshCw className="animate-spin" size={14} /> : 'Apply Selection'}
+            </button>
+          </div>
+          
+          <div className="max-h-64 overflow-y-auto">
+            {scripts.length > 0 ? (
+              <table className="w-full text-sm text-slate-300">
+                <thead className="bg-slate-700/50 text-xs uppercase text-slate-400">
+                  <tr>
+                    <th className="w-10 px-4 py-2 text-center">#</th>
+                    <th className="px-4 py-2 text-left">Name</th>
+                    <th className="px-4 py-2 text-left">Type</th>
+                    <th className="px-4 py-2 text-left">Created</th>
+                    <th className="px-4 py-2 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {scripts.map(script => (
+                    <tr 
+                      key={script.id} 
+                      className="border-b border-slate-700 hover:bg-slate-700/30"
+                    >
+                      <td className="px-4 py-2 text-center">
+                        <input
+                          type="checkbox"
+                          checked={selectedScripts.includes(script.id)}
+                          onChange={() => toggleScriptSelection(script.id)}
+                          className="w-4 h-4 text-green-600 bg-slate-700 border-slate-600 rounded focus:ring-green-500"
+                        />
+                      </td>
+                      <td className="px-4 py-2">
+                        <div className="font-medium text-white">{script.name}</div>
+                        <div className="text-xs text-slate-400">{script.description}</div>
+                      </td>
+                      <td className="px-4 py-2">
+                        <span className="px-2 py-1 text-xs rounded-full bg-slate-700 text-slate-300">
+                          {script.type}
+                        </span>
+                      </td>
+                      <td className="px-4 py-2">{new Date(script.createdAt).toLocaleDateString()}</td>
+                      <td className="px-4 py-2 text-right">
+                        <div className="flex justify-end space-x-2">
+                          {script.endpoint && (
+                            <button
+                              onClick={() => {
+                                navigator.clipboard.writeText(`${API_URL}/scripts/execute/${script.endpoint}`);
+                                setMessage({
+                                  type: 'success',
+                                  text: 'Endpoint URL copied to clipboard!'
+                                });
+                              }}
+                              className="p-1 text-blue-400 hover:text-blue-300"
+                              title="Copy endpoint URL"
+                            >
+                              <FiLink size={16} />
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : (
+              <div className="p-4 text-center text-slate-500">
+                No scripts found. Create a new script to get started!
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Create Script Modal */}
+      {showScriptModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-slate-800 border border-slate-700 rounded-lg shadow-lg w-full max-w-3xl p-6 relative">
+            <button 
+              onClick={() => setShowScriptModal(false)}
+              className="absolute top-3 right-3 text-slate-400 hover:text-white"
+            >
+              <FiTrash2 size={18} />
+            </button>
+            <div className="mb-5">
+              <h2 className="text-lg font-medium text-white">Create New Script</h2>
+              <p className="text-sm text-slate-400">Create a script that can be called back by devices</p>
+            </div>
+            
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="relative border border-slate-600 rounded-md">
+                  <label className="absolute -top-2.5 left-2 px-1 bg-slate-800 text-xs font-medium text-slate-400">
+                    Script Name
+                  </label>
+                  <input
+                    type="text"
+                    name="name"
+                    value={scriptFormData.name}
+                    onChange={handleScriptInputChange}
+                    placeholder="My Callback Script"
+                    className="w-full px-3 py-2 bg-transparent text-white text-sm focus:outline-none"
+                  />
+                </div>
+                
+                <div className="relative border border-slate-600 rounded-md">
+                  <label className="absolute -top-2.5 left-2 px-1 bg-slate-800 text-xs font-medium text-slate-400">
+                    Script Type
+                  </label>
+                  <select
+                    name="type"
+                    value={scriptFormData.type}
+                    onChange={handleScriptInputChange}
+                    className="w-full px-3 py-2 bg-transparent text-white text-sm focus:outline-none"
+                  >
+                    <option value="callback">Callback</option>
+                    <option value="exfiltration">Exfiltration</option>
+                    <option value="command">Command</option>
+                    <option value="custom">Custom</option>
+                  </select>
+                </div>
+              </div>
+              
+              <div className="relative border border-slate-600 rounded-md">
+                <label className="absolute -top-2.5 left-2 px-1 bg-slate-800 text-xs font-medium text-slate-400">
+                  Description (optional)
+                </label>
+                <input
+                  type="text"
+                  name="description"
+                  value={scriptFormData.description}
+                  onChange={handleScriptInputChange}
+                  placeholder="A brief description of what this script does"
+                  className="w-full px-3 py-2 bg-transparent text-white text-sm focus:outline-none"
+                />
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="relative border border-slate-600 rounded-md">
+                  <label className="absolute -top-2.5 left-2 px-1 bg-slate-800 text-xs font-medium text-slate-400">
+                    Callback URL (optional)
+                  </label>
+                  <input
+                    type="text"
+                    name="callbackUrl"
+                    value={scriptFormData.callbackUrl}
+                    onChange={handleScriptInputChange}
+                    placeholder="https://yourdomain.com/callback"
+                    className="w-full px-3 py-2 bg-transparent text-white text-sm focus:outline-none"
+                  />
+                </div>
+                
+                <div className="py-2 px-3 flex items-center">
+                  <input
+                    type="checkbox"
+                    id="isPublic"
+                    name="isPublic"
+                    checked={scriptFormData.isPublic}
+                    onChange={handleCheckboxChange}
+                    className="mr-2 w-4 h-4 text-green-600 bg-slate-700 border-slate-600 rounded focus:ring-green-500"
+                  />
+                  <label htmlFor="isPublic" className="text-white text-sm">
+                    Make script public (available to all users)
+                  </label>
+                </div>
+              </div>
+              
+              <div className="relative border border-slate-600 rounded-md">
+                <label className="absolute -top-2.5 left-2 px-1 bg-slate-800 text-xs font-medium text-slate-400">
+                  Script Content
+                </label>
+                <textarea
+                  name="content"
+                  value={fileContent || scriptFormData.content}
+                  onChange={handleScriptInputChange}
+                  placeholder="Enter your script content here or upload a file"
+                  className="w-full h-40 px-3 py-2 bg-transparent text-white text-sm focus:outline-none resize-none"
+                  readOnly={fileContent !== null}
+                ></textarea>
+              </div>
+              
+              <div>
+                <label className="block mb-2 text-sm font-medium text-white">
+                  Or upload a script file
+                </label>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  onChange={handleFileUpload}
+                  className="block w-full text-sm text-slate-400
+                    file:mr-4 file:py-2 file:px-4
+                    file:rounded-md file:border-0
+                    file:text-sm file:font-medium
+                    file:bg-slate-700 file:text-slate-300
+                    hover:file:bg-slate-600"
+                />
+              </div>
+              
+              <div className="pt-4 flex justify-end space-x-3">
+                <button
+                  type="button"
+                  onClick={() => setShowScriptModal(false)}
+                  className="px-4 py-2 bg-slate-700 border border-slate-600 rounded-md text-sm text-slate-300 hover:bg-slate-600"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={createScript}
+                  disabled={isLoading || (!scriptFormData.content && !fileContent)}
+                  className="px-4 py-2 bg-green-500/10 border border-green-500/30 rounded-md text-sm text-green-500 hover:bg-green-500/20 flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isLoading ? <FiRefreshCw className="mr-2 animate-spin" size={14} /> : <FiSave className="mr-2" size={14} />}
+                  Create Script
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
