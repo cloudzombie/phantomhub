@@ -165,9 +165,9 @@ const Layout = () => {
             <div className="mr-4">
               <ThemeToggle compact={true} showLabels={false} />
             </div>
-            <div className="text-xs text-slate-400 py-1 px-2 bg-slate-700/50 rounded border border-slate-600/50">
+            <div className="text-xs py-1 px-2 rounded border border-slate-600/50 bg-slate-700/80 dark-theme:bg-slate-700/50 light-theme:bg-slate-900/90 light-theme:border-slate-400/30">
               {currentUser ? (
-                <span className="text-green-500 font-medium">{currentUser.email || 'User'}</span>
+                <span className="dark-theme:text-green-500 light-theme:text-green-600 font-medium">{currentUser.email || 'User'}</span>
               ) : (
                 <span className="text-slate-400">Not logged in</span>
               )}
