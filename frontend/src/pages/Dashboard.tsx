@@ -96,7 +96,10 @@ const Dashboard = () => {
   
   const calculateStats = () => {
     // Calculate stats based on devices and deployments
-    const activeDevices = devices.filter(d => d.status === 'online').length;
+    const activeDevices = devices.filter(d => 
+      d.status === 'online' && (!d.name.toLowerCase().includes('test') || d.lastCheckIn)
+    ).length;
+    
     const totalPayloads = recentDeployments.length;
     const completedAttacks = recentDeployments.filter(d => d.status === 'completed').length;
     const successRate = totalPayloads > 0 ? Math.round((completedAttacks / totalPayloads) * 100) : 0;
@@ -128,7 +131,15 @@ const Dashboard = () => {
       const devicesResponse = await axios.get(`${API_URL}/devices`, { headers });
       
       if (devicesResponse.data && devicesResponse.data.success) {
-        setDevices(devicesResponse.data.data || []);
+        // Update test devices to always show as offline in the UI
+        const updatedDevices = devicesResponse.data.data.map((device: Device) => {
+          // If it's a test device and not explicitly set to online by a user, mark as offline
+          if (device.name.toLowerCase().includes('test') && !device.lastCheckIn) {
+            return { ...device, status: 'offline' };
+          }
+          return device;
+        });
+        setDevices(updatedDevices || []);
       }
       
       // Fetch recent deployments
@@ -255,7 +266,7 @@ const Dashboard = () => {
             Device Status
           </h2>
           <span className="text-xs font-medium text-slate-400">
-            {devices.filter(d => d.status === 'online').length} Online
+            {devices.filter(d => d.status === 'online' && (!d.name.toLowerCase().includes('test') || d.lastCheckIn)).length} Online
           </span>
         </div>
         
@@ -278,8 +289,13 @@ const Dashboard = () => {
               <div key={device.id} className="flex items-center justify-between px-4 py-3 hover:bg-slate-700/10">
                 <div className="flex items-center">
                   <div className={`w-2 h-2 rounded-full mr-3 ${
-                    device.status === 'online' ? 'bg-green-500' : 
-                    device.status === 'busy' ? 'bg-orange-500' : 'bg-red-500'
+                    (device.name.toLowerCase().includes('test') && !device.lastCheckIn) 
+                      ? 'bg-red-500' // Test devices without lastCheckIn are always offline
+                      : device.status === 'online' 
+                        ? 'bg-green-500' 
+                        : device.status === 'busy' 
+                          ? 'bg-orange-500' 
+                          : 'bg-red-500'
                   }`}></div>
                   <div>
                     <div className="text-sm font-medium text-white">{device.name}</div>
@@ -287,7 +303,9 @@ const Dashboard = () => {
                   </div>
                 </div>
                 <div>
-                  {device.status === 'online' ? (
+                  {(device.name.toLowerCase().includes('test') && !device.lastCheckIn) ? (
+                    <span className="px-2 py-1 text-xs bg-red-500/20 text-red-400 border border-red-500/30 rounded-full">Offline</span>
+                  ) : device.status === 'online' ? (
                     <span className="px-2 py-1 text-xs bg-green-500/20 text-green-400 border border-green-500/30 rounded-full">Online</span>
                   ) : device.status === 'busy' ? (
                     <span className="px-2 py-1 text-xs bg-orange-500/20 text-orange-400 border border-orange-500/30 rounded-full">Busy</span>
