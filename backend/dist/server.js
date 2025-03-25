@@ -14,6 +14,10 @@ const database_1 = require("./config/database");
 const errorHandler_1 = require("./middleware/errorHandler");
 const os_1 = __importDefault(require("os"));
 const database_2 = require("./config/database");
+const deviceConnectionPool_1 = __importDefault(require("./services/deviceConnectionPool"));
+const logger_1 = __importDefault(require("./utils/logger"));
+const rateLimiter_1 = require("./middleware/rateLimiter");
+const socketService_1 = require("./services/socketService");
 // Track when the server started
 const serverStartTime = new Date();
 // Import routes
@@ -31,7 +35,7 @@ const app = (0, express_1.default)();
 const PORT = process.env.PORT || 5001;
 // Create HTTP server
 const server = http_1.default.createServer(app);
-// Initialize Socket.IO
+// Initialize Socket.IO with proper WebSocket configuration
 const io = new socket_io_1.Server(server, {
     cors: {
         origin: function (origin, callback) {
@@ -46,10 +50,25 @@ const io = new socket_io_1.Server(server, {
         },
         methods: ['GET', 'POST'],
         credentials: true
-    }
+    },
+    // WebSocket specific configuration
+    transports: ['websocket', 'polling'],
+    pingTimeout: 20000,
+    pingInterval: 25000,
+    connectTimeout: 45000,
+    allowUpgrades: true,
+    upgradeTimeout: 10000,
+    // Engine.IO configuration
+    maxHttpBufferSize: 1e8,
+    path: '/socket.io/',
+    // WebSocket engine configuration
+    wsEngine: require('ws').Server
 });
-// Make io available to our routes
+// Initialize SocketService with the configured io instance
+const socketService = new socketService_1.SocketService(io); // Type assertion needed due to Socket.IO version mismatch
+// Make socketService available to our routes
 app.set('io', io);
+app.set('socketService', socketService);
 // Middleware
 app.use(express_1.default.json());
 app.use(express_1.default.urlencoded({ extended: true }));
@@ -70,6 +89,15 @@ app.use((0, cors_1.default)({
 }));
 app.use((0, helmet_1.default)());
 app.use((0, morgan_1.default)('dev'));
+// Apply global rate limiter to all requests
+app.use((req, res, next) => {
+    // Exclude Socket.IO paths from rate limiting
+    if (req.path.startsWith('/socket.io')) {
+        return next();
+    }
+    // Apply rate limiter to all other paths
+    (0, rateLimiter_1.globalRateLimiter)(req, res, next);
+});
 // Routes
 app.get('/', (req, res) => {
     res.send('PHANTOM HUB API is running');
@@ -182,41 +210,21 @@ app.use('/api/users', userRoutes_1.default);
 app.use('/api/scripts', scriptRoutes_1.default);
 // Error handling middleware
 app.use(errorHandler_1.errorHandler);
-// Socket.IO connection handler
-io.on('connection', (socket) => {
-    console.log('User connected:', socket.id);
-    // Listen for device status updates
-    socket.on('device_status_update', (data) => {
-        // Broadcast device status update to all connected clients
-        io.emit('device_status_changed', data);
-    });
-    // Listen for payload execution events
-    socket.on('payload_executing', (data) => {
-        io.emit('payload_status_update', {
-            ...data,
-            status: 'executing'
-        });
-    });
-    // Listen for payload completion events
-    socket.on('payload_completed', (data) => {
-        io.emit('payload_status_update', {
-            ...data,
-            status: 'completed'
-        });
-    });
-    // Listen for deployment status updates
-    socket.on('deployment_status_update', (data) => {
-        io.emit('deployment_status_changed', data);
-    });
-    socket.on('disconnect', () => {
-        console.log('User disconnected:', socket.id);
-    });
-});
 // Initialize database and start server
 const startServer = async () => {
     try {
         // Initialize database first
         await (0, database_1.initializeDatabase)();
+        // Initialize device connection pool
+        const connectionPool = deviceConnectionPool_1.default.getInstance({
+            maxConnections: process.env.CONNECTION_POOL_MAX_CONNECTIONS ?
+                parseInt(process.env.CONNECTION_POOL_MAX_CONNECTIONS) : 20,
+            connectionTTL: process.env.CONNECTION_POOL_TTL ?
+                parseInt(process.env.CONNECTION_POOL_TTL) : 5 * 60 * 1000,
+            idleTimeout: process.env.CONNECTION_POOL_IDLE_TIMEOUT ?
+                parseInt(process.env.CONNECTION_POOL_IDLE_TIMEOUT) : 60 * 1000
+        });
+        logger_1.default.info('Device connection pool initialized');
         // Start server
         server.listen(PORT, () => {
             console.log(`🚀 Starting server on port ${PORT}...`);

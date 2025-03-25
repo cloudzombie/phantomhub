@@ -29,6 +29,13 @@ export class SocketService {
       }
     });
 
+    // Configure Socket.IO for optimal WebSocket support
+    this.io.engine.on('connection', (rawSocket) => {
+      // Set WebSocket ping interval and timeout
+      rawSocket.pingInterval = 25000; // 25 seconds
+      rawSocket.pingTimeout = 20000;  // 20 seconds
+    });
+
     this.setupMiddleware();
     this.setupEventHandlers();
   }
@@ -37,22 +44,34 @@ export class SocketService {
     this.io.use(async (socket: AuthenticatedSocket, next) => {
       try {
         const token = socket.handshake.auth.token;
+        logger.debug(`Socket auth attempt with token: ${token ? 'provided' : 'missing'}`);
+        
         if (!token) {
-          throw new Error('Authentication token required');
+          logger.warn(`Socket ${socket.id} connection rejected: No auth token`);
+          return next(new Error('Authentication token required'));
         }
 
-        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key') as any;
-        // Support both id and userId formats for backward compatibility
-        const userId = decoded.id || decoded.userId;
-        
-        if (!userId) {
-          throw new Error('Invalid token structure');
+        try {
+          const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key') as any;
+          // Support both id and userId formats for backward compatibility
+          const userId = decoded.id || decoded.userId;
+          
+          if (!userId) {
+            logger.warn(`Socket ${socket.id} connection rejected: Invalid token structure`);
+            return next(new Error('Invalid token structure'));
+          }
+          
+          // Successfully authenticated
+          socket.userId = userId;
+          logger.info(`Socket ${socket.id} authenticated for user ${userId}`);
+          return next();
+        } catch (jwtError) {
+          logger.error(`JWT verification error for socket ${socket.id}:`, jwtError);
+          return next(new Error('Authentication failed: Invalid token'));
         }
-        
-        socket.userId = userId;
-        next();
       } catch (error) {
-        next(new Error('Authentication failed'));
+        logger.error(`Socket authentication error for socket ${socket.id}:`, error);
+        return next(new Error('Authentication failed'));
       }
     });
   }

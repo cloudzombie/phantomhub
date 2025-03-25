@@ -3,20 +3,40 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getDevices = exports.deleteDevice = exports.sendPayload = exports.updateDeviceStatus = exports.createDevice = exports.getDevice = exports.getAllDevices = void 0;
+exports.getDeviceActivities = exports.getDevices = exports.deleteDevice = exports.sendPayload = exports.updateDeviceStatus = exports.createDevice = exports.getDevice = exports.getAllDevices = void 0;
 const Device_1 = __importDefault(require("../models/Device"));
 const axios_1 = __importDefault(require("axios"));
 const User_1 = __importDefault(require("../models/User"));
 const logger_1 = __importDefault(require("../utils/logger"));
+const deviceConnectionPool_1 = __importDefault(require("../services/deviceConnectionPool"));
+const Activity_1 = __importDefault(require("../models/Activity"));
+const sequelize_1 = require("sequelize");
 // API timeout for device communication (milliseconds)
 const API_TIMEOUT = 5000;
-// Helper function to check device connectivity
+// Helper function to check device connectivity using the connection pool
 const checkDeviceConnectivity = async (device) => {
     try {
         if (device.connectionType === 'network') {
-            // For network devices, try to ping the device
-            await axios_1.default.get(`http://${device.ipAddress}/api/ping`, { timeout: API_TIMEOUT });
-            return true;
+            // For network devices, use the connection pool
+            const connectionPool = deviceConnectionPool_1.default.getInstance();
+            const client = await connectionPool.acquireConnection(device);
+            if (!client) {
+                logger_1.default.error(`Failed to acquire connection for device ${device.id}`);
+                return false;
+            }
+            try {
+                // Use the pooled connection to ping the device
+                await client.get('/ping');
+                return true;
+            }
+            catch (error) {
+                logger_1.default.error(`Failed to ping device ${device.id}:`, error);
+                return false;
+            }
+            finally {
+                // Always release the connection back to the pool
+                connectionPool.releaseConnection(device.id);
+            }
         }
         else {
             // For USB devices, we'll return true as connectivity is managed from the frontend via WebSerial
@@ -24,7 +44,7 @@ const checkDeviceConnectivity = async (device) => {
         }
     }
     catch (error) {
-        logger_1.default.error(`Failed to connect to device at ${device.ipAddress}:`, error);
+        logger_1.default.error(`Failed to connect to device ${device.name} (${device.id}):`, error);
         return false;
     }
 };
@@ -180,13 +200,20 @@ const createDevice = async (req, res) => {
         // If this is a network device, verify connectivity
         if (connectionType === 'network') {
             try {
-                // Use the actual O.MG Cable API endpoint for connectivity check
-                const response = await axios_1.default.get(`http://${ipAddress}/api/ping`, { timeout: API_TIMEOUT });
-                // Only proceed if the device responds with a successful status
-                if (response.status !== 200) {
+                // Create device object for connectivity check
+                const tempDevice = {
+                    id: 'temp-' + Date.now(),
+                    name,
+                    connectionType,
+                    ipAddress,
+                    userId
+                };
+                // Use the connection pool to verify connectivity
+                const isConnected = await checkDeviceConnectivity(tempDevice);
+                if (!isConnected) {
                     return res.status(400).json({
                         success: false,
-                        message: 'Could not communicate with the O.MG Cable at the specified IP address',
+                        message: 'Could not connect to the O.MG Cable at the specified IP address',
                     });
                 }
             }
@@ -527,3 +554,95 @@ const getDevices = async (req, res) => {
     }
 };
 exports.getDevices = getDevices;
+// Get device activities
+const getDeviceActivities = async (req, res) => {
+    var _a;
+    try {
+        const { id } = req.params;
+        const userId = (_a = req.user) === null || _a === void 0 ? void 0 : _a.id;
+        if (!userId) {
+            return res.status(401).json({
+                success: false,
+                message: 'Authentication required',
+            });
+        }
+        const device = await Device_1.default.findByPk(id);
+        if (!device) {
+            return res.status(404).json({
+                success: false,
+                message: 'Device not found',
+            });
+        }
+        // Check if the device belongs to the user or if user is admin/operator
+        const user = await User_1.default.findByPk(userId);
+        if (device.userId !== userId && (user === null || user === void 0 ? void 0 : user.role) !== 'admin' && (user === null || user === void 0 ? void 0 : user.role) !== 'operator') {
+            return res.status(403).json({
+                success: false,
+                message: 'You do not have permission to view this device\'s activities',
+            });
+        }
+        // Parse query parameters
+        const limit = parseInt(req.query.limit) || 50;
+        const types = req.query.types ?
+            Array.isArray(req.query.types) ?
+                req.query.types :
+                [req.query.types]
+            : undefined;
+        const dateFrom = req.query.dateFrom ? new Date(req.query.dateFrom) : undefined;
+        const dateTo = req.query.dateTo ? new Date(req.query.dateTo) : undefined;
+        // Build the query
+        const whereClause = { deviceId: id };
+        if (types && types.length > 0) {
+            whereClause.type = { [sequelize_1.Op.in]: types };
+        }
+        if (dateFrom || dateTo) {
+            whereClause.createdAt = {};
+            if (dateFrom) {
+                whereClause.createdAt[sequelize_1.Op.gte] = dateFrom;
+            }
+            if (dateTo) {
+                whereClause.createdAt[sequelize_1.Op.lte] = dateTo;
+            }
+        }
+        // Get activities with user info
+        const activities = await Activity_1.default.findAll({
+            where: whereClause,
+            include: [
+                {
+                    model: User_1.default,
+                    as: 'user',
+                    attributes: ['id', 'name', 'email'],
+                }
+            ],
+            order: [['createdAt', 'DESC']],
+            limit: Math.min(limit, 100) // Cap at 100 to prevent excessive queries
+        });
+        // Format the response
+        const formattedActivities = activities.map(activity => {
+            var _a;
+            const activityData = activity.toJSON();
+            return {
+                id: activity.id,
+                deviceId: activity.deviceId,
+                type: activity.type,
+                description: activity.description,
+                metadata: activity.metadata,
+                createdAt: activity.createdAt,
+                userId: activity.userId,
+                userName: (_a = activityData.user) === null || _a === void 0 ? void 0 : _a.name
+            };
+        });
+        return res.status(200).json({
+            success: true,
+            data: formattedActivities,
+        });
+    }
+    catch (error) {
+        logger_1.default.error('Error retrieving device activities:', error);
+        return res.status(500).json({
+            success: false,
+            message: 'Failed to retrieve device activities',
+        });
+    }
+};
+exports.getDeviceActivities = getDeviceActivities;

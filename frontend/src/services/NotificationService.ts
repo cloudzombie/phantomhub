@@ -115,20 +115,29 @@ class NotificationService {
     
     console.log('NotificationService: Connecting to socket server at', socketUrl);
     
+    // Get token for authentication
+    const token = localStorage.getItem('token');
+    
     this.socket = io(socketUrl, {
+      reconnection: true,
       reconnectionAttempts: this.maxConnectionAttempts,
       reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
+      randomizationFactor: 0.5,
       autoConnect: true,
-      transports: ['polling', 'websocket'] // Try polling first, then websocket
+      transports: ['websocket', 'polling'], // Try WebSocket first, then fallback to polling
+      auth: {
+        token: token // Include token in the initial handshake
+      },
+      // WebSocket specific configuration
+      forceNew: true,
+      timeout: 45000
     });
 
     this.socket.on('connect', () => {
       console.log('NotificationService: Socket connected');
       this.isConnected = true;
       this.connectionAttempts = 0;
-      
-      // Authenticate the socket connection
-      this.authenticateSocket();
       
       // Configure notifications after successful connection
       this.configureNotifications();
@@ -137,6 +146,19 @@ class NotificationService {
     this.socket.on('connect_error', (error) => {
       console.error('NotificationService: Connection error', error);
       this.connectionAttempts++;
+      
+      // Check if token is available but still getting auth errors
+      if (error.message && error.message.includes('Authentication')) {
+        const token = localStorage.getItem('token');
+        console.warn('NotificationService: Authentication error with socket connection. Token exists:', !!token);
+        
+        // If multiple auth errors, suggest user to log in again
+        if (this.connectionAttempts > 2) {
+          console.warn('NotificationService: Multiple authentication failures, token may be invalid or expired');
+          // Optionally, you could dispatch an event to show a login prompt
+          // document.dispatchEvent(new CustomEvent('auth-token-invalid'));
+        }
+      }
       
       if (this.connectionAttempts >= this.maxConnectionAttempts) {
         console.warn('NotificationService: Max connection attempts reached, falling back to polling mode');

@@ -80,34 +80,45 @@ const authenticate = async (req, res, next) => {
             res.status(429).json({ error: 'Too many requests' });
             return;
         }
+        console.log('Running authenticate middleware');
+        console.log('Headers:', JSON.stringify(req.headers));
         const authHeader = req.headers.authorization;
         if (!authHeader) {
+            console.log('No authorization header found');
             res.status(401).json({ error: 'No authorization header' });
             return;
         }
         const token = authHeader.split(' ')[1];
         if (!token) {
+            console.log('No token provided in Authorization header');
             res.status(401).json({ error: 'No token provided' });
             return;
         }
+        console.log('Token received, checking blacklist');
         // Check if token is blacklisted
         if (await isTokenBlacklisted(token)) {
+            console.log('Token is blacklisted');
             res.status(401).json({ error: 'Token has been revoked' });
             return;
         }
+        console.log('Verifying token with JWT_SECRET');
         // Verify token
         const decoded = jsonwebtoken_1.default.verify(token, process.env.JWT_SECRET || 'your-secret-key');
+        console.log('Token decoded successfully:', JSON.stringify(decoded));
         // Find user and include their permissions
         const user = await User_1.default.findByPk(decoded.id);
         if (!user) {
+            console.log(`User with ID ${decoded.id} not found`);
             res.status(401).json({ error: 'User not found' });
             return;
         }
         // Check if user is active
         if (!user.isActive) {
+            console.log(`User ${user.id} is inactive`);
             res.status(401).json({ error: 'User account is inactive' });
             return;
         }
+        console.log(`User found: ${user.id}, role: ${user.role}`);
         // Attach user and their permissions to request
         req.user = {
             id: user.id,
@@ -118,10 +129,12 @@ const authenticate = async (req, res, next) => {
         };
         // Update last activity
         await user.update({ lastLogin: new Date() });
+        console.log('Authentication successful, proceeding to next middleware/handler');
         next();
     }
     catch (error) {
         logger_1.default.error('Authentication error:', error);
+        console.error('Authentication error details:', error);
         if (error instanceof jsonwebtoken_1.default.TokenExpiredError) {
             res.status(401).json({ error: 'Token has expired' });
         }

@@ -37,7 +37,7 @@ const PORT = process.env.PORT || 5001;
 // Create HTTP server
 const server = http.createServer(app);
 
-// Initialize Socket.IO
+// Initialize Socket.IO with proper WebSocket configuration
 const io = new SocketIOServer(server, {
   cors: {
     origin: function(origin, callback) {
@@ -51,11 +51,23 @@ const io = new SocketIOServer(server, {
     },
     methods: ['GET', 'POST'],
     credentials: true
-  }
+  },
+  // WebSocket specific configuration
+  transports: ['websocket', 'polling'],
+  pingTimeout: 20000,
+  pingInterval: 25000,
+  connectTimeout: 45000,
+  allowUpgrades: true,
+  upgradeTimeout: 10000,
+  // Engine.IO configuration
+  maxHttpBufferSize: 1e8,
+  path: '/socket.io/',
+  // WebSocket engine configuration
+  wsEngine: require('ws').Server
 });
 
-// Initialize SocketService
-const socketService = new SocketService(server);
+// Initialize SocketService with the configured io instance
+const socketService = new SocketService(io as any); // Type assertion needed due to Socket.IO version mismatch
 
 // Make socketService available to our routes
 app.set('io', io);
@@ -82,7 +94,14 @@ app.use(helmet());
 app.use(morgan('dev'));
 
 // Apply global rate limiter to all requests
-app.use(globalRateLimiter);
+app.use((req, res, next) => {
+  // Exclude Socket.IO paths from rate limiting
+  if (req.path.startsWith('/socket.io')) {
+    return next();
+  }
+  // Apply rate limiter to all other paths
+  globalRateLimiter(req, res, next);
+});
 
 // Routes
 app.get('/', (req, res) => {
@@ -200,106 +219,6 @@ app.use('/api/scripts', scriptRoutes);
 
 // Error handling middleware
 app.use(errorHandler);
-
-// Socket.IO connection handler
-io.on('connection', (socket) => {
-  console.log('User connected:', socket.id);
-  
-  // Authentication for Socket.IO
-  socket.on('authenticate', (data) => {
-    try {
-      const { token } = data;
-      if (!token) {
-        socket.emit('auth_error', { message: 'No token provided' });
-        return;
-      }
-      
-      // Verify the token
-      const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key') as any;
-      if (!decoded) {
-        socket.emit('auth_error', { message: 'Invalid token' });
-        return;
-      }
-      
-      // Check if token has required user ID (could be in id or userId field)
-      const userId = decoded.id || decoded.userId;
-      if (!userId) {
-        socket.emit('auth_error', { message: 'Invalid token structure' });
-        return;
-      }
-      
-      // Store user ID and join user-specific room
-      (socket as any).userId = userId;
-      socket.join(userId);
-      socket.emit('authenticated', { success: true });
-      
-      logger.info(`Socket ${socket.id} authenticated as user ${userId}`);
-    } catch (error) {
-      logger.error('Socket authentication error:', error);
-      socket.emit('auth_error', { message: 'Authentication failed' });
-    }
-  });
-  
-  // Listen for device status updates - use socketService to properly scope events
-  socket.on('device_status_update', (data) => {
-    if (!(socket as any).userId) {
-      socket.emit('error', { message: 'Authentication required' });
-      return;
-    }
-    
-    // Use socketService for proper scoping
-    socketService.emitDeviceStatus(data.deviceId, data);
-  });
-  
-  // Listen for payload execution events - use socketService to properly scope events
-  socket.on('payload_executing', (data) => {
-    if (!(socket as any).userId) {
-      socket.emit('error', { message: 'Authentication required' });
-      return;
-    }
-    
-    // Use socketService for proper scoping
-    const status = {
-      ...data,
-      status: 'executing'
-    };
-    
-    // Find relevant users and emit to them
-    socketService.emitToDeviceSubscribers(data.deviceId, 'payload_status_update', status);
-  });
-  
-  // Listen for payload completion events - use socketService to properly scope events
-  socket.on('payload_completed', (data) => {
-    if (!(socket as any).userId) {
-      socket.emit('error', { message: 'Authentication required' });
-      return;
-    }
-    
-    // Use socketService for proper scoping
-    const status = {
-      ...data,
-      status: 'completed'
-    };
-    
-    // Find relevant users and emit to them
-    socketService.emitToDeviceSubscribers(data.deviceId, 'payload_status_update', status);
-  });
-  
-  // Listen for deployment status updates - use socketService to properly scope events
-  socket.on('deployment_status_update', (data) => {
-    if (!(socket as any).userId) {
-      socket.emit('error', { message: 'Authentication required' });
-      return;
-    }
-    
-    // Use socketService for proper scoping
-    socketService.emitToDeviceSubscribers(data.deviceId, 'deployment_status_changed', data);
-  });
-  
-  socket.on('disconnect', () => {
-    console.log('User disconnected:', socket.id);
-  });
-});
 
 // Initialize database and start server
 const startServer = async () => {

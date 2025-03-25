@@ -659,16 +659,19 @@ export const getDeviceActivities = async (req: AuthRequest, res: Response) => {
     });
     
     // Format the response
-    const formattedActivities = activities.map(activity => ({
-      id: activity.id,
-      deviceId: activity.deviceId,
-      type: activity.type,
-      description: activity.description,
-      metadata: activity.metadata,
-      createdAt: activity.createdAt,
-      userId: activity.userId,
-      userName: activity.user ? activity.user.name : undefined
-    }));
+    const formattedActivities = activities.map(activity => {
+      const activityData: any = activity.toJSON();
+      return {
+        id: activity.id,
+        deviceId: activity.deviceId,
+        type: activity.type,
+        description: activity.description,
+        metadata: activity.metadata,
+        createdAt: activity.createdAt,
+        userId: activity.userId,
+        userName: activityData.user?.name
+      };
+    });
     
     return res.status(200).json({
       success: true,

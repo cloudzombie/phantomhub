@@ -3,10 +3,13 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const deploymentController_1 = require("../controllers/deploymentController");
 const auth_1 = require("../middleware/auth");
+const rateLimiter_1 = require("../middleware/rateLimiter");
 const router = (0, express_1.Router)();
+const deploymentRateLimiter = (0, rateLimiter_1.createRateLimiterMiddleware)('deployments');
 // Public routes (none for deployments)
 // Protected routes
 router.use(auth_1.authenticate); // Apply authentication to all deployment routes
+router.use(deploymentRateLimiter); // Apply rate limiting to all deployment routes
 // GET all deployments - Admin access
 router.get('/', auth_1.isOperator, deploymentController_1.getAllDeployments);
 // GET single deployment - Admin access

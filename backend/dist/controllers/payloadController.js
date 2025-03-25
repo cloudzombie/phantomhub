@@ -159,11 +159,18 @@ const updatePayload = async (req, res) => {
 exports.updatePayload = updatePayload;
 // Delete a payload
 const deletePayload = async (req, res) => {
-    var _a;
+    var _a, _b;
     try {
         const { id } = req.params;
         const userId = (_a = req.user) === null || _a === void 0 ? void 0 : _a.id;
+        const userRole = (_b = req.user) === null || _b === void 0 ? void 0 : _b.role;
+        console.log(`Delete payload request for payload ${id} by user ${userId} with role ${userRole}`);
+        console.log('Headers:', JSON.stringify(req.headers));
+        console.log('Request method:', req.method);
+        console.log('Request path:', req.path);
+        console.log('User object:', JSON.stringify(req.user));
         if (!userId) {
+            console.log('No user ID found');
             return res.status(401).json({
                 success: false,
                 message: 'User authentication required',
@@ -171,19 +178,27 @@ const deletePayload = async (req, res) => {
         }
         const payload = await Payload_1.default.findByPk(id);
         if (!payload) {
+            console.log(`Payload ${id} not found`);
             return res.status(404).json({
                 success: false,
                 message: 'Payload not found',
             });
         }
-        // Check if the user is the creator of the payload
-        if (payload.userId !== userId) {
+        // Check if the user is the creator of the payload or has special role
+        const isOwner = payload.userId === userId;
+        const isAdmin = userRole === 'admin';
+        const isOperator = userRole === 'operator';
+        console.log(`Payload owner check: isOwner=${isOwner}, isAdmin=${isAdmin}, isOperator=${isOperator}`);
+        console.log(`Payload creator ID: ${payload.userId}, current user ID: ${userId}`);
+        if (!isOwner && !isAdmin && !isOperator) {
+            console.log(`User ${userId} not authorized to delete payload ${id}`);
             return res.status(403).json({
                 success: false,
                 message: 'Not authorized to delete this payload',
             });
         }
         await payload.destroy();
+        console.log(`Payload ${id} deleted successfully`);
         return res.status(200).json({
             success: true,
             message: 'Payload deleted successfully',
