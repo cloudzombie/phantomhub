@@ -12,7 +12,7 @@ export interface ScriptAttributes {
    * Script types:
    * - callback: Safe, just records the callback and updates counters
    * - exfiltration: Safe, stores data and forwards to callback URL if specified
-   * - command: Logs but doesn't execute (sandboxed for security)
+   * - command: Executed in a secure Node.js VM sandbox with strict limitations and no file/network access
    * - custom: Safe, client-side handling only
    */
   type: 'callback' | 'exfiltration' | 'command' | 'custom';

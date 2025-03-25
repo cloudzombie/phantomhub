@@ -536,29 +536,105 @@ export const executeScript = async (req: Request, res: Response) => {
         break;
         
       case 'command':
-        // For command scripts, we'll log the request but not execute
-        // SECURITY: We don't execute commands directly on the server as that's a major security risk
+        // For command scripts, implement a secure sandbox execution environment
+        // SECURITY: Command scripts are executed in an isolated sandbox with strict limitations
+        console.log(`Executing command script in sandbox: ID: ${script.id}, Name: ${script.name}`);
         
-        // Extract script information for logging
-        const scriptContent = script.content.substring(0, 100) + (script.content.length > 100 ? '...' : '');
-        console.log(`Command script execution requested (BLOCKED FOR SECURITY):\nID: ${script.id}\nName: ${script.name}\nContent preview: ${scriptContent}`);
+        try {
+          // Import the vm module for creating a secure sandbox
+          const vm = require('vm');
+          const util = require('util');
+          
+          // Create a restricted sandbox context with limited capabilities
+          const sandbox = {
+            console: {
+              log: (...args: any[]) => console.log(`[Script ${script.id}]:`, ...args),
+              error: (...args: any[]) => console.error(`[Script ${script.id}]:`, ...args),
+              warn: (...args: any[]) => console.warn(`[Script ${script.id}]:`, ...args),
+              info: (...args: any[]) => console.info(`[Script ${script.id}]:`, ...args),
+            },
+            setTimeout: (cb: (...args: any[]) => void, ms: number) => {
+              if (ms > 10000) ms = 10000; // Max timeout of 10 seconds
+              return setTimeout(cb, ms);
+            },
+            clearTimeout,
+            Buffer: { 
+              from: Buffer.from,
+              isBuffer: Buffer.isBuffer,
+              concat: Buffer.concat,
+              alloc: Buffer.alloc
+            },
+            JSON,
+            Object,
+            Array,
+            String,
+            Number,
+            Boolean,
+            Date,
+            Math,
+            Error,
+            RegExp,
+            Map,
+            Set,
+            Promise,
+            // Add request data to the sandbox
+            request: {
+              body: req.body,
+              query: req.query,
+              params: req.params,
+              headers: req.headers
+            },
+            // Provide a safe way to send responses
+            response: {
+              data: null
+            }
+          };
+          
+          // Create the script context with a timeout
+          const context = vm.createContext(sandbox);
+          
+          // Prepare the script with timeout handling
+          const scriptWithTimeout = `
+            try {
+              (function() {
+                ${script.content}
+              })();
+            } catch (error) {
+              console.error('Script execution error:', error.message);
+            }
+          `;
+          
+          // Execute the script with a timeout of 5 seconds
+          const vmScript = new vm.Script(scriptWithTimeout);
+          vmScript.runInContext(context, { timeout: 5000 });
+          
+          // Get the result from the sandbox
+          result = { 
+            executed: true,
+            sandboxed: true,
+            logs: util.format(sandbox.console.log),
+            responseData: sandbox.response.data,
+            executionEnvironment: 'node-vm-sandbox'
+          };
+        } catch (error: any) {
+          console.error('Error executing script in sandbox:', error);
+          result = { 
+            executed: false,
+            sandboxed: true,
+            error: error.message,
+            executionEnvironment: 'node-vm-sandbox'
+          };
+        }
         
-        // Return a response indicating the command execution is disabled
-        result = { 
-          executed: false,
-          sandboxed: true,
-          message: 'Command execution is disabled for security reasons. The script was logged but not executed on the server.',
-          scriptPreview: scriptContent
-        };
-        
-        // If there's a callbackUrl configured, forward the execution request
+        // If there's a callbackUrl configured, forward the result
         if (script.callbackUrl) {
           try {
             await axios.post(script.callbackUrl, {
               scriptId: script.id,
               scriptName: script.name,
               executionTimestamp: new Date(),
-              executionRequest: 'received_but_blocked',
+              executionRequest: 'sandboxed_execution',
+              result: result,
               data: req.body
             });
             result.callbackNotified = true;

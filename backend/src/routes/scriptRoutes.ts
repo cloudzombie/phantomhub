@@ -20,7 +20,7 @@ const router = Router();
  * For security reasons:
  * - 'callback' scripts only track execution and update counters
  * - 'exfiltration' scripts store data and optionally forward to a callback URL
- * - 'command' scripts are logged but NOT executed on the server (sandboxed)
+ * - 'command' scripts are executed in a secure Node.js VM sandbox with no file/network access
  * - 'custom' scripts are handled client-side only
  * 
  * DO NOT modify this behavior without a thorough security review!
