@@ -8,7 +8,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.Command = exports.Activity = exports.UserSettings = exports.Deployment = exports.Device = exports.Payload = exports.User = void 0;
+exports.PayloadScript = exports.Script = exports.Command = exports.Activity = exports.UserSettings = exports.Deployment = exports.Device = exports.Payload = exports.User = void 0;
 const User_1 = __importDefault(require("./User"));
 exports.User = User_1.default;
 const Device_1 = __importDefault(require("./Device"));
@@ -23,9 +23,27 @@ const Activity_1 = __importDefault(require("./Activity"));
 exports.Activity = Activity_1.default;
 const Command_1 = __importDefault(require("./Command"));
 exports.Command = Command_1.default;
+const Script_1 = __importDefault(require("./Script"));
+exports.Script = Script_1.default;
+const PayloadScript_1 = __importDefault(require("./PayloadScript"));
+exports.PayloadScript = PayloadScript_1.default;
 // User associations
 User_1.default.hasMany(Payload_1.default, { foreignKey: 'userId', as: 'payloads' });
 User_1.default.hasMany(Deployment_1.default, { foreignKey: 'userId', as: 'deployments' });
+User_1.default.hasMany(Script_1.default, { foreignKey: 'userId', as: 'scripts' });
+// Script associations
+Payload_1.default.belongsToMany(Script_1.default, {
+    through: PayloadScript_1.default,
+    foreignKey: 'payloadId',
+    otherKey: 'scriptId',
+    as: 'scripts'
+});
+Script_1.default.belongsToMany(Payload_1.default, {
+    through: PayloadScript_1.default,
+    foreignKey: 'scriptId',
+    otherKey: 'payloadId',
+    as: 'payloads'
+});
 // Additional associations are already defined in the individual model files
 // Define model associations
 User_1.default.hasMany(Device_1.default, {
@@ -56,4 +74,6 @@ exports.default = {
     UserSettings: UserSettings_1.default,
     Activity: Activity_1.default,
     Command: Command_1.default,
+    Script: Script_1.default,
+    PayloadScript: PayloadScript_1.default,
 };

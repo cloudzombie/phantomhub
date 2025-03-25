@@ -9,10 +9,33 @@ const Device_1 = __importDefault(require("../models/Device"));
 const Deployment_1 = __importDefault(require("../models/Deployment"));
 // Get all payloads
 const getAllPayloads = async (req, res) => {
+    var _a, _b;
     try {
-        const payloads = await Payload_1.default.findAll({
-            include: [{ association: 'creator', attributes: ['id', 'username', 'email'] }]
-        });
+        const userId = (_a = req.user) === null || _a === void 0 ? void 0 : _a.id;
+        let payloads;
+        // If no user is authenticated, return unauthorized
+        if (!userId) {
+            return res.status(401).json({
+                success: false,
+                message: 'User authentication required',
+            });
+        }
+        // Admin can see all payloads, others only see their own
+        if (((_b = req.user) === null || _b === void 0 ? void 0 : _b.role) === 'admin') {
+            payloads = await Payload_1.default.findAll({
+                include: [
+                    { association: 'creator', attributes: ['id', 'name', 'email'] }
+                ]
+            });
+        }
+        else {
+            payloads = await Payload_1.default.findAll({
+                where: { userId },
+                include: [
+                    { association: 'creator', attributes: ['id', 'name', 'email'] }
+                ]
+            });
+        }
         return res.status(200).json({
             success: true,
             data: payloads,
@@ -32,7 +55,7 @@ const getPayload = async (req, res) => {
     try {
         const { id } = req.params;
         const payload = await Payload_1.default.findByPk(id, {
-            include: [{ association: 'creator', attributes: ['id', 'username', 'email'] }]
+            include: [{ association: 'creator', attributes: ['id', 'name', 'email'] }]
         });
         if (!payload) {
             return res.status(404).json({

@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.deleteDevice = exports.sendPayload = exports.updateDeviceStatus = exports.createDevice = exports.getDevice = exports.getAllDevices = void 0;
+exports.getDevices = exports.deleteDevice = exports.sendPayload = exports.updateDeviceStatus = exports.createDevice = exports.getDevice = exports.getAllDevices = void 0;
 const Device_1 = __importDefault(require("../models/Device"));
 const axios_1 = __importDefault(require("axios"));
 const User_1 = __importDefault(require("../models/User"));
@@ -470,3 +470,60 @@ const deleteDevice = async (req, res) => {
     }
 };
 exports.deleteDevice = deleteDevice;
+const getDevices = async (req, res) => {
+    var _a;
+    try {
+        const userId = (_a = req.user) === null || _a === void 0 ? void 0 : _a.id;
+        if (!userId) {
+            return res.status(401).json({
+                success: false,
+                message: 'Authentication required',
+            });
+        }
+        const devices = await Device_1.default.findAll({
+            where: {
+                userId,
+            },
+            include: [{
+                    model: User_1.default,
+                    as: 'owner',
+                    attributes: ['id', 'name', 'email'],
+                }],
+        });
+        // Update status for each device
+        for (const device of devices) {
+            // For USB devices
+            if (device.connectionType === 'usb') {
+                // USB devices should always show as offline in the list
+                // They only show as online when actively connected via WebSerial
+                device.status = 'offline';
+            }
+            // For network devices
+            else if (device.connectionType === 'network' && device.ipAddress) {
+                try {
+                    // Try to ping the device
+                    const response = await axios_1.default.get(`http://${device.ipAddress}/api/status`, {
+                        timeout: 2000 // 2 second timeout
+                    });
+                    device.status = response.status === 200 ? 'online' : 'offline';
+                }
+                catch (err) {
+                    device.status = 'offline';
+                }
+            }
+            await device.save();
+        }
+        return res.status(200).json({
+            success: true,
+            data: devices,
+        });
+    }
+    catch (error) {
+        console.error('Error fetching devices:', error);
+        return res.status(500).json({
+            success: false,
+            message: 'Failed to fetch devices',
+        });
+    }
+};
+exports.getDevices = getDevices;

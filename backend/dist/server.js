@@ -22,6 +22,7 @@ const payloadRoutes_1 = __importDefault(require("./routes/payloadRoutes"));
 const deploymentRoutes_1 = __importDefault(require("./routes/deploymentRoutes"));
 const systemRoutes_1 = __importDefault(require("./routes/systemRoutes"));
 const userRoutes_1 = __importDefault(require("./routes/userRoutes"));
+const scriptRoutes_1 = __importDefault(require("./routes/scriptRoutes"));
 // Load environment variables
 dotenv_1.default.config();
 // Initialize Express app
@@ -158,6 +159,7 @@ app.use('/api/payloads', payloadRoutes_1.default);
 app.use('/api/deployments', deploymentRoutes_1.default);
 app.use('/api/system', systemRoutes_1.default);
 app.use('/api/users', userRoutes_1.default);
+app.use('/api/scripts', scriptRoutes_1.default);
 // Error handling middleware
 app.use(errorHandler_1.errorHandler);
 // Socket.IO connection handler
