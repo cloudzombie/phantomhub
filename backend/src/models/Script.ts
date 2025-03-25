@@ -123,6 +123,19 @@ Script.init(
             [Op.ne]: null
           }
         }
+      },
+      {
+        fields: ['name'],
+      },
+      {
+        fields: ['isPublic'],
+      },
+      {
+        fields: ['createdAt'],
+      },
+      {
+        name: 'scripts_access_pattern',
+        fields: ['isPublic', 'userId']
       }
     ]
   }

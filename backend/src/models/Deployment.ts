@@ -79,7 +79,33 @@ Deployment.init(
   {
     sequelize,
     modelName: 'Deployment',
-    tableName: 'deployments'
+    tableName: 'deployments',
+    indexes: [
+      {
+        fields: ['userId'],
+        // Index for finding deployments by user
+      },
+      {
+        fields: ['deviceId'],
+        // Index for finding deployments by device
+      },
+      {
+        fields: ['payloadId'],
+        // Index for finding deployments by payload
+      },
+      {
+        fields: ['status'],
+        // Index for filtering deployments by status
+      },
+      {
+        fields: ['createdAt'],
+        // Index for sorting/filtering by creation date
+      },
+      {
+        // Composite index for common query patterns
+        fields: ['userId', 'status']
+      }
+    ]
   }
 );
 

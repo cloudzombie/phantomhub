@@ -128,6 +128,13 @@ UserSettings.init(
     sequelize,
     modelName: 'UserSettings',
     tableName: 'user_settings',
+    indexes: [
+      {
+        fields: ['userId'],
+        unique: true,
+        // Important index for quickly retrieving settings by user
+      }
+    ]
   }
 );
 

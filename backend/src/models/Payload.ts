@@ -58,7 +58,21 @@ Payload.init(
   {
     sequelize,
     modelName: 'Payload',
-    tableName: 'payloads'
+    tableName: 'payloads',
+    indexes: [
+      {
+        fields: ['userId'],
+        // Index for quickly finding payloads by user
+      },
+      {
+        fields: ['name'],
+        // Index for searching payloads by name
+      },
+      {
+        fields: ['createdAt'],
+        // Index for sorting by creation date
+      }
+    ]
   }
 );
 
