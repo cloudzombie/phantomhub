@@ -221,6 +221,72 @@
   border-color: #e2e8f0 !important;
 }
 
+/* API Health Status popup light theme overrides */
+.light-theme .glass {
+  background: rgba(241, 245, 249, 0.9) !important; /* Light background with slight transparency */
+  border-color: rgba(203, 213, 225, 0.5) !important;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1) !important;
+}
+
+.light-theme .glass .bg-slate-800 {
+  background-color: rgba(241, 245, 249, 0.95) !important; /* Slightly more opaque for header/footer */
+}
+
+.light-theme .glass .border-slate-700\/50,
+.light-theme .glass .border-slate-600\/50 {
+  border-color: rgba(203, 213, 225, 0.5) !important;
+}
+
+.light-theme .glass .bg-slate-700 {
+  background-color: #e2e8f0 !important; /* Progress bar background */
+}
+
+.light-theme .glass .text-slate-400 {
+  color: #64748b !important; /* Better contrast for labels */
+}
+
+.light-theme .glass .text-slate-500 {
+  color: #94a3b8 !important; /* Slightly lighter for secondary text */
+}
+
+.light-theme .glass .text-white {
+  color: #0f172a !important; /* Dark text on light background */
+}
+
+.light-theme .glass .hover\:text-white:hover {
+  color: #7c3aed !important; /* Purple on hover instead of white */
+}
+
+.light-theme .glass .hover\:bg-slate-700\/50:hover {
+  background-color: rgba(226, 232, 240, 0.6) !important;
+}
+
+/* Progress bars in API Health Status for light theme */
+.light-theme .glass .bg-green-500 {
+  background-color: rgba(34, 197, 94, 0.8) !important; /* Light mode green */
+}
+
+.light-theme .glass .bg-orange-500 {
+  background-color: rgba(249, 115, 22, 0.8) !important; /* Light mode orange */
+}
+
+.light-theme .glass .bg-red-500 {
+  background-color: rgba(239, 68, 68, 0.8) !important; /* Light mode red */
+}
+
+/* Error message in API Health Status */
+.light-theme .glass .bg-red-500\/10 {
+  background-color: rgba(254, 226, 226, 0.6) !important; /* Light red background */
+}
+
+.light-theme .glass .border-red-500\/20 {
+  border-color: rgba(239, 68, 68, 0.3) !important;
+}
+
+.light-theme .glass .text-red-400 {
+  color: rgba(220, 38, 38, 0.9) !important; /* Darker red for better contrast */
+}
+
 /* Fix app container */
 #root {
   max-width: 100% !important;
