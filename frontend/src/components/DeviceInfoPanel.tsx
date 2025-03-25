@@ -55,14 +55,18 @@ const DeviceInfoPanel: React.FC<DeviceInfoPanelProps> = ({ deviceInfo, onRefresh
       if (deviceInfo) {
         setLoading(true);
         try {
+          // Use optional chaining and nullish coalescing for type safety
+          const connectionType = deviceInfo.connectionType || 'wifi';
+          
           // For USB devices, check WebSerial connection
-          if (deviceInfo.connectionType === 'usb') {
+          if (connectionType === 'usb' && deviceInfo.serialPortId) {
             const isConnected = await checkWebSerialConnection(deviceInfo.serialPortId);
             deviceInfo.connectionStatus = isConnected ? 'connected' : 'disconnected';
           }
           // For network devices, status is managed by the backend
           else {
-            deviceInfo.connectionStatus = deviceInfo.status === 'online' ? 'connected' : 'disconnected';
+            const status = deviceInfo.status || 'offline';
+            deviceInfo.connectionStatus = status === 'online' ? 'connected' : 'disconnected';
           }
 
           const enhancedInfo = await getDeviceCapabilities(deviceInfo);

@@ -1,4 +1,5 @@
 import axios, { AxiosInstance, AxiosRequestConfig } from 'axios';
+import { io, Socket } from 'socket.io-client';
 
 interface ApiConfig {
   endpoint: string;
@@ -10,6 +11,8 @@ class ApiService {
   private static instance: ApiService;
   private axiosInstance: AxiosInstance;
   private config: ApiConfig;
+  private socket: Socket | null = null;
+  private baseURL: string;
 
   private constructor() {
     // Default configuration
@@ -42,6 +45,11 @@ class ApiService {
     
     // Load stored configuration
     this.loadStoredConfig();
+
+    this.baseURL = import.meta.env.VITE_API_URL || 'http://localhost:5001';
+    
+    // Initialize socket connection
+    this.initializeSocket();
   }
 
   public static getInstance(): ApiService {
@@ -49,6 +57,17 @@ class ApiService {
       ApiService.instance = new ApiService();
     }
     return ApiService.instance;
+  }
+
+  public static getSocket(): Socket | null {
+    return ApiService.getInstance().socket;
+  }
+
+  /**
+   * Static method to reconnect the socket if disconnected
+   */
+  public static reconnectSocket(): void {
+    ApiService.getInstance().reconnectSocket();
   }
 
   private getCurrentUserId(): string | null {
@@ -144,6 +163,90 @@ class ApiService {
     const response = await this.axiosInstance.patch<T>(url, data, config);
     return response.data;
   }
+
+  /**
+   * Initialize Socket.IO connection with proper authentication
+   */
+  private initializeSocket(): void {
+    try {
+      const socketUrl = import.meta.env.VITE_SOCKET_URL || 'http://localhost:5001';
+      console.log('ApiService: Initializing socket connection to', socketUrl);
+      
+      // Get token for authentication
+      const token = localStorage.getItem('token');
+      
+      if (!token) {
+        console.warn('ApiService: No auth token available for socket connection');
+        return;
+      }
+      
+      this.socket = io(socketUrl, {
+        reconnection: true,
+        reconnectionAttempts: 5,
+        reconnectionDelay: 1000,
+        reconnectionDelayMax: 5000,
+        randomizationFactor: 0.5,
+        autoConnect: true,
+        transports: ['websocket', 'polling'],
+        auth: {
+          token: token
+        },
+        forceNew: true,
+        timeout: 45000
+      });
+      
+      this.setupSocketEventHandlers();
+    } catch (error) {
+      console.error('ApiService: Error initializing socket:', error);
+    }
+  }
+  
+  /**
+   * Set up event handlers for socket connection
+   */
+  private setupSocketEventHandlers(): void {
+    if (!this.socket) return;
+    
+    this.socket.on('connect', () => {
+      console.log('ApiService: Socket connected successfully');
+    });
+    
+    this.socket.on('connect_error', (error) => {
+      console.error('ApiService: Socket connection error:', error);
+    });
+    
+    this.socket.on('disconnect', (reason) => {
+      console.log('ApiService: Socket disconnected:', reason);
+      
+      if (reason === 'io server disconnect') {
+        // If the server disconnected us, try to reconnect
+        this.socket?.connect();
+      }
+    });
+    
+    // Debug listener for all events
+    this.socket.onAny((event, ...args) => {
+      console.debug(`ApiService: Socket event "${event}" received:`, args);
+    });
+  }
+  
+  /**
+   * Reconnect socket if disconnected
+   */
+  public reconnectSocket(): void {
+    if (this.socket && !this.socket.connected) {
+      console.log('ApiService: Attempting to reconnect socket');
+      this.socket.connect();
+    } else if (!this.socket) {
+      console.log('ApiService: Initializing new socket connection');
+      this.initializeSocket();
+    }
+  }
 }
 
-export default ApiService.getInstance(); 
+// Export the instance as default
+const apiServiceInstance = ApiService.getInstance();
+export default apiServiceInstance;
+
+// Also export the class for static method access
+export { ApiService }; 

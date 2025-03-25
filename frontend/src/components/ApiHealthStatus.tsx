@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   FiServer, 
   FiCpu, 
@@ -11,9 +11,27 @@ import {
   FiHardDrive,
   FiInfo,
   FiCommand,
-  FiHash
+  FiHash,
+  FiCheckCircle,
+  FiAlertCircle,
+  FiXCircle,
+  FiCircle,
+  FiRefreshCw,
+  FiWifi
 } from 'react-icons/fi';
 import ApiService from '../services/ApiService';
+import { getSocket } from '../utils/socketUtils';
+import NotificationService from '../services/NotificationService';
+
+interface ApiHealthStatusProps {
+  onStatusChange?: (status: 'healthy' | 'degraded' | 'down') => void;
+}
+
+interface HealthCheckResponse {
+  status: 'healthy' | 'degraded' | 'down';
+  timestamp: string;
+  details?: Record<string, unknown>;
+}
 
 interface ApiHealth {
   status: 'online' | 'offline' | 'degraded';
@@ -44,7 +62,7 @@ interface ApiHealth {
   lastChecked: Date;
 }
 
-const ApiHealthStatus = () => {
+const ApiHealthStatus: React.FC<ApiHealthStatusProps> = ({ onStatusChange }) => {
   const [apiHealth, setApiHealth] = useState<ApiHealth>({
     status: 'offline',
     version: 'v1.0.0',
@@ -68,6 +86,8 @@ const ApiHealthStatus = () => {
   const [checking, setChecking] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [socketStatus, setSocketStatus] = useState<'untested' | 'testing' | 'connected' | 'failed'>('untested');
+  const [socketTestResult, setSocketTestResult] = useState<string | null>(null);
 
   const checkApiHealth = async () => {
     setChecking(true);
@@ -129,31 +149,67 @@ const ApiHealthStatus = () => {
   };
 
   useEffect(() => {
-    // Check API health on mount
     checkApiHealth();
     
-    // Get polling interval from API service config
     const { pollingInterval } = ApiService.getConfig();
-    const intervalMs = pollingInterval * 1000;
+    const interval = pollingInterval * 1000;
+    const timer = setInterval(checkApiHealth, interval);
     
-    // Set up interval to check API health based on configured polling interval
-    const interval = setInterval(checkApiHealth, intervalMs);
-    
-    // Event listener for API config changes to update polling interval
-    const handleApiConfigChange = (event: CustomEvent) => {
+    const handleConfigChange = (event: CustomEvent<any>) => {
       if (event.detail && event.detail.pollingInterval) {
-        // Clear existing interval and create a new one with updated polling interval
-        clearInterval(interval);
-        const newIntervalMs = event.detail.pollingInterval * 1000;
-        setInterval(checkApiHealth, newIntervalMs);
+        clearInterval(timer);
+        const newInterval = event.detail.pollingInterval * 1000;
+        setInterval(checkApiHealth, newInterval);
       }
     };
     
-    document.addEventListener('api-config-changed', handleApiConfigChange as EventListener);
+    document.addEventListener('api-config-changed', handleConfigChange as EventListener);
+    
+    // Set up socket event listeners for real-time updates
+    const socket = getSocket();
+    if (socket) {
+      console.log('ApiHealthStatus: Setting up socket event listeners');
+      
+      // Listen for server status updates
+      socket.on('server_status', (data) => {
+        console.log('ApiHealthStatus: Received real-time server status update', data);
+        if (data && typeof data === 'object') {
+          setApiHealth(prev => ({
+            ...prev,
+            ...data,
+            lastChecked: new Date()
+          }));
+        }
+      });
+      
+      // Listen for server load updates
+      socket.on('server_load', (data) => {
+        console.log('ApiHealthStatus: Received real-time server load update', data);
+        if (data && typeof data === 'object') {
+          setApiHealth(prev => ({
+            ...prev,
+            cpuLoad: data.cpuLoad || prev.cpuLoad,
+            memory: {
+              ...prev.memory,
+              used: data.memoryUsed || prev.memory.used,
+              percentage: data.memoryPercentage || prev.memory.percentage
+            },
+            lastChecked: new Date()
+          }));
+        }
+      });
+    }
     
     return () => {
-      clearInterval(interval);
-      document.removeEventListener('api-config-changed', handleApiConfigChange as EventListener);
+      clearInterval(timer);
+      document.removeEventListener('api-config-changed', handleConfigChange as EventListener);
+      
+      // Clean up socket event listeners
+      const socket = getSocket();
+      if (socket) {
+        socket.off('server_status');
+        socket.off('server_load');
+      }
     };
   }, []);
 
@@ -193,18 +249,15 @@ const ApiHealthStatus = () => {
   
   // Get the appropriate color for the status indicator
   const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'online': return 'bg-green-500';
-      case 'degraded': return 'bg-orange-500';
-      default: return 'bg-red-500';
-    }
-  };
-
-  const getStatusColorText = (status: string) => {
-    switch (status) {
-      case 'online': return 'text-green-500';
-      case 'degraded': return 'text-orange-500';
-      default: return 'text-red-500';
+    switch (status.toLowerCase()) {
+      case 'online':
+        return 'bg-green-500';
+      case 'degraded':
+        return 'bg-yellow-500';
+      case 'offline':
+        return 'bg-red-500';
+      default:
+        return 'bg-gray-500';
     }
   };
 
@@ -213,6 +266,50 @@ const ApiHealthStatus = () => {
     if (percentage > 90) return 'bg-red-500';
     if (percentage > 70) return 'bg-orange-500';
     return 'bg-green-500';
+  };
+
+  // Handle socket test
+  const handleSocketTest = async () => {
+    console.log('ApiHealthStatus: Starting socket test...');
+    setSocketStatus('testing');
+    setSocketTestResult(null);
+    
+    try {
+      // Subscribe to system updates to get test results
+      const handleSocketTestResult = (data: any) => {
+        console.log('ApiHealthStatus: Received socket test result:', data);
+        if (data && data.type === 'socket_test') {
+          setSocketStatus(data.success ? 'connected' : 'failed');
+          setSocketTestResult(JSON.stringify(data.data || data.message, null, 2));
+          // Unsubscribe after receiving the result
+          NotificationService.unsubscribe('system_update', handleSocketTestResult);
+        }
+      };
+      
+      // Subscribe for the test result
+      NotificationService.subscribe('system_update', handleSocketTestResult);
+      
+      // Perform the test
+      await NotificationService.testSocketConnection();
+      
+      // Set a timeout for the test response (additional safeguard)
+      const timeoutId = setTimeout(() => {
+        if (socketStatus === 'testing') {
+          console.log('ApiHealthStatus: Socket test timed out');
+          setSocketStatus('failed');
+          setSocketTestResult('Socket test timed out after 6 seconds (no response from server)');
+          NotificationService.unsubscribe('system_update', handleSocketTestResult);
+        }
+      }, 6000);
+      
+      // Clean up timeout on component unmount
+      return () => clearTimeout(timeoutId);
+      
+    } catch (error) {
+      console.error('ApiHealthStatus: Error testing socket:', error);
+      setSocketStatus('failed');
+      setSocketTestResult(`Error: ${error instanceof Error ? error.message : String(error)}`);
+    }
   };
 
   return (
@@ -409,6 +506,60 @@ const ApiHealthStatus = () => {
                     <div className="text-[9px] font-mono">{apiHealth.processes.memoryUsage}MB (PID: {apiHealth.processes.pid})</div>
                   </div>
                 )}
+
+                {/* Add WebSocket Test Button */}
+                <div className="flex flex-col space-y-1 mt-2">
+                  <div className="flex justify-between items-center">
+                    <div className="text-[9px] text-slate-400 flex items-center">
+                      <FiWifi className="mr-1" size={10} />
+                      WebSocket Status
+                    </div>
+                    <div className="text-[9px] font-mono flex items-center">
+                      {socketStatus === 'untested' && (
+                        <span className="text-slate-400">Not Tested</span>
+                      )}
+                      {socketStatus === 'testing' && (
+                        <span className="text-blue-400 flex items-center">
+                          <FiRefreshCw className="animate-spin mr-1" size={8} />
+                          Testing...
+                        </span>
+                      )}
+                      {socketStatus === 'connected' && (
+                        <span className="text-green-400 flex items-center">
+                          <FiCheckCircle className="mr-1" size={8} />
+                          Connected
+                        </span>
+                      )}
+                      {socketStatus === 'failed' && (
+                        <span className="text-red-400 flex items-center">
+                          <FiXCircle className="mr-1" size={8} />
+                          Failed
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  
+                  <div className="flex justify-between items-center">
+                    <button 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleSocketTest();
+                      }}
+                      className="text-[9px] bg-slate-700 hover:bg-slate-600 text-slate-300 px-2 py-1 rounded w-full"
+                      disabled={socketStatus === 'testing'}
+                    >
+                      {socketStatus === 'testing' ? 'Testing...' : 'Test WebSocket Connection'}
+                    </button>
+                  </div>
+                  
+                  {socketTestResult && (
+                    <div className="mt-1 p-1 bg-slate-800 rounded text-[8px] text-slate-300 font-mono">
+                      <pre className="whitespace-pre-wrap overflow-auto max-h-[100px]">
+                        {socketTestResult}
+                      </pre>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
           </div>

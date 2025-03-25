@@ -65,7 +65,7 @@ const io = new socket_io_1.Server(server, {
     wsEngine: require('ws').Server
 });
 // Initialize SocketService with the configured io instance
-const socketService = new socketService_1.SocketService(io); // Type assertion needed due to Socket.IO version mismatch
+const socketService = new socketService_1.SocketService(io);
 // Make socketService available to our routes
 app.set('io', io);
 app.set('socketService', socketService);

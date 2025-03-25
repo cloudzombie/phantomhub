@@ -20,14 +20,8 @@ export class SocketService {
   private deviceSubscriptions: Map<string, Set<string>> = new Map(); // deviceId -> userIds
   private userSubscriptions: Map<string, Set<string>> = new Map(); // userId -> deviceIds
 
-  constructor(httpServer: HttpServer) {
-    this.io = new Server(httpServer, {
-      cors: {
-        origin: process.env.FRONTEND_URL || 'http://localhost:5173',
-        methods: ['GET', 'POST'],
-        credentials: true
-      }
-    });
+  constructor(io: Server) {
+    this.io = io;
 
     // Configure Socket.IO for optimal WebSocket support
     this.io.engine.on('connection', (rawSocket) => {
@@ -79,6 +73,21 @@ export class SocketService {
   private setupEventHandlers() {
     this.io.on('connection', (socket: AuthenticatedSocket) => {
       logger.info(`Client connected: ${socket.id} (User: ${socket.userId})`);
+
+      // Add ping test handler
+      socket.on('ping_test', (data) => {
+        logger.info(`Received ping_test from ${socket.id} (User: ${socket.userId})`);
+        // Respond with server info
+        socket.emit('pong_test', {
+          serverTime: new Date().toISOString(),
+          receivedData: data,
+          serverInfo: {
+            uptime: process.uptime(),
+            activeConnections: this.io.engine.clientsCount,
+            nodeVersion: process.version
+          }
+        });
+      });
 
       // Subscribe to device updates
       socket.on('subscribe:device', (deviceId: string) => {

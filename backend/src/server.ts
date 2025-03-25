@@ -67,7 +67,7 @@ const io = new SocketIOServer(server, {
 });
 
 // Initialize SocketService with the configured io instance
-const socketService = new SocketService(io as any); // Type assertion needed due to Socket.IO version mismatch
+const socketService = new SocketService(io);
 
 // Make socketService available to our routes
 app.set('io', io);

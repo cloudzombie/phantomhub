@@ -1,5 +1,6 @@
 import { io, Socket } from 'socket.io-client';
-import ApiService from './ApiService';
+import apiServiceInstance, { ApiService } from './ApiService';
+import { getSocket } from '../utils/socketUtils';
 
 interface NotificationSettings {
   deviceStatus: boolean;
@@ -14,34 +15,60 @@ type NotificationCallback = (data: any) => void;
 class NotificationService {
   private static instance: NotificationService;
   private socket: Socket | null = null;
-  private settings: NotificationSettings;
-  private subscribers: Map<NotificationType, Set<NotificationCallback>> = new Map();
   private isConnected: boolean = false;
+  private settings: NotificationSettings = {
+    deviceStatus: true,
+    deploymentAlerts: true,
+    systemUpdates: true,
+    securityAlerts: true
+  };
+  private subscribers: Map<string, Set<NotificationCallback>> = new Map();
   private connectionAttempts: number = 0;
   private maxConnectionAttempts: number = 5;
 
   private constructor() {
-    // Default settings
-    this.settings = {
-      deviceStatus: true,
-      deploymentAlerts: true,
-      systemUpdates: false,
-      securityAlerts: true
-    };
-
-    // Initialize notification handlers
-    this.loadStoredSettings();
+    this.loadSettings();
+    this.connect();
     
     // Set up listener for settings changes
     document.addEventListener('notification-settings-changed', this.handleSettingsChange as EventListener);
   }
 
-  // Static method to get the singleton instance
   public static getInstance(): NotificationService {
     if (!NotificationService.instance) {
       NotificationService.instance = new NotificationService();
     }
     return NotificationService.instance;
+  }
+
+  // Static method to get settings
+  public static getSettings(): NotificationSettings {
+    return NotificationService.getInstance().getSettings();
+  }
+
+  // Static method to connect
+  public static connect(): void {
+    NotificationService.getInstance().connect();
+  }
+
+  // Static method to disconnect
+  public static disconnect(): void {
+    NotificationService.getInstance().disconnect();
+  }
+
+  // Static method to subscribe
+  public static subscribe(type: NotificationType, callback: NotificationCallback): void {
+    NotificationService.getInstance().subscribe(type, callback);
+  }
+
+  // Static method to unsubscribe
+  public static unsubscribe(type: NotificationType, callback: NotificationCallback): void {
+    NotificationService.getInstance().unsubscribe(type, callback);
+  }
+
+  // Static method to test socket connection
+  public static async testSocketConnection(): Promise<boolean> {
+    return NotificationService.getInstance().testSocketConnection();
   }
 
   private getCurrentUserId(): string | null {
@@ -62,7 +89,7 @@ class NotificationService {
     return userId ? `phantomhub_settings_${userId}` : 'phantomhub_settings';
   }
 
-  private loadStoredSettings(): void {
+  private loadSettings(): void {
     try {
       const storedSettings = localStorage.getItem(this.getSettingsKey());
       if (storedSettings) {
@@ -79,7 +106,7 @@ class NotificationService {
   // Public method to explicitly reload settings for the current user
   public reloadSettings(): void {
     console.log('NotificationService: Reloading settings for user');
-    this.loadStoredSettings();
+    this.loadSettings();
     this.configureNotifications();
   }
 
@@ -102,38 +129,42 @@ class NotificationService {
   }
 
   public connect(): void {
-    if (this.socket) {
-      // If we already have a socket but it's not connected, try to reconnect
-      if (!this.isConnected) {
-        this.socket.connect();
-      }
+    // Use the socket from ApiService instead of creating a new one
+    this.socket = getSocket();
+    
+    if (!this.socket) {
+      console.warn('NotificationService: No socket available from ApiService');
       return;
     }
+    
+    if (!this.socket.connected) {
+      console.log('NotificationService: ApiService socket not connected, requesting reconnection');
+      // Ask ApiService to reconnect the socket
+      ApiService.reconnectSocket();
+      // Wait for connection
+      this.socket.once('connect', () => {
+        console.log('NotificationService: Socket connected successfully');
+        this.isConnected = true;
+        this.setupSocketEventListeners();
+        this.configureNotifications();
+      });
+    } else {
+      console.log('NotificationService: Using existing socket from ApiService:', this.socket.id);
+      this.isConnected = true;
+      this.setupSocketEventListeners();
+      this.configureNotifications();
+    }
+  }
 
-    // Get API endpoint from environment variable directly
-    const socketUrl = import.meta.env.VITE_SOCKET_URL || 'http://localhost:5001';
+  private setupSocketEventListeners(): void {
+    if (!this.socket) return;
     
-    console.log('NotificationService: Connecting to socket server at', socketUrl);
+    // Clean up existing listeners
+    this.socket.off('connect');
+    this.socket.off('disconnect');
+    this.socket.off('connect_error');
     
-    // Get token for authentication
-    const token = localStorage.getItem('token');
-    
-    this.socket = io(socketUrl, {
-      reconnection: true,
-      reconnectionAttempts: this.maxConnectionAttempts,
-      reconnectionDelay: 1000,
-      reconnectionDelayMax: 5000,
-      randomizationFactor: 0.5,
-      autoConnect: true,
-      transports: ['websocket', 'polling'], // Try WebSocket first, then fallback to polling
-      auth: {
-        token: token // Include token in the initial handshake
-      },
-      // WebSocket specific configuration
-      forceNew: true,
-      timeout: 45000
-    });
-
+    // Set up new listeners
     this.socket.on('connect', () => {
       console.log('NotificationService: Socket connected');
       this.isConnected = true;
@@ -142,98 +173,42 @@ class NotificationService {
       // Configure notifications after successful connection
       this.configureNotifications();
     });
-
+    
     this.socket.on('connect_error', (error) => {
       console.error('NotificationService: Connection error', error);
       this.connectionAttempts++;
+      this.isConnected = false;
       
-      // Check if token is available but still getting auth errors
+      // Handle authentication errors
       if (error.message && error.message.includes('Authentication')) {
         const token = localStorage.getItem('token');
         console.warn('NotificationService: Authentication error with socket connection. Token exists:', !!token);
         
-        // If multiple auth errors, suggest user to log in again
         if (this.connectionAttempts > 2) {
           console.warn('NotificationService: Multiple authentication failures, token may be invalid or expired');
-          // Optionally, you could dispatch an event to show a login prompt
-          // document.dispatchEvent(new CustomEvent('auth-token-invalid'));
         }
       }
-      
-      if (this.connectionAttempts >= this.maxConnectionAttempts) {
-        console.warn('NotificationService: Max connection attempts reached, falling back to polling mode');
-        // We've already configured the socket to use polling as fallback
-      }
     });
-
+    
     this.socket.on('disconnect', (reason) => {
       console.log('NotificationService: Socket disconnected', reason);
       this.isConnected = false;
-      
-      // If the server disconnected us, try to reconnect
-      if (reason === 'io server disconnect') {
-        this.socket?.connect();
-      }
     });
-
-    this.socket.on('error', (error) => {
-      console.error('NotificationService: Socket error', error);
-    });
-    
-    this.socket.on('auth_error', (error) => {
-      console.error('NotificationService: Authentication error', error);
-      // Retry authentication after delay
-      setTimeout(() => this.authenticateSocket(), 3000);
-    });
-    
-    this.socket.on('authenticated', () => {
-      console.log('NotificationService: Socket authenticated successfully');
-    });
-  }
-
-  private authenticateSocket(): void {
-    if (!this.socket || !this.isConnected) return;
-    
-    const token = localStorage.getItem('token');
-    if (!token) {
-      console.warn('NotificationService: No token available for socket authentication');
-      return;
-    }
-    
-    console.log('NotificationService: Authenticating socket connection');
-    
-    // Listen for authentication response events if not already listening
-    if (!this.socket.hasListeners('authenticated')) {
-      this.socket.on('authenticated', (data) => {
-        console.log('NotificationService: Socket authenticated successfully', data);
-        // Now that we're authenticated, set up event listeners
-        this.configureNotifications();
-      });
-    }
-    
-    if (!this.socket.hasListeners('auth_error')) {
-      this.socket.on('auth_error', (error) => {
-        console.error('NotificationService: Authentication error', error);
-        
-        // Check if token might be outdated
-        const userData = localStorage.getItem('user');
-        if (userData) {
-          // If we have user data but auth failed, token might be invalid
-          console.warn('NotificationService: Token may be invalid, consider logging in again');
-        }
-        
-        // Retry authentication after delay
-        setTimeout(() => this.authenticateSocket(), 3000);
-      });
-    }
-    
-    // Send authentication request
-    this.socket.emit('authenticate', { token });
   }
 
   public disconnect(): void {
+    // Just clear our reference and event listeners, don't actually disconnect the socket
+    // as it's managed by ApiService
     if (this.socket) {
-      this.socket.disconnect();
+      this.socket.off('connect');
+      this.socket.off('disconnect');
+      this.socket.off('connect_error');
+      this.socket.off('device_status_changed');
+      this.socket.off('deployment_status_changed');
+      this.socket.off('payload_status_update');
+      this.socket.off('system_update_available');
+      this.socket.off('security_alert');
+      
       this.socket = null;
       this.isConnected = false;
     }
@@ -329,6 +304,103 @@ class NotificationService {
         if (permission === 'granted') {
           new Notification(title, options);
         }
+      });
+    }
+  }
+
+  /**
+   * Test the socket connection and emit a diagnostic event
+   */
+  public async testSocketConnection(): Promise<boolean> {
+    console.log('NotificationService: Testing socket connection...');
+    
+    // Get socket from ApiService
+    this.socket = getSocket();
+    console.log('NotificationService: Socket exists:', !!this.socket);
+    console.log('NotificationService: Socket connected:', this.socket?.connected);
+    console.log('NotificationService: Socket ID:', this.socket?.id);
+    
+    // If socket doesn't exist or isn't connected, ask ApiService to reconnect
+    if (!this.socket || !this.socket.connected) {
+      console.log('NotificationService: Socket not connected, requesting reconnection...');
+      
+      // Try to reconnect using ApiService
+      ApiService.reconnectSocket();
+      
+      // Wait for connection with timeout
+      return new Promise((resolve) => {
+        // Set timeout for 5 seconds
+        const timeoutId = setTimeout(() => {
+          console.log('NotificationService: Socket connection timed out');
+          this.notifySubscribers('system_update', {
+            type: 'socket_test',
+            success: false,
+            message: 'WebSocket connection timed out',
+            data: null
+          });
+          resolve(false);
+        }, 5000);
+        
+        if (this.socket) {
+          this.socket.once('connect', () => {
+            clearTimeout(timeoutId);
+            console.log('NotificationService: Socket connected, proceeding with test');
+            this.emitTestEvent();
+            resolve(true);
+          });
+        } else {
+          clearTimeout(timeoutId);
+          resolve(false);
+        }
+      });
+    }
+
+    // If socket is already connected, emit test event directly
+    this.emitTestEvent();
+    return true;
+  }
+
+  private emitTestEvent(): void {
+    if (!this.socket) {
+      console.error('NotificationService: Cannot emit test event - socket is null');
+      this.notifySubscribers('system_update', {
+        type: 'socket_test',
+        success: false,
+        message: 'WebSocket connection failed - socket is null',
+        data: null
+      });
+      return;
+    }
+    
+    console.log('NotificationService: Emitting test event...');
+    
+    try {
+      this.socket.emit('ping_test', { 
+        timestamp: new Date().toISOString(),
+        clientInfo: {
+          url: window.location.href,
+          userAgent: navigator.userAgent
+        }
+      });
+      
+      // Register a one-time listener for the server's response
+      this.socket.once('pong_test', (data) => {
+        console.log('NotificationService: Received pong response:', data);
+        // Notify any subscribers
+        this.notifySubscribers('system_update', {
+          type: 'socket_test',
+          success: true,
+          message: 'WebSocket connectivity test succeeded',
+          data
+        });
+      });
+    } catch (error) {
+      console.error('NotificationService: Error during test:', error);
+      this.notifySubscribers('system_update', {
+        type: 'socket_test',
+        success: false,
+        message: `WebSocket test failed: ${error instanceof Error ? error.message : String(error)}`,
+        data: null
       });
     }
   }

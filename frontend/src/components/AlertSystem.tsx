@@ -30,7 +30,8 @@ const AlertSystem: React.FC<AlertSystemProps> = ({ maxAlerts = 5 }) => {
   const [showPanel, setShowPanel] = useState(false);
 
   useEffect(() => {
-    const notificationService = NotificationService.getInstance();
+    // Get the NotificationService instance
+    const notificationService = NotificationService;
 
     // Subscribe to device status notifications
     const deviceStatusHandler = (data: any) => {

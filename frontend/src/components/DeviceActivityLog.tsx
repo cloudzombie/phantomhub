@@ -9,6 +9,7 @@ import React, { useState, useEffect } from 'react';
 import { FiActivity, FiAlertCircle, FiCheckCircle, FiFilter, FiX, FiDownload, FiChevronDown, FiClock } from 'react-icons/fi';
 import { format } from 'date-fns';
 import ApiService from '../services/ApiService';
+import { getSocket } from '../utils/socketUtils';
 
 export interface DeviceActivity {
   id: string;
@@ -53,7 +54,7 @@ const DeviceActivityLog: React.FC<DeviceActivityLogProps> = ({
     fetchActivities();
     
     // Set up socket listener for real-time updates
-    const socket = ApiService.getSocket();
+    const socket = getSocket();
     
     if (socket) {
       // Subscribe to device-specific activity channel
