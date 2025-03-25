@@ -40,6 +40,7 @@ interface Payload {
   description: string | null;
   createdAt: string;
   updatedAt: string;
+  userId: string;
 }
 
 interface Script {
@@ -94,6 +95,9 @@ const PayloadEditor = () => {
   const [renamePayloadId, setRenamePayloadId] = useState<string | null>(null);
   const [newPayloadName, setNewPayloadName] = useState('');
   
+  // Add this state near other state declarations
+  const [userRole, setUserRole] = useState<string>('user');
+  
   useEffect(() => {
     // Check if WebSerial is supported
     setWebSerialSupported(isWebSerialSupported());
@@ -140,6 +144,9 @@ const PayloadEditor = () => {
     
     // Fetch available scripts
     fetchScripts();
+    
+    // Get user role when component mounts
+    setUserRole(getCurrentUserRole());
     
     // Cleanup
     return () => {
@@ -319,48 +326,109 @@ const PayloadEditor = () => {
       
       console.log(`Deleting payload with ID: ${payloadId}`);
       
-      const response = await axios.delete(`${API_URL}/payloads/${payloadId}`, {
-        headers: {
-          Authorization: `Bearer ${token}`
+      // Get user data to check role
+      const userData = localStorage.getItem('user');
+      let userRole = 'user';
+      if (userData) {
+        try {
+          const user = JSON.parse(userData);
+          userRole = user.role;
+          console.log('User role from localStorage:', userRole);
+        } catch (e) {
+          console.error('Error parsing user data:', e);
         }
-      });
+      }
       
-      console.log('Delete payload response:', response.data);
+      // Check if user has permission to delete
+      const currentUser = getCurrentUserFromStorage();
+      const payload = payloads.find(p => p.id === payloadId);
       
-      if (response.data && response.data.success) {
-        setMessage({
-          type: 'success',
-          text: 'Payload deleted successfully'
-        });
-        
-        // Remove the deleted payload from the state
-        setPayloads(prevPayloads => prevPayloads.filter(payload => payload.id !== payloadId));
-        
-        // If the deleted payload was selected, clear the selection
-        if (selectedPayload && selectedPayload.id === payloadId) {
-          setSelectedPayload(null);
-          setPayloadName('New Payload');
-          if (editorRef.current) {
-            editorRef.current.setValue(DEFAULT_DUCKY_SCRIPT);
-          }
-        }
-      } else {
+      if (!payload) {
         setMessage({
           type: 'error',
-          text: response.data?.message || 'Failed to delete payload'
+          text: 'Payload not found'
         });
+        return;
       }
-    } catch (error) {
-      console.error('Error deleting payload:', error);
-      setMessage({
-        type: 'error',
-        text: 'Failed to delete payload. Please try again.'
-      });
       
-      // If we get a 401, redirect to login
-      if (axios.isAxiosError(error) && error.response?.status === 401) {
-        localStorage.removeItem('token');
-        window.location.href = '/login';
+      const isOwner = currentUser?.id === payload.userId;
+      const isAdmin = userRole === 'admin';
+      const isOperator = userRole === 'operator';
+      
+      if (!isOwner && !isAdmin && !isOperator) {
+        setMessage({
+          type: 'error',
+          text: 'You do not have permission to delete this payload'
+        });
+        return;
+      }
+      
+      try {
+        const response = await axios.delete(`${API_URL}/payloads/${payloadId}`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        console.log('Delete payload response:', response.data);
+        
+        if (response.data && response.data.success) {
+          setMessage({
+            type: 'success',
+            text: 'Payload deleted successfully'
+          });
+          
+          // Remove the deleted payload from the state
+          setPayloads(prevPayloads => prevPayloads.filter(payload => payload.id !== payloadId));
+          
+          // If the deleted payload was selected, clear the selection
+          if (selectedPayload && selectedPayload.id === payloadId) {
+            setSelectedPayload(null);
+            setPayloadName('New Payload');
+            if (editorRef.current) {
+              editorRef.current.setValue(DEFAULT_DUCKY_SCRIPT);
+            }
+          }
+        } else {
+          setMessage({
+            type: 'error',
+            text: response.data?.message || 'Failed to delete payload'
+          });
+        }
+      } catch (error) {
+        console.error('Error deleting payload:', error);
+        
+        // Enhanced error logging
+        if (axios.isAxiosError(error)) {
+          console.error('API Error Status:', error.response?.status);
+          console.error('API Error Data:', error.response?.data);
+          
+          // Give more specific error messages based on status code
+          if (error.response?.status === 403) {
+            setMessage({
+              type: 'error',
+              text: 'You do not have permission to delete this payload. Only operators and admins can delete payloads.'
+            });
+          } else if (error.response?.status === 401) {
+            setMessage({
+              type: 'error',
+              text: 'Authentication failed. Please log in again.'
+            });
+            localStorage.removeItem('token');
+            window.location.href = '/login';
+          } else {
+            setMessage({
+              type: 'error',
+              text: error.response?.data?.message || 'Failed to delete payload. Please try again.'
+            });
+          }
+        } else {
+          setMessage({
+            type: 'error',
+            text: 'Failed to delete payload. Please try again.'
+          });
+        }
       }
     } finally {
       setIsLoading(false);
@@ -1183,6 +1251,33 @@ const PayloadEditor = () => {
     }
   };
   
+  // Add this helper function to get the current user from storage
+  const getCurrentUserFromStorage = () => {
+    try {
+      const userData = localStorage.getItem('user');
+      if (userData) {
+        return JSON.parse(userData);
+      }
+    } catch (error) {
+      console.error('Error parsing user data:', error);
+    }
+    return null;
+  };
+  
+  // Add this function near the top of the component, before it's used
+  const getCurrentUserRole = (): string => {
+    try {
+      const userData = localStorage.getItem('user');
+      if (userData) {
+        const user = JSON.parse(userData);
+        return user.role || 'user';
+      }
+    } catch (error) {
+      console.error('Error parsing user data:', error);
+    }
+    return 'user';
+  };
+  
   return (
     <div className="flex flex-col h-full p-6">
       <div className="border-b border-slate-700 pb-6 mb-6">
@@ -1352,13 +1447,15 @@ const PayloadEditor = () => {
                             >
                               <FiEdit2 size={16} />
                             </button>
-                            <button
-                              onClick={(e) => handleDeleteClick(payload, e)}
-                              className="p-2 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded"
-                              title="Delete Payload"
-                            >
-                              <FiTrash2 size={16} />
-                            </button>
+                            {(payload.userId === (getCurrentUserFromStorage()?.id) || userRole === 'admin' || userRole === 'operator') && (
+                              <button
+                                onClick={(e) => handleDeleteClick(payload, e)}
+                                className="p-2 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded"
+                                title="Delete Payload"
+                              >
+                                <FiTrash2 size={16} />
+                              </button>
+                            )}
                           </div>
                         </>
                       )}

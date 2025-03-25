@@ -9,6 +9,7 @@ import {
 } from '../controllers/payloadController';
 import { authenticate, isAdmin, isOperator } from '../middleware/auth';
 import { createRateLimiterMiddleware } from '../middleware/rateLimiter';
+import logger from '../utils/logger';
 
 const router = Router();
 const payloadRateLimiter = createRateLimiterMiddleware('payloads');
@@ -34,7 +35,10 @@ router.get('/:id', isOperator, getPayload);
 // PUT update payload - Admin access (owner check in controller)
 router.put('/:id', isOperator, updatePayload);
 
-// DELETE payload - Admin access (owner check in controller)
-router.delete('/:id', isOperator, deletePayload);
+// DELETE payload - Authenticated access (owner check is done in controller)
+router.delete('/:id', (req, res, next) => {
+  logger.info(`DELETE request received for payload ID: ${req.params.id} from user ID: ${(req as any).user?.id}, Role: ${(req as any).user?.role}`);
+  next();
+}, authenticate, deletePayload);
 
 export default router; 
