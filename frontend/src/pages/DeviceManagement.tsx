@@ -91,8 +91,13 @@ const DeviceManagement = () => {
       // Use ApiService instead of direct axios call
       const response = await ApiService.get('/devices');
       
-      // Adjust the response handling based on ApiService's return structure
-      setDevices(response);
+      // Access the devices array from the data property
+      if (response.success && Array.isArray(response.data)) {
+        setDevices(response.data);
+      } else {
+        console.error('Invalid response format:', response);
+        setErrorMessage('Failed to load O.MG Cables. Invalid response format.');
+      }
     } catch (error) {
       console.error('Error fetching devices:', error);
       setErrorMessage('Failed to load O.MG Cables. Please try again.');
