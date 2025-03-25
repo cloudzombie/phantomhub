@@ -23,7 +23,13 @@ const Layout = () => {
         setCurrentUser(userData);
         
         // Reload theme settings for the current user
+        console.log('Layout: User data loaded, reloading theme settings');
         ThemeService.reloadSettings();
+        
+        // Force save the current theme to ensure it's stored for this user
+        setTimeout(() => {
+          ThemeService.forceSaveCurrentTheme();
+        }, 100); // Short delay to ensure theme is fully applied first
       } catch (error) {
         console.error('Error parsing user data:', error);
       }

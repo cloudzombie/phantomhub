@@ -34,10 +34,34 @@ const Login = () => {
         localStorage.setItem('token', response.data.token);
         localStorage.setItem('user', JSON.stringify(response.data.user));
         
-        // Reload all service settings for the new user
+        console.log('Login successful, reloading all service settings...');
+        
+        // Fetch settings from API if available
+        try {
+          const settingsResponse = await axios.get(`${API_URL}/users/settings`, {
+            headers: { Authorization: `Bearer ${response.data.token}` }
+          });
+          
+          if (settingsResponse.data && settingsResponse.data.success) {
+            console.log('Successfully loaded user settings from API');
+            
+            // Save the API-retrieved settings to localStorage
+            const userId = response.data.user.id;
+            const settingsKey = userId ? `phantomhub_settings_${userId}` : 'phantomhub_settings';
+            localStorage.setItem(settingsKey, JSON.stringify(settingsResponse.data.data));
+          }
+        } catch (settingsError) {
+          console.warn('Could not load settings from API, using defaults:', settingsError);
+        }
+        
+        // Reload all service settings
         ApiService.reloadSettings();
         ThemeService.reloadSettings();
         NotificationService.reloadSettings();
+        
+        // Explicitly verify the theme is loaded
+        const currentTheme = ThemeService.getConfig().theme;
+        console.log(`Current theme after reload: ${currentTheme}`);
         
         setSuccessMessage('Login successful! Redirecting...');
         

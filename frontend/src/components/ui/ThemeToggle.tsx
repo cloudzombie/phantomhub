@@ -31,10 +31,13 @@ const ThemeToggle = ({ compact = false, showLabels = true }: ThemeToggleProps) =
     // Set the theme in ThemeService
     ThemeService.setTheme(newTheme);
     
-    // Save the theme to localStorage settings
+    // Use the forceSave method to guarantee it's saved to localStorage
+    ThemeService.forceSaveCurrentTheme();
+    
+    // Also use the regular saveToSettings for double safety
     ThemeService.saveToSettings();
     
-    console.log('ThemeToggle: Theme change completed, saved to settings');
+    console.log('ThemeToggle: Theme change completed and saved to settings');
   };
 
   if (compact) {

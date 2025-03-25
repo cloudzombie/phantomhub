@@ -62,16 +62,43 @@ class ThemeService {
 
   private loadStoredConfig(): void {
     try {
-      const storedSettings = localStorage.getItem(this.getSettingsKey());
+      // Get the settings key for the current user
+      const settingsKey = this.getSettingsKey();
+      console.log(`ThemeService: Loading configuration from localStorage key: ${settingsKey}`);
+      
+      // Get the settings from localStorage
+      const storedSettings = localStorage.getItem(settingsKey);
+      
       if (storedSettings) {
+        console.log(`ThemeService: Found stored settings: ${storedSettings.substring(0, 100)}...`);
+        
+        // Try to parse the settings
         const settings = JSON.parse(storedSettings);
+        
+        // Update theme if present
         if (settings.theme) {
+          console.log(`ThemeService: Updating theme from '${this.config.theme}' to '${settings.theme}'`);
           this.config.theme = settings.theme;
+        } else {
+          console.log(`ThemeService: No theme found in settings, keeping current theme: '${this.config.theme}'`);
         }
+        
+        // Update display settings if present
         if (settings.display) {
-          this.config.compactView = settings.display.compactView;
-          this.config.dateFormat = settings.display.dateFormat;
+          if (settings.display.compactView !== undefined) {
+            console.log(`ThemeService: Setting compactView to ${settings.display.compactView}`);
+            this.config.compactView = settings.display.compactView;
+          }
+          
+          if (settings.display.dateFormat) {
+            console.log(`ThemeService: Setting dateFormat to ${settings.display.dateFormat}`);
+            this.config.dateFormat = settings.display.dateFormat;
+          }
+        } else {
+          console.log('ThemeService: No display settings found');
         }
+      } else {
+        console.log(`ThemeService: No stored settings found for key: ${settingsKey}`);
       }
     } catch (error) {
       console.error('Error loading stored theme configuration:', error);
@@ -80,9 +107,22 @@ class ThemeService {
 
   // Public method to explicitly reload settings and apply them
   public reloadSettings(): void {
-    console.log('ThemeService: Reloading settings for user');
+    const currentTheme = this.config.theme;
+    console.log(`ThemeService: Reloading settings for user - current theme before reload: '${currentTheme}'`);
+    
+    // Get the current settings key
+    const settingsKey = this.getSettingsKey();
+    console.log(`ThemeService: Using settings key: ${settingsKey}`);
+    
     // Reload the configuration
     this.loadStoredConfig();
+    
+    // Log any theme change
+    if (currentTheme !== this.config.theme) {
+      console.log(`ThemeService: Theme changed from '${currentTheme}' to '${this.config.theme}' after reload`);
+    } else {
+      console.log(`ThemeService: Theme remained '${this.config.theme}' after reload`);
+    }
     
     // Apply the reloaded settings
     this.applyTheme();
@@ -91,6 +131,9 @@ class ThemeService {
     
     // Notify listeners of changes
     this.notifyListeners();
+    
+    // Log the final state
+    console.log(`ThemeService: Settings reload complete - current theme is now: '${this.config.theme}'`);
   }
 
   private handleSystemThemeChange = (e: MediaQueryListEvent): void => {
@@ -183,32 +226,111 @@ class ThemeService {
   public saveToSettings(): void {
     try {
       const settingsKey = this.getSettingsKey();
+      console.log(`ThemeService: Saving theme '${this.config.theme}' to localStorage key: ${settingsKey}`);
+      
+      // Create a complete settings object that correctly includes all current theme settings
+      const completeSettings = {
+        theme: this.config.theme,
+        display: {
+          compactView: this.config.compactView,
+          dateFormat: this.config.dateFormat,
+          showAdvancedOptions: true
+        }
+      };
+      
+      // Try to merge with existing settings if they exist
       const storedSettings = localStorage.getItem(settingsKey);
       if (storedSettings) {
-        const settings = JSON.parse(storedSettings);
-        settings.theme = this.config.theme;
-        if (!settings.display) {
-          settings.display = {};
+        try {
+          const existingSettings = JSON.parse(storedSettings);
+          
+          // Merge the existing settings with our updated theme settings
+          const mergedSettings = {
+            ...existingSettings,
+            theme: this.config.theme,
+            display: {
+              ...existingSettings.display,
+              compactView: this.config.compactView,
+              dateFormat: this.config.dateFormat
+            }
+          };
+          
+          // Save the merged settings
+          localStorage.setItem(settingsKey, JSON.stringify(mergedSettings));
+          console.log('ThemeService: Updated existing settings in localStorage', mergedSettings);
+        } catch (parseError) {
+          // If we can't parse existing settings, just save our complete settings
+          localStorage.setItem(settingsKey, JSON.stringify(completeSettings));
+          console.log('ThemeService: Created new settings in localStorage (parse error)', completeSettings);
         }
-        settings.display.compactView = this.config.compactView;
-        settings.display.dateFormat = this.config.dateFormat;
-        localStorage.setItem(settingsKey, JSON.stringify(settings));
-        console.log('ThemeService: Saved theme settings to localStorage', settings);
       } else {
-        // Create new settings object if none exists
-        const newSettings = {
-          theme: this.config.theme,
-          display: {
-            compactView: this.config.compactView,
-            dateFormat: this.config.dateFormat,
-            showAdvancedOptions: true
-          }
-        };
-        localStorage.setItem(settingsKey, JSON.stringify(newSettings));
-        console.log('ThemeService: Created new settings in localStorage', newSettings);
+        // No existing settings, create new ones
+        localStorage.setItem(settingsKey, JSON.stringify(completeSettings));
+        console.log('ThemeService: Created new settings in localStorage (no existing)', completeSettings);
+      }
+      
+      // Double-check that the theme was saved correctly
+      try {
+        const checkSettings = localStorage.getItem(settingsKey);
+        if (checkSettings) {
+          const parsed = JSON.parse(checkSettings);
+          console.log(`ThemeService: Verification - saved theme is now '${parsed.theme}'`);
+        }
+      } catch (e) {
+        console.error('ThemeService: Verification failed', e);
       }
     } catch (error) {
       console.error('Error saving theme settings to localStorage:', error);
+    }
+  }
+
+  // Force save the current theme to localStorage
+  public forceSaveCurrentTheme(): void {
+    try {
+      const settingsKey = this.getSettingsKey();
+      const currentTheme = this.config.theme;
+      
+      console.log(`ThemeService: Force saving current theme '${currentTheme}' to ${settingsKey}`);
+      
+      // Get existing settings or create new ones
+      let settings: any = {};
+      
+      try {
+        const stored = localStorage.getItem(settingsKey);
+        if (stored) {
+          settings = JSON.parse(stored);
+        }
+      } catch (e) {
+        console.error('Error reading existing settings:', e);
+      }
+      
+      // Ensure we have the required structure
+      settings.theme = currentTheme;
+      
+      if (!settings.display) {
+        settings.display = {};
+      }
+      
+      settings.display.compactView = this.config.compactView;
+      settings.display.dateFormat = this.config.dateFormat;
+      
+      // Save back to localStorage
+      localStorage.setItem(settingsKey, JSON.stringify(settings));
+      
+      console.log(`ThemeService: Successfully force saved theme '${currentTheme}' to localStorage`);
+      
+      // Verify it worked
+      try {
+        const verification = localStorage.getItem(settingsKey);
+        if (verification) {
+          const parsed = JSON.parse(verification);
+          console.log(`ThemeService: Verification - theme in localStorage is now '${parsed.theme}'`);
+        }
+      } catch (e) {
+        console.error('ThemeService: Verification failed', e);
+      }
+    } catch (error) {
+      console.error('Error force saving theme:', error);
     }
   }
 }
