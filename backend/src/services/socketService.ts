@@ -41,8 +41,15 @@ export class SocketService {
           throw new Error('Authentication token required');
         }
 
-        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key') as { userId: string };
-        socket.userId = decoded.userId;
+        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key') as any;
+        // Support both id and userId formats for backward compatibility
+        const userId = decoded.id || decoded.userId;
+        
+        if (!userId) {
+          throw new Error('Invalid token structure');
+        }
+        
+        socket.userId = userId;
         next();
       } catch (error) {
         next(new Error('Authentication failed'));

@@ -179,6 +179,33 @@ class NotificationService {
     }
     
     console.log('NotificationService: Authenticating socket connection');
+    
+    // Listen for authentication response events if not already listening
+    if (!this.socket.hasListeners('authenticated')) {
+      this.socket.on('authenticated', (data) => {
+        console.log('NotificationService: Socket authenticated successfully', data);
+        // Now that we're authenticated, set up event listeners
+        this.configureNotifications();
+      });
+    }
+    
+    if (!this.socket.hasListeners('auth_error')) {
+      this.socket.on('auth_error', (error) => {
+        console.error('NotificationService: Authentication error', error);
+        
+        // Check if token might be outdated
+        const userData = localStorage.getItem('user');
+        if (userData) {
+          // If we have user data but auth failed, token might be invalid
+          console.warn('NotificationService: Token may be invalid, consider logging in again');
+        }
+        
+        // Retry authentication after delay
+        setTimeout(() => this.authenticateSocket(), 3000);
+      });
+    }
+    
+    // Send authentication request
     this.socket.emit('authenticate', { token });
   }
 

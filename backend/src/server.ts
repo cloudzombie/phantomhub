@@ -215,18 +215,25 @@ io.on('connection', (socket) => {
       }
       
       // Verify the token
-      const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key');
-      if (!decoded || !decoded.id) {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key') as any;
+      if (!decoded) {
         socket.emit('auth_error', { message: 'Invalid token' });
         return;
       }
       
+      // Check if token has required user ID (could be in id or userId field)
+      const userId = decoded.id || decoded.userId;
+      if (!userId) {
+        socket.emit('auth_error', { message: 'Invalid token structure' });
+        return;
+      }
+      
       // Store user ID and join user-specific room
-      (socket as any).userId = decoded.id;
-      socket.join(decoded.id);
+      (socket as any).userId = userId;
+      socket.join(userId);
       socket.emit('authenticated', { success: true });
       
-      logger.info(`Socket ${socket.id} authenticated as user ${decoded.id}`);
+      logger.info(`Socket ${socket.id} authenticated as user ${userId}`);
     } catch (error) {
       logger.error('Socket authentication error:', error);
       socket.emit('auth_error', { message: 'Authentication failed' });
