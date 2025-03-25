@@ -1,0 +1,32 @@
+{
+  "development": {
+    "username": "joshuafisher",
+    "password": "",
+    "database": "phantomhub",
+    "host": "localhost",
+    "port": 5432,
+    "dialect": "postgres"
+  },
+  "test": {
+    "username": "joshuafisher",
+    "password": "",
+    "database": "phantomhub_test",
+    "host": "localhost",
+    "port": 5432,
+    "dialect": "postgres"
+  },
+  "production": {
+    "username": "joshuafisher",
+    "password": "",
+    "database": "phantomhub",
+    "host": "localhost",
+    "port": 5432,
+    "dialect": "postgres",
+    "dialectOptions": {
+      "ssl": {
+        "require": true,
+        "rejectUnauthorized": true
+      }
+    }
+  }
+} 

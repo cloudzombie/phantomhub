@@ -1,20 +1,33 @@
-import { connectDB } from '../config/database';
+import { initializeDatabase } from '../config/database';
 import Device from '../models/Device';
+import User from '../models/User';
 
 async function createDevice() {
   try {
-    // Connect to database
-    await connectDB();
+    // Initialize database
+    await initializeDatabase();
     console.log('Database connected for creating device');
+
+    // Find admin user
+    const admin = await User.findOne({
+      where: { email: 'admin@phantomhub.com' }
+    });
+
+    if (!admin) {
+      console.error('Admin user not found. Please run the seedDatabase script first.');
+      process.exit(1);
+    }
 
     // Create a test device
     const [device, created] = await Device.findOrCreate({
-      where: { ipAddress: '192.168.1.100' },
+      where: { name: 'Test O.MG Cable' },
       defaults: {
         name: 'Test O.MG Cable',
+        userId: admin.id,
         ipAddress: '192.168.1.100',
         firmwareVersion: '1.2.0',
-        status: 'online'
+        status: 'online',
+        connectionType: 'network'
       }
     });
 

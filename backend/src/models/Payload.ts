@@ -1,42 +1,41 @@
-import { Model, DataTypes } from 'sequelize';
-import sequelize from '../config/database';
+import { Model, DataTypes, Association } from 'sequelize';
+import { sequelize } from '../config/database';
 import User from './User';
 
-interface PayloadAttributes {
-  id: number;
+export interface PayloadAttributes {
+  id?: string;
   name: string;
   script: string;
   description: string | null;
-  userId: number;
+  userId: string;
+  createdAt?: Date;
+  updatedAt?: Date;
 }
 
-interface PayloadCreationAttributes {
-  name: string;
-  script: string;
-  description?: string;
-  userId: number;
-}
-
-class Payload extends Model<PayloadAttributes, PayloadCreationAttributes> implements PayloadAttributes {
-  public id!: number;
+class Payload extends Model<PayloadAttributes> implements PayloadAttributes {
+  public id!: string;
   public name!: string;
   public script!: string;
   public description!: string | null;
-  public userId!: number;
-
+  public userId!: string;
   public readonly createdAt!: Date;
   public readonly updatedAt!: Date;
+
+  // Define associations
+  public static associations: {
+    creator: Association<Payload, User>;
+  };
 }
 
 Payload.init(
   {
     id: {
-      type: DataTypes.INTEGER,
-      autoIncrement: true,
+      type: DataTypes.UUID,
+      defaultValue: DataTypes.UUIDV4,
       primaryKey: true,
     },
     name: {
-      type: DataTypes.STRING(100),
+      type: DataTypes.STRING,
       allowNull: false,
     },
     script: {
@@ -48,10 +47,10 @@ Payload.init(
       allowNull: true,
     },
     userId: {
-      type: DataTypes.INTEGER,
+      type: DataTypes.UUID,
       allowNull: false,
       references: {
-        model: 'users',
+        model: User,
         key: 'id',
       },
     },
@@ -59,7 +58,7 @@ Payload.init(
   {
     sequelize,
     modelName: 'Payload',
-    tableName: 'payloads',
+    tableName: 'payloads'
   }
 );
 

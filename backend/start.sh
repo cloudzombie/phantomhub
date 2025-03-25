@@ -2,8 +2,13 @@
 
 echo "🚀 Starting PhantomHub Backend Server..."
 
-# Define the port
+# Define the port and logging directory
 PORT=5001
+LOG_DIR="logs"
+LOG_FILE="$LOG_DIR/server.log"
+
+# Create logs directory if it doesn't exist
+mkdir -p $LOG_DIR
 
 # First kill any running backend instances
 echo "🔍 Checking for existing backend processes..."
@@ -49,7 +54,8 @@ echo "🏗️  Building project..."
 npm run build
 
 echo "🚀 Starting server on port $PORT..."
-node dist/server.js
+LOG_LEVEL=debug node dist/server.js 2>&1 | tee -a $LOG_FILE
 
 # This will only execute if the server crashes
+echo "⚠️  Server stopped" >> $LOG_FILE
 echo "⚠️  Server stopped" 

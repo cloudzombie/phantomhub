@@ -1,69 +1,78 @@
 import bcrypt from 'bcryptjs';
-import { connectDB } from '../config/database';
-import { User, UserRole } from '../models/User';
+import { initializeDatabase } from '../config/database';
+import User from '../models/User';
 import Device from '../models/Device';
 import Payload from '../models/Payload';
 import Deployment from '../models/Deployment';
 
 async function seedDatabase() {
   try {
-    // Connect to database
-    await connectDB();
+    // Initialize database
+    await initializeDatabase();
     console.log('Database connected for seeding');
-
-    // Sync models with database
-    await User.sync({ alter: true });
-    await Device.sync({ alter: true });
-    await Payload.sync({ alter: true });
-    await Deployment.sync({ alter: true });
 
     // Create admin user
     const adminPassword = 'admin123';
     const hashedPassword = await bcrypt.hash(adminPassword, 10);
     
-    const adminUser = await User.findOrCreate({
+    const [admin] = await User.findOrCreate({
       where: { email: 'admin@phantomhub.com' },
       defaults: {
-        username: 'admin',
+        name: 'Admin User',
         email: 'admin@phantomhub.com',
         password: hashedPassword,
-        role: UserRole.ADMIN,
+        role: 'admin',
+        isActive: true,
+        failedLoginAttempts: 0,
+        mfaEnabled: false,
+        sessionTimeout: 3600,
+        requirePasswordChange: false
       }
     });
     
-    console.log(`Admin user ${adminUser[0].username} created or already exists`);
+    console.log(`Admin user ${admin.name} created or already exists`);
 
     // Create operator user
     const operatorPassword = 'operator123';
     const hashedOperatorPassword = await bcrypt.hash(operatorPassword, 10);
     
-    const operatorUser = await User.findOrCreate({
+    const [operator] = await User.findOrCreate({
       where: { email: 'operator@phantomhub.com' },
       defaults: {
-        username: 'operator',
+        name: 'Operator User',
         email: 'operator@phantomhub.com',
         password: hashedOperatorPassword,
-        role: UserRole.OPERATOR,
+        role: 'user',
+        isActive: true,
+        failedLoginAttempts: 0,
+        mfaEnabled: false,
+        sessionTimeout: 3600,
+        requirePasswordChange: true
       }
     });
     
-    console.log(`Operator user ${operatorUser[0].username} created or already exists`);
+    console.log(`Operator user ${operator.name} created or already exists`);
 
     // Create viewer user
     const viewerPassword = 'viewer123';
     const hashedViewerPassword = await bcrypt.hash(viewerPassword, 10);
     
-    const viewerUser = await User.findOrCreate({
+    const [viewer] = await User.findOrCreate({
       where: { email: 'viewer@phantomhub.com' },
       defaults: {
-        username: 'viewer',
+        name: 'Viewer User',
         email: 'viewer@phantomhub.com',
         password: hashedViewerPassword,
-        role: UserRole.VIEWER,
+        role: 'user',
+        isActive: true,
+        failedLoginAttempts: 0,
+        mfaEnabled: false,
+        sessionTimeout: 3600,
+        requirePasswordChange: true
       }
     });
     
-    console.log(`Viewer user ${viewerUser[0].username} created or already exists`);
+    console.log(`Viewer user ${viewer.name} created or already exists`);
 
     console.log('Database seeding completed successfully');
     process.exit(0);

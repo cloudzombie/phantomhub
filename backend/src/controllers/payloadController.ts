@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import Payload from '../models/Payload';
 import Device from '../models/Device';
 import Deployment from '../models/Deployment';
-import { AuthRequest } from '../middleware/authMiddleware';
+import { AuthRequest } from '../middleware/auth';
 import axios from 'axios';
 
 // Get all payloads
@@ -67,10 +67,10 @@ export const createPayload = async (req: AuthRequest, res: Response) => {
     }
     
     const payload = await Payload.create({
-      name,
-      script,
-      description,
-      userId,
+      name: name as string,
+      script: script as string,
+      description: description as string | null,
+      userId: req.user!.id
     });
     
     return res.status(201).json({
@@ -195,6 +195,14 @@ export const deployPayload = async (req: AuthRequest, res: Response) => {
         message: 'Both payloadId and deviceId are required',
       });
     }
+
+    // Validate connection type
+    if (!connectionType || !['usb', 'network'].includes(connectionType)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Connection type must be either "usb" or "network"',
+      });
+    }
     
     // Find the payload
     const payload = await Payload.findByPk(payloadId);
@@ -226,15 +234,15 @@ export const deployPayload = async (req: AuthRequest, res: Response) => {
     
     // Create deployment record
     const deployment = await Deployment.create({
-      payloadId,
-      deviceId,
+      payloadId: payloadId as string,
+      deviceId: deviceId as string,
       userId: req.user!.id,
-      status: 'pending',
+      status: 'pending' as const
     });
     
     try {
-      // Update device status to 'busy'
-      await device.update({ status: 'busy' });
+      // Update device status to 'maintenance'
+      await device.update({ status: 'maintenance' });
       
       // Update deployment status to 'executing'
       await deployment.update({ status: 'executing' });
@@ -244,7 +252,7 @@ export const deployPayload = async (req: AuthRequest, res: Response) => {
       if (io) {
         io.emit('device_status_changed', {
           id: device.id,
-          status: 'busy'
+          status: 'maintenance'
         });
         
         io.emit('deployment_status_changed', {
@@ -257,10 +265,12 @@ export const deployPayload = async (req: AuthRequest, res: Response) => {
       // For network devices, we handle it here with API calls or simulation
       if (connectionType !== 'usb') {
         // For network devices, communicate with the O.MG Cable API (or simulate)
-        
-        // Simulate device execution (would be a real API call in production)
-        setTimeout(async () => {
+        // Create a promise for network device execution
+        const executeNetworkPayload = new Promise<void>(async (resolve, reject) => {
           try {
+            // Simulate network device execution (would be real API call in production)
+            await new Promise(r => setTimeout(r, 5000)); // 5-second execution time
+
             // Update deployment status to 'completed'
             await deployment.update({ 
               status: 'completed',
@@ -287,10 +297,43 @@ export const deployPayload = async (req: AuthRequest, res: Response) => {
                 status: 'completed'
               });
             }
+            resolve();
           } catch (error) {
-            console.error('Error updating deployment after network completion:', error);
+            console.error('Error in network payload execution:', error);
+            reject(error);
           }
-        }, 5000); // 5-second execution time for network devices
+        });
+
+        // Execute the network payload in the background
+        executeNetworkPayload.catch(async (error) => {
+          console.error('Network payload execution failed:', error);
+          
+          // Update deployment status to 'failed'
+          await deployment.update({ 
+            status: 'failed',
+            result: JSON.stringify({
+              success: false,
+              error: 'Failed to execute network payload',
+              timestamp: new Date()
+            })
+          });
+          
+          // Update device status back to 'online'
+          await device.update({ status: 'online' });
+          
+          // Notify clients
+          if (io) {
+            io.emit('device_status_changed', {
+              id: device.id,
+              status: 'online'
+            });
+            
+            io.emit('deployment_status_changed', {
+              id: deployment.id,
+              status: 'failed'
+            });
+          }
+        });
       }
       
       return res.status(200).json({

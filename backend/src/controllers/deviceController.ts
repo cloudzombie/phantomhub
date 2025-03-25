@@ -1,8 +1,29 @@
 import { Request, Response } from 'express';
-import Device from '../models/Device';
+import Device, { DeviceAttributes } from '../models/Device';
 import axios from 'axios';
-import { AuthRequest } from '../middleware/authMiddleware';
+import { AuthRequest } from '../middleware/auth';
 import User from '../models/User';
+import logger from '../utils/logger';
+
+// API timeout for device communication (milliseconds)
+const API_TIMEOUT = 5000;
+
+// Helper function to check device connectivity
+const checkDeviceConnectivity = async (device: Device): Promise<boolean> => {
+  try {
+    if (device.connectionType === 'network') {
+      // For network devices, try to ping the device
+      await axios.get(`http://${device.ipAddress}/api/ping`, { timeout: API_TIMEOUT });
+      return true;
+    } else {
+      // For USB devices, we'll return true as connectivity is managed from the frontend via WebSerial
+      return true;
+    }
+  } catch (error) {
+    logger.error(`Failed to connect to device at ${device.ipAddress}:`, error);
+    return false;
+  }
+};
 
 // Get all O.MG Cables
 export const getAllDevices = async (req: AuthRequest, res: Response) => {
@@ -16,21 +37,58 @@ export const getAllDevices = async (req: AuthRequest, res: Response) => {
       });
     }
     
-    // Check if user is an admin or operator (can see all devices)
+    // Check if user is an admin (can see all devices)
     const user = await User.findByPk(userId);
+    if (!user) {
+      logger.error(`User not found with ID: ${userId}`);
+      return res.status(404).json({
+        success: false,
+        message: 'User not found',
+      });
+    }
     
     let devices;
-    if (user && (user.role === 'Administrator' || user.role === 'Operator')) {
-      // Admins and operators can see all devices
-      devices = await Device.findAll({
-        include: [{ model: User, as: 'owner', attributes: ['id', 'username', 'email'] }]
+    try {
+      if (user.role === 'admin') {
+        // Admins can see all devices
+        devices = await Device.findAll({
+          include: [{ model: User, as: 'owner', attributes: ['id', 'name', 'email'] }]
+        });
+      } else {
+        // Regular users can only see their own devices
+        devices = await Device.findAll({
+          where: { userId },
+          include: [{ model: User, as: 'owner', attributes: ['id', 'name', 'email'] }]
+        });
+      }
+    } catch (error) {
+      logger.error('Error querying devices:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to fetch devices from database',
+        error: error instanceof Error ? error.message : 'Unknown error',
       });
-    } else {
-      // Regular users can only see their own devices
-      devices = await Device.findAll({
-        where: { userId },
-        include: [{ model: User, as: 'owner', attributes: ['id', 'username', 'email'] }]
-      });
+    }
+    
+    // Check connectivity for network devices and update status
+    for (const device of devices) {
+      if (device.connectionType === 'network') {
+        try {
+          const isConnected = await checkDeviceConnectivity(device);
+          if (isConnected && device.status !== 'online') {
+            device.status = 'online';
+            device.lastSeen = new Date();
+            await device.save();
+          } else if (!isConnected && device.status !== 'offline') {
+            device.status = 'offline';
+            await device.save();
+          }
+        } catch (error) {
+          logger.error(`Error checking connectivity for device ${device.id}:`, error);
+          // Don't fail the whole request if connectivity check fails
+          continue;
+        }
+      }
     }
     
     return res.status(200).json({
@@ -38,10 +96,11 @@ export const getAllDevices = async (req: AuthRequest, res: Response) => {
       data: devices,
     });
   } catch (error) {
-    console.error('Error fetching O.MG Cables:', error);
+    logger.error('Error in getAllDevices:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch O.MG Cables',
+      error: error instanceof Error ? error.message : 'Unknown error',
     });
   }
 };
@@ -60,7 +119,7 @@ export const getDevice = async (req: AuthRequest, res: Response) => {
     }
     
     const device = await Device.findByPk(id, {
-      include: [{ model: User, as: 'owner', attributes: ['id', 'username', 'email'] }]
+      include: [{ model: User, as: 'owner', attributes: ['id', 'name', 'email'] }]
     });
     
     if (!device) {
@@ -70,13 +129,26 @@ export const getDevice = async (req: AuthRequest, res: Response) => {
       });
     }
     
-    // Check if the device belongs to the user or if user is admin/operator
+    // Check if the device belongs to the user or if user is admin
     const user = await User.findByPk(userId);
-    if (device.userId !== userId && user?.role !== 'Administrator' && user?.role !== 'Operator') {
+    if (device.userId !== userId && user?.role !== 'admin') {
       return res.status(403).json({
         success: false,
         message: 'You do not have permission to access this device',
       });
+    }
+    
+    // Check connectivity for network devices
+    if (device.connectionType === 'network') {
+      const isConnected = await checkDeviceConnectivity(device);
+      if (isConnected && device.status !== 'online') {
+        device.status = 'online';
+        device.lastSeen = new Date();
+        await device.save();
+      } else if (!isConnected && device.status !== 'offline') {
+        device.status = 'offline';
+        await device.save();
+      }
     }
     
     return res.status(200).json({
@@ -106,10 +178,18 @@ export const createDevice = async (req: AuthRequest, res: Response) => {
     }
     
     // If this is a network device, verify connectivity
-    if (connectionType !== 'usb') {
+    if (connectionType === 'network') {
       try {
-        // NOTE: In a real implementation, we would use the actual O.MG Cable API endpoints
-        await axios.get(`http://${ipAddress}/ping`, { timeout: 5000 });
+        // Use the actual O.MG Cable API endpoint for connectivity check
+        const response = await axios.get(`http://${ipAddress}/api/ping`, { timeout: API_TIMEOUT });
+        
+        // Only proceed if the device responds with a successful status
+        if (response.status !== 200) {
+          return res.status(400).json({
+            success: false,
+            message: 'Could not communicate with the O.MG Cable at the specified IP address',
+          });
+        }
       } catch (err) {
         return res.status(400).json({
           success: false,
@@ -118,15 +198,18 @@ export const createDevice = async (req: AuthRequest, res: Response) => {
       }
     }
     
-    const device = await Device.create({
+    const deviceData: Pick<DeviceAttributes, 'name' | 'userId' | 'status' | 'connectionType' | 'ipAddress' | 'serialPortId' | 'firmwareVersion' | 'errors'> = {
       name,
-      ipAddress,
-      firmwareVersion,
-      status: connectionType === 'usb' ? 'online' : 'online', // Mark USB devices as online immediately
-      connectionType: connectionType || 'network',
+      userId,
+      status: 'online',
+      connectionType,
+      ipAddress: ipAddress || null,
       serialPortId: serialPortId || null,
-      userId, // Associate device with current user
-    });
+      firmwareVersion: firmwareVersion || null,
+      errors: []
+    };
+    
+    const device = await Device.create(deviceData);
     
     // Notify all connected clients via Socket.IO about the new device
     const io = req.app.get('io');
@@ -173,41 +256,43 @@ export const updateDeviceStatus = async (req: AuthRequest, res: Response) => {
     
     // Check if the device belongs to the user or if user is admin/operator
     const user = await User.findByPk(userId);
-    if (device.userId !== userId && user?.role !== 'Administrator' && user?.role !== 'Operator') {
+    if (device.userId !== userId && user?.role !== 'admin') {
       return res.status(403).json({
         success: false,
         message: 'You do not have permission to update this device',
       });
     }
     
-    // Try to ping the O.MG Cable to verify status
+    // Try to ping the O.MG Cable to verify status for network devices
     let actualStatus = status;
-    try {
-      // NOTE: In a real implementation, we would use the actual O.MG Cable API endpoints
-      await axios.get(`http://${device.ipAddress}/ping`, { timeout: 5000 });
-      // If the ping was successful but requested status is offline, respect the requested status
-      if (status === 'offline') {
+    
+    if (device.connectionType === 'network') {
+      try {
+        // Use the actual O.MG Cable API endpoint for status check
+        const response = await axios.get(`http://${device.ipAddress}/api/status`, { 
+          timeout: API_TIMEOUT 
+        });
+        
+        // Update status based on response
+        if (response.status === 200) {
+          actualStatus = 'online';
+          device.lastSeen = new Date();
+        } else {
+          actualStatus = 'error';
+        }
+      } catch (err) {
         actualStatus = 'offline';
-      } else {
-        actualStatus = 'online';
       }
-    } catch (err) {
-      // If we can't reach the device, it's offline regardless of requested status
-      actualStatus = 'offline';
     }
     
-    // Update device status and check-in time
+    // Update device status
     device.status = actualStatus;
-    device.lastCheckIn = new Date();
     await device.save();
     
-    // Notify all connected clients via Socket.IO
+    // Notify all connected clients via Socket.IO about the status update
     const io = req.app.get('io');
     if (io) {
-      io.emit('device_status_changed', {
-        id: device.id,
-        status: device.status
-      });
+      io.emit('device_status_updated', { id: device.id, status: device.status });
     }
     
     return res.status(200).json({
@@ -228,7 +313,7 @@ export const updateDeviceStatus = async (req: AuthRequest, res: Response) => {
 export const sendPayload = async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
-    const { payloadId } = req.body;
+    const { payloadId, payloadContent } = req.body;
     const userId = req.user?.id;
     
     if (!userId) {
@@ -249,7 +334,7 @@ export const sendPayload = async (req: AuthRequest, res: Response) => {
     
     // Check if the device belongs to the user or if user is admin/operator
     const user = await User.findByPk(userId);
-    if (device.userId !== userId && user?.role !== 'Administrator' && user?.role !== 'Operator') {
+    if (device.userId !== userId && user?.role !== 'admin') {
       return res.status(403).json({
         success: false,
         message: 'You do not have permission to send payload to this device',
@@ -263,57 +348,152 @@ export const sendPayload = async (req: AuthRequest, res: Response) => {
       });
     }
     
-    // In a real implementation, we would fetch the payload from the database
-    // and send it to the O.MG Cable using its API
-    
-    try {
-      // NOTE: This is a placeholder. In a real implementation, we would:
-      // 1. Fetch the payload script from the database
-      // 2. Send it to the O.MG Cable's API endpoint
-      // 3. Handle the response accordingly
-      await axios.post(`http://${device.ipAddress}/execute`, {
-        payloadId,
-      }, { timeout: 10000 });
-      
-      // Update device status to 'busy' while executing payload
-      device.status = 'busy';
-      await device.save();
-      
-      // Notify all connected clients via Socket.IO
-      const io = req.app.get('io');
-      if (io) {
-        io.emit('device_status_changed', {
-          id: device.id,
-          status: 'busy'
+    // For network-connected devices, use the API
+    if (device.connectionType === 'network') {
+      try {
+        // Fetch payload content if only ID was provided
+        let content = payloadContent;
+        if (!content && payloadId) {
+          // Fetch payload content from database (not implemented here)
+          // const payload = await Payload.findByPk(payloadId);
+          // content = payload?.content;
+          
+          return res.status(400).json({
+            success: false,
+            message: 'Payload content is required for network devices',
+          });
+        }
+        
+        if (!content) {
+          return res.status(400).json({
+            success: false,
+            message: 'No payload content provided',
+          });
+        }
+        
+        // First enter DuckyScript mode
+        await axios.post(`http://${device.ipAddress}/api/ducky/mode`, {}, { 
+          timeout: API_TIMEOUT 
         });
         
-        io.emit('payload_executing', {
-          deviceId: device.id,
-          payloadId
+        // Then send the payload content
+        await axios.post(`http://${device.ipAddress}/api/ducky/write`, 
+          { content },
+          { timeout: 10000 } // Longer timeout for payload write
+        );
+        
+        // Execute the payload
+        await axios.post(`http://${device.ipAddress}/api/ducky/execute`, {}, { 
+          timeout: API_TIMEOUT 
+        });
+        
+        // Update device status to 'maintenance' while executing payload
+        device.status = 'maintenance';
+        await device.save();
+        
+        // Notify all connected clients via Socket.IO
+        const io = req.app.get('io');
+        if (io) {
+          io.emit('device_status_changed', {
+            id: device.id,
+            status: 'maintenance'
+          });
+          
+          io.emit('payload_executing', {
+            deviceId: device.id,
+            payloadId: payloadId || 'custom'
+          });
+        }
+        
+        return res.status(200).json({
+          success: true,
+          message: 'Payload sent to O.MG Cable successfully',
+          data: {
+            deviceId: device.id,
+            payloadId: payloadId || 'custom',
+            status: 'executing'
+          },
+        });
+      } catch (err) {
+        console.error('Error communicating with O.MG Cable:', err);
+        
+        return res.status(500).json({
+          success: false,
+          message: 'Failed to send payload to O.MG Cable',
+          error: err instanceof Error ? err.message : 'Unknown error'
         });
       }
-      
+    } else {
+      // For USB devices, payload deployment is handled via WebSerial on the frontend
+      // Just notify that the backend acknowledges the request
       return res.status(200).json({
         success: true,
-        message: 'Payload sent to O.MG Cable successfully',
+        message: 'Payload request acknowledged. USB devices require frontend deployment.',
         data: {
           deviceId: device.id,
-          payloadId,
-          status: 'executing'
+          payloadId: payloadId || 'custom',
+          status: 'pending_frontend_deployment'
         },
       });
-    } catch (err) {
-      return res.status(500).json({
-        success: false,
-        message: 'Failed to communicate with O.MG Cable',
-      });
     }
-    
   } catch (error) {
     console.error('Error sending payload to O.MG Cable:', error);
     return res.status(500).json({
       success: false,
       message: 'Failed to send payload to O.MG Cable',
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+};
+
+// Delete O.MG Cable
+export const deleteDevice = async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user?.id;
+    
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: 'Authentication required',
+      });
+    }
+    
+    const device = await Device.findByPk(id);
+    
+    if (!device) {
+      return res.status(404).json({
+        success: false,
+        message: 'O.MG Cable not found',
+      });
+    }
+    
+    // Check if the device belongs to the user or if user is admin
+    const user = await User.findByPk(userId);
+    if (device.userId !== userId && user?.role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'You do not have permission to delete this device',
+      });
+    }
+    
+    await device.destroy();
+    
+    // Notify all connected clients via Socket.IO about the device deletion
+    const io = req.app.get('io');
+    if (io) {
+      io.emit('device_deleted', id);
+    }
+    
+    return res.status(200).json({
+      success: true,
+      message: 'O.MG Cable deleted successfully',
+    });
+  } catch (error) {
+    console.error('Error deleting O.MG Cable:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to delete O.MG Cable',
     });
   }
 }; 

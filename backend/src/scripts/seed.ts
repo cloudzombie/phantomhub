@@ -1,11 +1,11 @@
-import { connectDB } from '../config/database';
-import { User, UserRole } from '../models/User';
+import { initializeDatabase } from '../config/database';
+import User from '../models/User';
 import Device from '../models/Device';
 
 async function seedDatabase() {
   try {
     // Connect to database
-    await connectDB();
+    await initializeDatabase();
     console.log('Database connected');
 
     // Check if admin user exists
@@ -18,10 +18,15 @@ async function seedDatabase() {
     if (!adminExists) {
       // Create admin user
       await User.create({
-        username: 'admin',
+        name: 'Admin User',
         email: 'admin@phantomhub.com',
         password: 'admin123',
-        role: UserRole.ADMIN
+        role: 'admin',
+        isActive: true,
+        failedLoginAttempts: 0,
+        mfaEnabled: false,
+        sessionTimeout: 3600,
+        requirePasswordChange: false
       });
       console.log('Admin user created');
     } else {
@@ -37,10 +42,15 @@ async function seedDatabase() {
 
     if (!operatorExists) {
       await User.create({
-        username: 'operator',
+        name: 'Operator User',
         email: 'operator@phantomhub.com',
         password: 'operator123',
-        role: UserRole.OPERATOR
+        role: 'user',
+        isActive: true,
+        failedLoginAttempts: 0,
+        mfaEnabled: false,
+        sessionTimeout: 3600,
+        requirePasswordChange: true
       });
       console.log('Operator user created');
     } else {
@@ -56,10 +66,15 @@ async function seedDatabase() {
 
     if (!viewerExists) {
       await User.create({
-        username: 'viewer',
+        name: 'Viewer User',
         email: 'viewer@phantomhub.com',
         password: 'viewer123',
-        role: UserRole.VIEWER
+        role: 'user',
+        isActive: true,
+        failedLoginAttempts: 0,
+        mfaEnabled: false,
+        sessionTimeout: 3600,
+        requirePasswordChange: true
       });
       console.log('Viewer user created');
     } else {
@@ -73,23 +88,37 @@ async function seedDatabase() {
         ipAddress: '192.168.1.101',
         firmwareVersion: 'v1.2.0',
         status: 'online' as const,
-        lastCheckIn: new Date()
+        lastSeen: new Date(),
+        connectionType: 'network' as const
       },
       {
         name: 'Conference Room Cable',
         ipAddress: '192.168.1.102',
         firmwareVersion: 'v1.1.5',
         status: 'offline' as const,
-        lastCheckIn: new Date(Date.now() - 24 * 60 * 60 * 1000) // 1 day ago
+        lastSeen: new Date(Date.now() - 24 * 60 * 60 * 1000), // 1 day ago
+        connectionType: 'network' as const
       },
       {
         name: 'Lab Cable',
         ipAddress: '192.168.1.103',
         firmwareVersion: 'v1.2.0',
-        status: 'busy' as const,
-        lastCheckIn: new Date()
+        status: 'maintenance' as const,
+        lastSeen: new Date(),
+        connectionType: 'network' as const
       }
     ];
+
+    // Get admin user for device ownership
+    const admin = await User.findOne({
+      where: { 
+        email: 'admin@phantomhub.com'
+      }
+    });
+
+    if (!admin) {
+      throw new Error('Admin user not found');
+    }
 
     for (const deviceData of sampleDevices) {
       const deviceExists = await Device.findOne({
@@ -99,7 +128,10 @@ async function seedDatabase() {
       });
 
       if (!deviceExists) {
-        await Device.create(deviceData);
+        await Device.create({
+          ...deviceData,
+          userId: admin.id
+        });
         console.log(`Device ${deviceData.name} created`);
       } else {
         console.log(`Device with IP ${deviceData.ipAddress} already exists`);

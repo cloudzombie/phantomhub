@@ -40,6 +40,94 @@
 30. Develop integration modules for third-party services: create `/backend/services/twilio.js` for SMS notifications and `/backend/services/sendgrid.js` for email alerts. (Project Requirements: Third-Party Integrations)
 31. **Validation:** Test each API endpoint and middleware using Postman or similar tools; for example, use POST requests to `/api/login` and ensure a valid JWT is returned and error cases are handled. (Project Requirements: Testing & Security)
 
+## Database Implementation Details
+
+### User-Specific Data Management
+1. **User Authentication & Authorization**
+   - Implemented JWT-based authentication
+   - User model with UUID primary keys
+   - Role-based access control (admin/user)
+   - Secure password hashing with bcrypt
+
+2. **Data Ownership & Isolation**
+   - All models include user associations:
+     ```typescript
+     // User owns devices
+     User.hasMany(Device, { foreignKey: 'userId' });
+     Device.belongsTo(User, { foreignKey: 'userId' });
+
+     // User owns payloads
+     User.hasMany(Payload, { foreignKey: 'userId' });
+     Payload.belongsTo(User, { foreignKey: 'userId' });
+
+     // User owns deployments
+     User.hasMany(Deployment, { foreignKey: 'userId' });
+     Deployment.belongsTo(User, { foreignKey: 'userId' });
+     ```
+
+3. **Database Models**
+   - User Model:
+     - UUID primary key
+     - Email (unique)
+     - Password (hashed)
+     - Role (admin/user)
+     - Last login tracking
+     - Active status
+
+   - Device Model:
+     - UUID primary key
+     - User association
+     - Status tracking
+     - Connection details
+     - Firmware version
+     - Last seen timestamp
+
+   - Payload Model:
+     - UUID primary key
+     - User association
+     - Content storage
+     - Version tracking
+     - Creation metadata
+
+   - Deployment Model:
+     - UUID primary key
+     - User association
+     - Device association
+     - Payload association
+     - Status tracking
+     - Result storage
+
+4. **Security Measures**
+   - Foreign key constraints for data integrity
+   - JWT token validation
+   - Request scoping to user ID
+   - Password hashing
+   - Role-based access control
+
+5. **Data Flow**
+   When a user logs in:
+   1. Receives JWT token with user ID
+   2. Can only:
+      - View their own devices
+      - Create payloads (saved to their account)
+      - Deploy payloads to their devices
+      - View their own deployment results
+      - Manage their own device settings
+
+6. **Data Isolation**
+   - Users cannot:
+     - Access other users' devices
+     - View other users' payloads
+     - See other users' deployment results
+     - Modify other users' settings
+
+7. **Database Configuration**
+   - PostgreSQL with Sequelize ORM
+   - Connection pooling enabled
+   - Environment-based configuration
+   - Migration support
+   - Proper indexing on foreign keys
+
 ## Phase 4: Integration
 
 32. Connect the frontend login component to the backend authentication endpoint using the Axios service (`POST /api/login`). (Project Requirements: User Authentication)

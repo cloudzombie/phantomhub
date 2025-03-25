@@ -5,19 +5,30 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 const database_1 = require("../config/database");
 const Device_1 = __importDefault(require("../models/Device"));
+const User_1 = __importDefault(require("../models/User"));
 async function createDevice() {
     try {
-        // Connect to database
-        await (0, database_1.connectDB)();
+        // Initialize database
+        await (0, database_1.initializeDatabase)();
         console.log('Database connected for creating device');
+        // Find admin user
+        const admin = await User_1.default.findOne({
+            where: { email: 'admin@phantomhub.com' }
+        });
+        if (!admin) {
+            console.error('Admin user not found. Please run the seedDatabase script first.');
+            process.exit(1);
+        }
         // Create a test device
         const [device, created] = await Device_1.default.findOrCreate({
-            where: { ipAddress: '192.168.1.100' },
+            where: { name: 'Test O.MG Cable' },
             defaults: {
                 name: 'Test O.MG Cable',
+                userId: admin.id,
                 ipAddress: '192.168.1.100',
                 firmwareVersion: '1.2.0',
-                status: 'online'
+                status: 'online',
+                connectionType: 'network'
             }
         });
         if (created) {

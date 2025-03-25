@@ -1,10 +1,10 @@
-import { Model, DataTypes } from 'sequelize';
-import sequelize from '../config/database';
-import { User } from './User';
+import { Model, DataTypes, Association } from 'sequelize';
+import { sequelize } from '../config/database';
+import User from './User';
 
 interface UserSettingsAttributes {
-  id: number;
-  userId: number;
+  id?: string;
+  userId: string;
   theme: 'dark' | 'light' | 'system';
   notificationSettings: {
     deviceStatus: boolean;
@@ -26,36 +26,15 @@ interface UserSettingsAttributes {
     autoLogout: number;
     requireConfirmation: boolean;
   };
+  createdAt?: Date;
+  updatedAt?: Date;
 }
 
-interface UserSettingsCreationAttributes {
-  userId: number;
-  theme?: 'dark' | 'light' | 'system';
-  notificationSettings?: {
-    deviceStatus?: boolean;
-    deploymentAlerts?: boolean;
-    systemUpdates?: boolean;
-    securityAlerts?: boolean;
-  };
-  apiSettings?: {
-    endpoint?: string;
-    pollingInterval?: number;
-    timeout?: number;
-  };
-  displaySettings?: {
-    compactView?: boolean;
-    showAdvancedOptions?: boolean;
-    dateFormat?: string;
-  };
-  securitySettings?: {
-    autoLogout?: number;
-    requireConfirmation?: boolean;
-  };
-}
+interface UserSettingsCreationAttributes extends Omit<UserSettingsAttributes, 'id' | 'createdAt' | 'updatedAt'> {}
 
 class UserSettings extends Model<UserSettingsAttributes, UserSettingsCreationAttributes> implements UserSettingsAttributes {
-  public id!: number;
-  public userId!: number;
+  public id!: string;
+  public userId!: string;
   public theme!: 'dark' | 'light' | 'system';
   public notificationSettings!: {
     deviceStatus: boolean;
@@ -80,20 +59,25 @@ class UserSettings extends Model<UserSettingsAttributes, UserSettingsCreationAtt
 
   public readonly createdAt!: Date;
   public readonly updatedAt!: Date;
+
+  // Define associations
+  public static associations: {
+    user: Association<UserSettings, User>;
+  };
 }
 
 UserSettings.init(
   {
     id: {
-      type: DataTypes.INTEGER,
-      autoIncrement: true,
+      type: DataTypes.UUID,
+      defaultValue: DataTypes.UUIDV4,
       primaryKey: true,
     },
     userId: {
-      type: DataTypes.INTEGER,
+      type: DataTypes.UUID,
       allowNull: false,
       references: {
-        model: 'users',
+        model: User,
         key: 'id',
       },
       unique: true,
@@ -149,6 +133,5 @@ UserSettings.init(
 
 // Define association with User model
 UserSettings.belongsTo(User, { foreignKey: 'userId', as: 'user' });
-User.hasOne(UserSettings, { foreignKey: 'userId', as: 'settings' });
 
 export default UserSettings; 

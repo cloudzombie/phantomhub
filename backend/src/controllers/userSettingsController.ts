@@ -4,7 +4,7 @@ import UserSettings from '../models/UserSettings';
 // Define AuthRequest type to include user property
 interface AuthRequest extends Request {
   user?: {
-    id: number;
+    id: string;
     role: string;
   };
 }
@@ -21,9 +21,9 @@ export const getUserSettings = async (req: AuthRequest, res: Response): Promise<
 
     // Find user settings or create with defaults if they don't exist
     const [settings, created] = await UserSettings.findOrCreate({
-      where: { userId },
+      where: { userId: userId },
       defaults: {
-        userId,
+        userId: userId,
         theme: 'dark',
         notificationSettings: {
           deviceStatus: true,
@@ -86,9 +86,9 @@ export const updateUserSettings = async (req: AuthRequest, res: Response): Promi
 
     // Find or create user settings
     const [settings, created] = await UserSettings.findOrCreate({
-      where: { userId },
+      where: { userId: userId },
       defaults: {
-        userId,
+        userId: userId,
         theme: 'dark',
         notificationSettings: {
           deviceStatus: true,

@@ -5,7 +5,7 @@ import morgan from 'morgan';
 import dotenv from 'dotenv';
 import http from 'http';
 import { Server as SocketIOServer } from 'socket.io';
-import { connectDB } from './config/database';
+import { initializeDatabase } from './config/database';
 import { errorHandler } from './middleware/errorHandler';
 import os from 'os';
 
@@ -203,20 +203,20 @@ io.on('connection', (socket) => {
   });
 });
 
-// Start the server
-async function startServer() {
+// Initialize database and start server
+const startServer = async () => {
   try {
-    // Connect to database
-    await connectDB();
-    console.log('Database connected');
+    // Initialize database first
+    await initializeDatabase();
     
+    // Start server
     server.listen(PORT, () => {
-      console.log(`Server running on port ${PORT}`);
+      console.log(`🚀 Starting server on port ${PORT}...`);
     });
   } catch (error) {
     console.error('Failed to start server:', error);
     process.exit(1);
   }
-}
+};
 
 startServer(); 

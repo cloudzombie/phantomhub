@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import Deployment from '../models/Deployment';
 import Device from '../models/Device';
 import Payload from '../models/Payload';
-import { AuthRequest } from '../middleware/authMiddleware';
+import { AuthRequest } from '../middleware/auth';
 import User from '../models/User';
 
 // Get all deployments
@@ -219,8 +219,8 @@ export const updateDeployment = async (req: AuthRequest, res: Response) => {
     // Update the device status based on the deployment status
     const device = await Device.findByPk(deployment.deviceId);
     if (device) {
-      // Only update device if it's still in the 'busy' state related to this deployment
-      if (device.status === 'busy') {
+      // Only update device if it's still in the 'maintenance' state related to this deployment
+      if (device.status === 'maintenance') {
         await device.update({ status: 'online' });
         
         // Notify clients via Socket.IO

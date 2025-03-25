@@ -1,101 +1,140 @@
-import { Model, DataTypes } from 'sequelize';
-import sequelize from '../config/database';
+/**
+ * Device Model
+ * 
+ * Represents an O.MG Cable device in the system
+ */
+
+import { Model, DataTypes, Association } from 'sequelize';
+import { sequelize } from '../config/database';
 import User from './User';
 
-interface DeviceAttributes {
-  id: number;
+export interface DeviceAttributes {
+  id?: string;
   name: string;
-  ipAddress: string;
-  firmwareVersion: string | null;
-  lastCheckIn: Date | null;
-  status: 'online' | 'offline' | 'busy';
-  connectionType: 'network' | 'usb';
-  serialPortId: string | null;
-  userId: number;
-}
-
-interface DeviceCreationAttributes {
-  name: string;
-  ipAddress: string;
-  userId: number;
-  firmwareVersion?: string;
-  status?: 'online' | 'offline' | 'busy';
-  connectionType?: 'network' | 'usb';
+  userId: string;
+  status: 'online' | 'offline' | 'error' | 'maintenance';
+  connectionType: 'usb' | 'network';
+  ipAddress?: string;
   serialPortId?: string;
+  firmwareVersion?: string;
+  lastSeen?: Date;
+  batteryLevel?: number;
+  signalStrength?: number;
+  errors?: string[];
+  createdAt?: Date;
+  updatedAt?: Date;
 }
 
-class Device extends Model<DeviceAttributes, DeviceCreationAttributes> implements DeviceAttributes {
-  public id!: number;
+class Device extends Model<DeviceAttributes> implements DeviceAttributes {
+  public id!: string;
   public name!: string;
+  public userId!: string;
+  public status!: 'online' | 'offline' | 'error' | 'maintenance';
+  public connectionType!: 'usb' | 'network';
   public ipAddress!: string;
-  public firmwareVersion!: string | null;
-  public lastCheckIn!: Date | null;
-  public status!: 'online' | 'offline' | 'busy';
-  public connectionType!: 'network' | 'usb';
-  public serialPortId!: string | null;
-  public userId!: number;
-
+  public serialPortId!: string;
+  public firmwareVersion!: string;
+  public lastSeen!: Date;
+  public batteryLevel!: number;
+  public signalStrength!: number;
+  public errors!: string[];
   public readonly createdAt!: Date;
   public readonly updatedAt!: Date;
+
+  // Define associations
+  public static associations: {
+    owner: Association<Device, User>;
+  };
 }
 
 Device.init(
   {
     id: {
-      type: DataTypes.INTEGER,
-      autoIncrement: true,
+      type: DataTypes.UUID,
+      defaultValue: DataTypes.UUIDV4,
       primaryKey: true,
     },
     name: {
-      type: DataTypes.STRING(100),
+      type: DataTypes.STRING,
       allowNull: false,
     },
-    ipAddress: {
-      type: DataTypes.STRING(50),
+    userId: {
+      type: DataTypes.UUID,
       allowNull: false,
-      validate: {
-        isIP: true,
+      references: {
+        model: User,
+        key: 'id',
       },
     },
-    firmwareVersion: {
-      type: DataTypes.STRING(50),
-      allowNull: true,
-    },
-    lastCheckIn: {
-      type: DataTypes.DATE,
-      allowNull: true,
-    },
     status: {
-      type: DataTypes.ENUM('online', 'offline', 'busy'),
+      type: DataTypes.ENUM('online', 'offline', 'error', 'maintenance'),
       allowNull: false,
       defaultValue: 'offline',
     },
     connectionType: {
-      type: DataTypes.ENUM('network', 'usb'),
+      type: DataTypes.ENUM('usb', 'network'),
       allowNull: false,
-      defaultValue: 'network',
+    },
+    ipAddress: {
+      type: DataTypes.STRING,
+      allowNull: true,
+      validate: {
+        isIP: true,
+      },
     },
     serialPortId: {
-      type: DataTypes.STRING(100),
+      type: DataTypes.STRING,
       allowNull: true,
     },
-    userId: {
+    firmwareVersion: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
+    lastSeen: {
+      type: DataTypes.DATE,
+      allowNull: true,
+    },
+    batteryLevel: {
       type: DataTypes.INTEGER,
-      allowNull: false,
-      references: {
-        model: 'users',
-        key: 'id',
+      allowNull: true,
+      validate: {
+        min: 0,
+        max: 100,
       },
+    },
+    signalStrength: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      validate: {
+        min: 0,
+        max: 100,
+      },
+    },
+    errors: {
+      type: DataTypes.JSON,
+      allowNull: true,
+      defaultValue: [],
     },
   },
   {
     sequelize,
     modelName: 'Device',
     tableName: 'devices',
+    indexes: [
+      {
+        fields: ['userId'],
+      },
+      {
+        fields: ['status'],
+      },
+    ],
   }
 );
 
-// Define association with User
-Device.belongsTo(User, { foreignKey: 'userId', as: 'owner' });
+// Define associations
+Device.belongsTo(User, {
+  foreignKey: 'userId',
+  as: 'owner',
+});
 
 export default Device; 

@@ -7,7 +7,7 @@ import {
   getUserDeployments,
   updateDeployment
 } from '../controllers/deploymentController';
-import { authenticate, authorize } from '../middleware/authMiddleware';
+import { authenticate, isOperator } from '../middleware/auth';
 
 const router = Router();
 
@@ -16,17 +16,17 @@ const router = Router();
 // Protected routes
 router.use(authenticate); // Apply authentication to all deployment routes
 
-// GET all deployments - Admin & Operator access
-router.get('/', authorize(['Administrator', 'Operator']), getAllDeployments);
+// GET all deployments - Admin access
+router.get('/', isOperator, getAllDeployments);
 
-// GET single deployment - Admin & Operator access
-router.get('/:id', authorize(['Administrator', 'Operator']), getDeployment);
+// GET single deployment - Admin access
+router.get('/:id', isOperator, getDeployment);
 
-// GET deployments for a specific device - Admin & Operator access
-router.get('/device/:deviceId', authorize(['Administrator', 'Operator']), getDeviceDeployments);
+// GET deployments for a specific device - Admin access
+router.get('/device/:deviceId', isOperator, getDeviceDeployments);
 
-// GET deployments for a specific payload - Admin & Operator access
-router.get('/payload/:payloadId', authorize(['Administrator', 'Operator']), getPayloadDeployments);
+// GET deployments for a specific payload - Admin access
+router.get('/payload/:payloadId', isOperator, getPayloadDeployments);
 
 // GET user's own deployments - All authenticated users
 router.get('/user/me', getUserDeployments);

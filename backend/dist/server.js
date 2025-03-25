@@ -21,6 +21,7 @@ const deviceRoutes_1 = __importDefault(require("./routes/deviceRoutes"));
 const payloadRoutes_1 = __importDefault(require("./routes/payloadRoutes"));
 const deploymentRoutes_1 = __importDefault(require("./routes/deploymentRoutes"));
 const systemRoutes_1 = __importDefault(require("./routes/systemRoutes"));
+const userRoutes_1 = __importDefault(require("./routes/userRoutes"));
 // Load environment variables
 dotenv_1.default.config();
 // Initialize Express app
@@ -156,6 +157,7 @@ app.use('/api/devices', deviceRoutes_1.default);
 app.use('/api/payloads', payloadRoutes_1.default);
 app.use('/api/deployments', deploymentRoutes_1.default);
 app.use('/api/system', systemRoutes_1.default);
+app.use('/api/users', userRoutes_1.default);
 // Error handling middleware
 app.use(errorHandler_1.errorHandler);
 // Socket.IO connection handler
@@ -188,19 +190,19 @@ io.on('connection', (socket) => {
         console.log('User disconnected:', socket.id);
     });
 });
-// Start the server
-async function startServer() {
+// Initialize database and start server
+const startServer = async () => {
     try {
-        // Connect to database
-        await (0, database_1.connectDB)();
-        console.log('Database connected');
+        // Initialize database first
+        await (0, database_1.initializeDatabase)();
+        // Start server
         server.listen(PORT, () => {
-            console.log(`Server running on port ${PORT}`);
+            console.log(`🚀 Starting server on port ${PORT}...`);
         });
     }
     catch (error) {
         console.error('Failed to start server:', error);
         process.exit(1);
     }
-}
+};
 startServer();
