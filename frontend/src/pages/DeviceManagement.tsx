@@ -99,7 +99,15 @@ const DeviceManagement = () => {
       
       // Access the devices array from the data property
       if (response.success && Array.isArray(response.data)) {
-        setDevices(response.data);
+        // Update test devices to always show as offline in the UI
+        const updatedDevices = response.data.map((device: Device) => {
+          // If it's a test device and not explicitly set to online by a user, mark as offline
+          if (device.name.toLowerCase().includes('test') && !device.lastCheckIn) {
+            return { ...device, status: 'offline' };
+          }
+          return device;
+        });
+        setDevices(updatedDevices);
       } else {
         console.error('Invalid response format:', response);
         setErrorMessage('Failed to load O.MG Cables. Invalid response format.');
