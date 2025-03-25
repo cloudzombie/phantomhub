@@ -30,8 +30,20 @@ interface Device {
   serialPortId?: string;
 }
 
+interface Payload {
+  id: string;
+  name: string;
+  script: string;
+  description: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 const PayloadEditor = () => {
   const [payloadName, setPayloadName] = useState('New Payload');
+  const [payloads, setPayloads] = useState<Payload[]>([]);
+  const [selectedPayload, setSelectedPayload] = useState<Payload | null>(null);
+  const [showPayloadList, setShowPayloadList] = useState(false);
   const [devices, setDevices] = useState<Device[]>([]);
   const [selectedDevice, setSelectedDevice] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -50,6 +62,9 @@ const PayloadEditor = () => {
     
     // Fetch available devices
     fetchDevices();
+    
+    // Fetch available payloads
+    fetchPayloads();
     
     // Get any already connected USB devices
     if (isWebSerialSupported()) {
@@ -142,6 +157,105 @@ const PayloadEditor = () => {
     }
   };
   
+  const fetchPayloads = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        console.error('No authentication token found');
+        window.location.href = '/login';
+        return;
+      }
+      
+      const response = await axios.get(`${API_URL}/payloads`, {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+      
+      if (response.data && response.data.success) {
+        const fetchedPayloads = response.data.data || [];
+        setPayloads(fetchedPayloads);
+      }
+    } catch (error) {
+      console.error('Error fetching payloads:', error);
+      
+      // If we get a 401, redirect to login
+      if (axios.isAxiosError(error) && error.response?.status === 401) {
+        localStorage.removeItem('token');
+        window.location.href = '/login';
+      }
+    }
+  };
+  
+  const loadPayload = (payload: Payload) => {
+    if (editorRef.current) {
+      setPayloadName(payload.name);
+      editorRef.current.setValue(payload.script);
+      setSelectedPayload(payload);
+      setShowPayloadList(false);
+    }
+  };
+  
+  const createNewPayload = () => {
+    if (editorRef.current) {
+      setPayloadName('New Payload');
+      editorRef.current.setValue(DEFAULT_DUCKY_SCRIPT);
+      setSelectedPayload(null);
+      setShowPayloadList(false);
+    }
+  };
+  
+  const deletePayload = async (id: string) => {
+    try {
+      setIsLoading(true);
+      
+      const token = localStorage.getItem('token');
+      if (!token) {
+        console.error('No authentication token found');
+        window.location.href = '/login';
+        return;
+      }
+      
+      const response = await axios.delete(`${API_URL}/payloads/${id}`, {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+      
+      if (response.data && response.data.success) {
+        setMessage({
+          type: 'success',
+          text: 'Payload deleted successfully!'
+        });
+        fetchPayloads();
+        
+        // If we deleted the currently selected payload, reset to a new one
+        if (selectedPayload && selectedPayload.id === id) {
+          createNewPayload();
+        }
+      } else {
+        setMessage({
+          type: 'error',
+          text: response.data?.message || 'Failed to delete payload'
+        });
+      }
+    } catch (error) {
+      console.error('Error deleting payload:', error);
+      setMessage({
+        type: 'error',
+        text: 'Failed to delete payload. Please try again.'
+      });
+      
+      // If we get a 401, redirect to login
+      if (axios.isAxiosError(error) && error.response?.status === 401) {
+        localStorage.removeItem('token');
+        window.location.href = '/login';
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  
   const savePayload = async () => {
     try {
       if (!editorRef.current) {
@@ -178,17 +292,37 @@ const PayloadEditor = () => {
         type: 'duckyscript'
       };
       
-      const response = await axios.post(`${API_URL}/payloads`, payloadData, {
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
-      });
+      let response;
+      
+      // If we have a selected payload, update it, otherwise create a new one
+      if (selectedPayload) {
+        response = await axios.put(`${API_URL}/payloads/${selectedPayload.id}`, payloadData, {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        });
+      } else {
+        response = await axios.post(`${API_URL}/payloads`, payloadData, {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        });
+      }
       
       if (response.data && response.data.success) {
         setMessage({
           type: 'success',
           text: `Payload "${payloadName}" saved successfully!`
         });
+        
+        // Refresh the payloads list
+        fetchPayloads();
+        
+        // Update the selected payload if we just created one
+        if (!selectedPayload) {
+          setSelectedPayload(response.data.data);
+        }
+        
         return response.data.data;
       } else {
         setMessage({
@@ -447,6 +581,22 @@ const PayloadEditor = () => {
             />
           </div>
           
+          <div className="flex space-x-2">
+            <button
+              onClick={() => setShowPayloadList(!showPayloadList)}
+              className="flex items-center px-3 py-2 bg-slate-700 hover:bg-slate-600 border border-slate-600 rounded-md text-white text-sm font-medium transition-colors"
+            >
+              {showPayloadList ? 'Hide Payloads' : 'Show Payloads'}
+            </button>
+            
+            <button
+              onClick={createNewPayload}
+              className="flex items-center px-3 py-2 bg-slate-700 hover:bg-slate-600 border border-slate-600 rounded-md text-white text-sm font-medium transition-colors"
+            >
+              + New
+            </button>
+          </div>
+          
           <div className="relative flex-grow max-w-md">
             <select
               value={selectedDevice}
@@ -496,6 +646,60 @@ const PayloadEditor = () => {
           </div>
         </div>
       </div>
+      
+      {/* Payload List */}
+      {showPayloadList && (
+        <div className="bg-slate-800 border border-slate-700 rounded-md shadow-sm mb-4 overflow-hidden">
+          <div className="border-b border-slate-700 px-4 py-2 font-medium text-white">
+            Payload Library
+          </div>
+          
+          <div className="max-h-64 overflow-y-auto">
+            {payloads.length > 0 ? (
+              <table className="w-full text-sm text-slate-300">
+                <thead className="bg-slate-700/50 text-xs uppercase text-slate-400">
+                  <tr>
+                    <th className="px-4 py-2 text-left">Name</th>
+                    <th className="px-4 py-2 text-left">Created</th>
+                    <th className="px-4 py-2 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {payloads.map(payload => (
+                    <tr 
+                      key={payload.id} 
+                      className={`border-b border-slate-700 hover:bg-slate-700/30 ${
+                        selectedPayload?.id === payload.id ? 'bg-slate-700/20' : ''
+                      }`}
+                    >
+                      <td className="px-4 py-2">{payload.name}</td>
+                      <td className="px-4 py-2">{new Date(payload.createdAt).toLocaleDateString()}</td>
+                      <td className="px-4 py-2 text-right">
+                        <button
+                          onClick={() => loadPayload(payload)}
+                          className="ml-2 text-green-400 hover:text-green-300"
+                        >
+                          Load
+                        </button>
+                        <button
+                          onClick={() => deletePayload(payload.id)}
+                          className="ml-2 text-red-400 hover:text-red-300"
+                        >
+                          Delete
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : (
+              <div className="p-4 text-center text-slate-500">
+                No payloads found. Create a new one to get started!
+              </div>
+            )}
+          </div>
+        </div>
+      )}
       
       {/* Warning for browsers without WebSerial support */}
       {!webSerialSupported && (
