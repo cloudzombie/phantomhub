@@ -398,6 +398,14 @@ const PayloadEditor = () => {
     return <FiWifi className="ml-1" size={12} />;
   };
   
+  // Format the device display name with connection type indicator
+  const getDeviceDisplayName = (device: Device) => {
+    if (device.connectionType === 'usb') {
+      return `${device.name} (USB)`;
+    }
+    return `${device.name} (WiFi)`;
+  };
+  
   return (
     <div className="p-6 h-full flex flex-col">
       {/* Page Title */}
@@ -448,13 +456,23 @@ const PayloadEditor = () => {
               <option value="" disabled>Select a device</option>
               {devices.filter(d => d.status === 'online').map(device => (
                 <option key={device.id} value={device.id}>
-                  {device.name} {getDeviceConnectionIcon(device)}
+                  {getDeviceDisplayName(device)}
                 </option>
               ))}
               {devices.filter(d => d.status === 'online').length === 0 && (
                 <option value="" disabled>No online devices available</option>
               )}
             </select>
+            {selectedDevice && (
+              <div className="mt-1 text-xs text-slate-400 flex items-center">
+                Selected: {devices.find(d => d.id.toString() === selectedDevice)?.name} 
+                {selectedDevice && devices.find(d => d.id.toString() === selectedDevice) && (
+                  <span className="ml-1 flex items-center">
+                    {getDeviceConnectionIcon(devices.find(d => d.id.toString() === selectedDevice)!)}
+                  </span>
+                )}
+              </div>
+            )}
           </div>
           
           <div className="flex space-x-2">
