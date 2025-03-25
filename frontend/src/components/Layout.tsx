@@ -10,9 +10,21 @@ import ThemeToggle from './ui/ThemeToggle';
 const Layout = () => {
   const location = useLocation();
   const [activeRoute, setActiveRoute] = useState('/');
+  const [currentUser, setCurrentUser] = useState<{name?: string, email?: string, role?: string} | null>(null);
   
   useEffect(() => {
     setActiveRoute(location.pathname);
+    
+    // Get current user from localStorage
+    const userStr = localStorage.getItem('user');
+    if (userStr) {
+      try {
+        const userData = JSON.parse(userStr);
+        setCurrentUser(userData);
+      } catch (error) {
+        console.error('Error parsing user data:', error);
+      }
+    }
     
     // Listen for API configuration changes
     const handleApiConfigChange = (event: CustomEvent) => {
@@ -50,6 +62,7 @@ const Layout = () => {
   
   const handleLogout = () => {
     localStorage.removeItem('token');
+    localStorage.removeItem('user');
     window.location.href = '/login';
   };
   
@@ -133,7 +146,14 @@ const Layout = () => {
               <ThemeToggle compact={true} showLabels={false} />
             </div>
             <div className="text-xs text-slate-400 py-1 px-2 bg-slate-700/50 rounded border border-slate-600/50">
-              <span className="text-green-500 font-medium">admin</span>@phantomhub.io
+              {currentUser ? (
+                <>
+                  <span className="text-green-500 font-medium">{currentUser.name || currentUser.email?.split('@')[0]}</span>
+                  {currentUser.email && `@${currentUser.email.split('@')[1]}`}
+                </>
+              ) : (
+                <span className="text-slate-400">Not logged in</span>
+              )}
             </div>
           </div>
         </header>
