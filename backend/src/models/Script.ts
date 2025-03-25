@@ -8,6 +8,13 @@ export interface ScriptAttributes {
   id?: string;
   name: string;
   content: string;
+  /**
+   * Script types:
+   * - callback: Safe, just records the callback and updates counters
+   * - exfiltration: Safe, stores data and forwards to callback URL if specified
+   * - command: Logs but doesn't execute (sandboxed for security)
+   * - custom: Safe, client-side handling only
+   */
   type: 'callback' | 'exfiltration' | 'command' | 'custom';
   description: string | null;
   userId: string;

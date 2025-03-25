@@ -536,64 +536,37 @@ export const executeScript = async (req: Request, res: Response) => {
         break;
         
       case 'command':
-        // For command scripts, actually execute the script if server is configured to allow it
-        // This would be a security risk in production without proper safeguards
-        const { exec } = require('child_process');
-        const util = require('util');
-        const execPromise = util.promisify(exec);
+        // For command scripts, we'll log the request but not execute
+        // SECURITY: We don't execute commands directly on the server as that's a major security risk
         
-        // Determine script type and execution method
-        let command;
-        if (script.name.endsWith('.ps1') || 
-            script.content.includes('function ') || 
-            script.content.includes('Write-Host')) {
-          // PowerShell script
-          // Write script to temporary file
-          const fs = require('fs');
-          const os = require('os');
-          const path = require('path');
-          const tempFile = path.join(os.tmpdir(), `script_${script.id}.ps1`);
-          fs.writeFileSync(tempFile, script.content);
-          
-          // Execute PowerShell script
-          command = `powershell -ExecutionPolicy Bypass -File "${tempFile}"`;
-        } else if (script.name.endsWith('.sh') || 
-                  script.content.includes('#!/bin/bash') || 
-                  script.content.includes('#!/bin/sh')) {
-          // Shell script
-          // Write script to temporary file
-          const fs = require('fs');
-          const os = require('os');
-          const path = require('path');
-          const tempFile = path.join(os.tmpdir(), `script_${script.id}.sh`);
-          fs.writeFileSync(tempFile, script.content);
-          fs.chmodSync(tempFile, '755'); // Make executable
-          
-          // Execute shell script
-          command = `/bin/sh "${tempFile}"`;
-        } else {
-          // Generic script, try to execute directly
-          command = script.content;
-        }
+        // Extract script information for logging
+        const scriptContent = script.content.substring(0, 100) + (script.content.length > 100 ? '...' : '');
+        console.log(`Command script execution requested (BLOCKED FOR SECURITY):\nID: ${script.id}\nName: ${script.name}\nContent preview: ${scriptContent}`);
         
-        try {
-          // Execute with timeout of 30 seconds
-          const { stdout, stderr } = await execPromise(command, { timeout: 30000 });
-          result = { 
-            executed: true, 
-            stdout: stdout, 
-            stderr: stderr,
-            exitCode: 0
-          };
-        } catch (error: any) {
-          console.error('Error executing script:', error);
-          result = { 
-            executed: false, 
-            error: error.message,
-            stdout: error.stdout,
-            stderr: error.stderr,
-            exitCode: error.code
-          };
+        // Return a response indicating the command execution is disabled
+        result = { 
+          executed: false,
+          sandboxed: true,
+          message: 'Command execution is disabled for security reasons. The script was logged but not executed on the server.',
+          scriptPreview: scriptContent
+        };
+        
+        // If there's a callbackUrl configured, forward the execution request
+        if (script.callbackUrl) {
+          try {
+            await axios.post(script.callbackUrl, {
+              scriptId: script.id,
+              scriptName: script.name,
+              executionTimestamp: new Date(),
+              executionRequest: 'received_but_blocked',
+              data: req.body
+            });
+            result.callbackNotified = true;
+          } catch (error: any) {
+            console.error('Error notifying callback URL:', error);
+            result.callbackNotified = false;
+            result.callbackError = error.message;
+          }
         }
         break;
         

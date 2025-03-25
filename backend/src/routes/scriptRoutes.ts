@@ -14,6 +14,17 @@ import { authenticate, isOperator } from '../middleware/auth';
 
 const router = Router();
 
+/**
+ * SECURITY NOTICE:
+ * The /execute/:endpoint path is a public endpoint for receiving callbacks from devices.
+ * For security reasons:
+ * - 'callback' scripts only track execution and update counters
+ * - 'exfiltration' scripts store data and optionally forward to a callback URL
+ * - 'command' scripts are logged but NOT executed on the server (sandboxed)
+ * - 'custom' scripts are handled client-side only
+ * 
+ * DO NOT modify this behavior without a thorough security review!
+ */
 // Public endpoint for script execution (device callbacks)
 router.post('/execute/:endpoint', executeScript);
 
