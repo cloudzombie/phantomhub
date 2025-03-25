@@ -96,6 +96,35 @@
   border-color: #cbd5e1;
 }
 
+/* Navigation sidebar specific overrides for light theme */
+.light-theme aside.bg-slate-800 {
+  background-color: #f1f5f9 !important; /* lighter gray for sidebar */
+  border-right-color: #e2e8f0 !important;
+}
+
+.light-theme aside .bg-slate-800 {
+  background-color: #f1f5f9 !important; /* for the logo area */
+}
+
+.light-theme aside .text-slate-500 {
+  color: #64748b !important; /* darker for better readability */
+}
+
+.light-theme aside .bg-slate-800\/80,
+.light-theme aside .hover\:bg-slate-800\/40:hover {
+  background-color: rgba(226, 232, 240, 0.6) !important; /* lighter highlight for active/hover items */
+}
+
+/* Active navigation item in light theme */
+.light-theme aside a.text-green-500 {
+  background-color: rgba(167, 139, 250, 0.15) !important;
+  color: #7c3aed !important; /* deeper purple for better contrast */
+}
+
+.light-theme aside a.text-green-500 span.text-green-500 {
+  color: #7c3aed !important;
+}
+
 /* Override styles for Settings page */
 .bg-slate-900,
 .bg-slate-800,
@@ -184,6 +213,12 @@
   background-color: var(--color-brand);
   box-shadow: 0 0 8px rgba(167, 139, 250, 0.7);
   animation: pulse 2s infinite;
+}
+
+/* Status indicators for light theme */
+.light-theme aside .bg-slate-700\/50 {
+  background-color: rgba(241, 245, 249, 0.8) !important;
+  border-color: #e2e8f0 !important;
 }
 
 /* Fix app container */
