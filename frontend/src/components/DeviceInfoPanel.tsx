@@ -21,7 +21,8 @@ import {
   getLatestFirmwareInfo, 
   isNewerFirmwareVersion,
   updateFirmware,
-  type OMGDeviceInfo 
+  type OMGDeviceInfo,
+  checkWebSerialConnection
 } from '../utils/webSerialUtils';
 
 interface DeviceInfoPanelProps {
@@ -51,9 +52,19 @@ const DeviceInfoPanel: React.FC<DeviceInfoPanelProps> = ({ deviceInfo, onRefresh
   // Fetch detailed device capabilities when device info changes
   useEffect(() => {
     const fetchDetailedInfo = async () => {
-      if (deviceInfo && deviceInfo.connectionStatus === 'connected') {
+      if (deviceInfo) {
         setLoading(true);
         try {
+          // For USB devices, check WebSerial connection
+          if (deviceInfo.connectionType === 'usb') {
+            const isConnected = await checkWebSerialConnection(deviceInfo.serialPortId);
+            deviceInfo.connectionStatus = isConnected ? 'connected' : 'disconnected';
+          }
+          // For network devices, status is managed by the backend
+          else {
+            deviceInfo.connectionStatus = deviceInfo.status === 'online' ? 'connected' : 'disconnected';
+          }
+
           const enhancedInfo = await getDeviceCapabilities(deviceInfo);
           setDetailedInfo(enhancedInfo);
           
@@ -68,6 +79,7 @@ const DeviceInfoPanel: React.FC<DeviceInfoPanelProps> = ({ deviceInfo, onRefresh
           }
         } catch (error) {
           console.error('Error fetching detailed device info:', error);
+          deviceInfo.connectionStatus = 'disconnected';
         } finally {
           setLoading(false);
         }

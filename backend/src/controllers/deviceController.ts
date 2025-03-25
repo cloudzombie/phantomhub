@@ -496,4 +496,62 @@ export const deleteDevice = async (req: AuthRequest, res: Response) => {
       message: 'Failed to delete O.MG Cable',
     });
   }
+};
+
+export const getDevices = async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: 'Authentication required',
+      });
+    }
+
+    const devices = await Device.findAll({
+      where: {
+        userId,
+      },
+      include: [{
+        model: User,
+        as: 'owner',
+        attributes: ['id', 'name', 'email'],
+      }],
+    });
+
+    // Update status for each device
+    for (const device of devices) {
+      // For USB devices
+      if (device.connectionType === 'usb') {
+        // USB devices should always show as offline in the list
+        // They only show as online when actively connected via WebSerial
+        device.status = 'offline';
+      }
+      // For network devices
+      else if (device.connectionType === 'network' && device.ipAddress) {
+        try {
+          // Try to ping the device
+          const response = await axios.get(`http://${device.ipAddress}/api/status`, { 
+            timeout: 2000 // 2 second timeout
+          });
+          device.status = response.status === 200 ? 'online' : 'offline';
+        } catch (err) {
+          device.status = 'offline';
+        }
+      }
+      await device.save();
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: devices,
+    });
+  } catch (error) {
+    console.error('Error fetching devices:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to fetch devices',
+    });
+  }
 }; 

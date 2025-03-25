@@ -127,13 +127,63 @@
   color: var(--text-primary) !important;
 }
 
-/* Preserve green color for highlights */
+/* Preserve purple color for highlights */
 .text-green-500 {
-  color: #00F260 !important;
+  color: #A78BFA !important;
 }
 
 .light-theme .bg-green-500\/20 {
-  background-color: rgba(0, 242, 96, 0.1) !important;
+  background-color: rgba(167, 139, 250, 0.1) !important;
+}
+
+/* Matrix-like text effects */
+.matrix-text {
+  text-shadow: 0 0 5px rgba(167, 139, 250, 0.7);
+  animation: matrixGlow 2s infinite alternate;
+}
+
+@keyframes matrixGlow {
+  from {
+    text-shadow: 0 0 3px rgba(167, 139, 250, 0.7);
+  }
+  to {
+    text-shadow: 0 0 7px rgba(167, 139, 250, 0.9);
+  }
+}
+
+/* Glow effects */
+.shadow-glow-green {
+  box-shadow: 0 0 8px rgba(167, 139, 250, 0.5);
+}
+
+.filter.drop-shadow-glow {
+  filter: drop-shadow(0 0 6px rgba(167, 139, 250, 0.6));
+}
+
+/* Text animation for cybersecurity feel */
+@keyframes textShadowPulse {
+  0% {
+    text-shadow: 0 0 4px rgba(167, 139, 250, 0.4);
+  }
+  50% {
+    text-shadow: 0 0 8px rgba(167, 139, 250, 0.6);
+  }
+  100% {
+    text-shadow: 0 0 4px rgba(167, 139, 250, 0.4);
+  }
+}
+
+/* Card hover effect */
+.card-modern:hover {
+  box-shadow: 0 0 15px rgba(167, 139, 250, 0.15);
+  border-color: rgba(167, 139, 250, 0.2);
+}
+
+/* Status indicators */
+.status-online {
+  background-color: var(--color-brand);
+  box-shadow: 0 0 8px rgba(167, 139, 250, 0.7);
+  animation: pulse 2s infinite;
 }
 
 /* Fix app container */

@@ -22,16 +22,16 @@ export default {
         foreground: "hsl(0 0% 95%)",
         
         brand: {
-          50: '#E6FFFA',
-          100: '#B2F5EA',
-          200: '#81E6D9',
-          300: '#4FD1C5',
-          400: '#38B2AC',
-          500: '#00F260', // Primary neon green
-          600: '#2C7A7B',
-          700: '#285E61',
-          800: '#234E52',
-          900: '#1D4044',
+          50: '#F5F3FF',
+          100: '#EDE9FE',
+          200: '#DDD6FE',
+          300: '#C4B5FD',
+          400: '#A78BFA',
+          500: '#A78BFA', // Primary purple
+          600: '#7C3AED',
+          700: '#6D28D9',
+          800: '#5B21B6',
+          900: '#4C1D95',
         },
         accent: {
           50: '#E6F0FF',
@@ -127,8 +127,8 @@ export default {
         sm: "0.25rem",
       },
       boxShadow: {
-        'neon': '0 0 5px theme("colors.brand.500"), 0 0 20px rgba(0, 242, 96, 0.3)',
-        'neon-lg': '0 0 10px theme("colors.brand.500"), 0 0 30px rgba(0, 242, 96, 0.5)',
+        'neon': '0 0 5px theme("colors.brand.500"), 0 0 20px rgba(167, 139, 250, 0.3)',
+        'neon-lg': '0 0 10px theme("colors.brand.500"), 0 0 30px rgba(167, 139, 250, 0.5)',
         'accent': '0 0 5px theme("colors.accent.500"), 0 0 20px rgba(5, 117, 230, 0.3)',
         'glow': '0 0 20px rgba(255, 255, 255, 0.1)',
       },
@@ -150,8 +150,8 @@ export default {
           '50%': { opacity: 0.5 },
         },
         glow: {
-          '0%, 100%': { boxShadow: '0 0 #00f260, 0 0 #00f260, 0 0 #00f260, 0 0 #00f260' },
-          '50%': { boxShadow: '0 0 10px #00f260, 0 0 20px #00f260, 0 0 30px #00f260, 0 0 40px #00f260' },
+          '0%, 100%': { boxShadow: '0 0 #A78BFA, 0 0 #A78BFA, 0 0 #A78BFA, 0 0 #A78BFA' },
+          '50%': { boxShadow: '0 0 10px #A78BFA, 0 0 20px #A78BFA, 0 0 30px #A78BFA, 0 0 40px #A78BFA' },
         },
       },
       animation: {

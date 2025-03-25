@@ -4,14 +4,21 @@
  * via the Web Serial API
  */
 
-// Web Serial API type definitions
+// Add SerialPort interface at the top of the file
+interface SerialPortInfo {
+  usbVendorId?: number;
+  usbProductId?: number;
+}
+
 interface SerialPort {
-  open: (options: SerialOptions) => Promise<void>;
-  close: () => Promise<void>;
+  getInfo(): SerialPortInfo;
+  open(options: SerialOptions): Promise<void>;
+  close(): Promise<void>;
   readable: ReadableStream<Uint8Array> | null;
   writable: WritableStream<Uint8Array> | null;
 }
 
+// Web Serial API type definitions
 interface SerialPortRequestOptions {
   filters?: Array<{
     usbVendorId?: number;
@@ -1244,4 +1251,32 @@ export async function disconnectFromWiFi(device: OMGDeviceInfo): Promise<boolean
     console.error('Error disconnecting from Wi-Fi:', error);
     throw error;
   }
-} 
+}
+
+/**
+ * Check if a WebSerial device is currently connected
+ * @param serialPortId The serial port ID to check
+ * @returns true if the device is connected
+ */
+export const checkWebSerialConnection = async (serialPortId?: string): Promise<boolean> => {
+  if (!serialPortId) return false;
+  
+  try {
+    // Get list of available ports
+    const ports = await navigator.serial.getPorts();
+    
+    // Check if our device's port is in the list
+    for (const port of ports) {
+      const info = await port.getInfo();
+      if (info.usbVendorId?.toString() === serialPortId || 
+          info.usbProductId?.toString() === serialPortId) {
+        return true;
+      }
+    }
+    
+    return false;
+  } catch (error) {
+    console.error('Error checking WebSerial connection:', error);
+    return false;
+  }
+}; 
