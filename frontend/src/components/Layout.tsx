@@ -147,10 +147,7 @@ const Layout = () => {
             </div>
             <div className="text-xs text-slate-400 py-1 px-2 bg-slate-700/50 rounded border border-slate-600/50">
               {currentUser ? (
-                <>
-                  <span className="text-green-500 font-medium">{currentUser.name || currentUser.email?.split('@')[0]}</span>
-                  {currentUser.email && `@${currentUser.email.split('@')[1]}`}
-                </>
+                <span className="text-green-500 font-medium">{currentUser.email || 'User'}</span>
               ) : (
                 <span className="text-slate-400">Not logged in</span>
               )}
