@@ -777,17 +777,17 @@ const PayloadEditor = () => {
 
   // Associate selected scripts with the current payload
   const associateScriptsWithPayload = async () => {
-    if (!selectedPayload) {
-      setMessage({
-        type: 'error',
-        text: 'Please save the payload first'
-      });
-      return;
-    }
-    
-    setIsLoading(true);
-    
     try {
+      if (!selectedPayload) {
+        setMessage({
+          type: 'error',
+          text: 'Please save a payload first before associating scripts'
+        });
+        return;
+      }
+      
+      setIsLoading(true);
+      
       const token = localStorage.getItem('token');
       if (!token) {
         console.error('No authentication token found');
@@ -795,7 +795,7 @@ const PayloadEditor = () => {
         return;
       }
       
-      // Get the scripts currently associated with this payload
+      // First, get current scripts associated with the payload
       const currentScripts = await axios.get(`${API_URL}/scripts/payload/${selectedPayload.id}`, {
         headers: {
           Authorization: `Bearer ${token}`
@@ -864,6 +864,15 @@ const PayloadEditor = () => {
         setMessage({
           type: 'error',
           text: 'Editor not initialized'
+        });
+        return;
+      }
+      
+      // Check if device is selected before deployment
+      if (!selectedDevice) {
+        setMessage({
+          type: 'error',
+          text: 'Please select a device before deploying'
         });
         return;
       }
