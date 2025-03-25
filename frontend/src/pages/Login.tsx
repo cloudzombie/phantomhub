@@ -48,18 +48,6 @@ const Login = () => {
     }
   };
 
-  // Quick login with admin credentials
-  const handleDevLogin = () => {
-    setEmail('admin@phantomhub.com');
-    setPassword('admin123');
-    // Submit the form programmatically
-    const form = document.querySelector('form');
-    if (form) {
-      const submitEvent = new Event('submit', { cancelable: true });
-      form.dispatchEvent(submitEvent);
-    }
-  };
-
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-900">
       <div 
@@ -140,15 +128,6 @@ const Login = () => {
                   Log In
                 </>
               )}
-            </button>
-            
-            {/* For development only - DO NOT USE IN PRODUCTION */}
-            <button 
-              type="button"
-              onClick={handleDevLogin}
-              className="w-full text-xs text-slate-500 hover:text-slate-400 transition-colors mt-4"
-            >
-              Dev Login (Skip Auth)
             </button>
           </div>
         </form>
