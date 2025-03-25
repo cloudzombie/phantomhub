@@ -932,8 +932,8 @@ const PayloadEditor = () => {
   };
   
   return (
-    <div className="flex flex-col h-full">
-      <div className="border-b border-slate-700 pb-4 mb-4">
+    <div className="flex flex-col h-full p-6">
+      <div className="border-b border-slate-700 pb-6 mb-6">
         <div className="flex flex-col">
           <h1 className="text-2xl font-bold text-white mb-1">Payload Editor</h1>
           <p className="text-sm text-slate-400">Create, edit, and deploy DuckyScript payloads to your O.MG Cables</p>
@@ -1022,9 +1022,8 @@ const PayloadEditor = () => {
       </div>
       
       <div className="flex-1 flex flex-col min-h-0">
-        {/* Script Management Row - Placed directly under the header */}
-        <div className="flex justify-between items-center mb-4">
-          <div className="text-lg font-semibold text-white">Payload Library</div>
+        {/* Script Management Row */}
+        <div className="flex justify-between items-center mb-6">
           <div className="flex space-x-2">
             <button
               onClick={() => setShowScriptList(!showScriptList)}
@@ -1044,55 +1043,9 @@ const PayloadEditor = () => {
           </div>
         </div>
         
-        {/* Payload Grid */}
-        <div className="mb-4">
-          <h3 className="text-sm font-medium text-slate-300 mb-2">Saved Payloads</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-            {payloads.length > 0 ? (
-              payloads.map(payload => (
-                <div 
-                  key={payload.id}
-                  className={`border border-slate-700 rounded-md bg-slate-800 hover:bg-slate-700/30 ${
-                    selectedPayload?.id === payload.id ? 'border-blue-500/50 bg-blue-500/5' : ''
-                  }`}
-                >
-                  <div className="p-3">
-                    <div className="flex justify-between items-start mb-2">
-                      <h4 
-                        className="font-medium text-white cursor-pointer hover:text-blue-400 truncate max-w-[80%]" 
-                        onClick={() => loadPayload(payload)}
-                        title={payload.name}
-                      >
-                        {payload.name}
-                      </h4>
-                      <button
-                        onClick={(e) => handleDeleteClick(payload, e)}
-                        className="p-1 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded"
-                        title="Delete Payload"
-                      >
-                        <FiTrash2 size={14} />
-                      </button>
-                    </div>
-                    {payload.description && (
-                      <div className="text-xs text-slate-400 mb-2 line-clamp-2">{payload.description}</div>
-                    )}
-                    <div className="text-xs text-slate-500">
-                      Last updated: {new Date(payload.updatedAt).toLocaleString()}
-                    </div>
-                  </div>
-                </div>
-              ))
-            ) : (
-              <div className="col-span-3 text-center p-4 border border-slate-700 rounded-md bg-slate-800/50">
-                <p className="text-slate-400">No payloads saved yet. Create and save a payload to get started.</p>
-              </div>
-            )}
-          </div>
-        </div>
-
         {/* Payload List (Hidden by default, shown when "Payloads" button is clicked) */}
         {showPayloadList && (
-          <div className="bg-slate-800 border border-slate-700 rounded-md shadow-sm mb-4 overflow-hidden">
+          <div className="bg-slate-800 border border-slate-700 rounded-md shadow-sm mb-6 overflow-hidden">
             <div className="border-b border-slate-700 px-4 py-2 font-medium text-white">Saved Payloads</div>
             <ul className="max-h-64 overflow-y-auto">
               {payloads.length > 0 ? (
@@ -1128,7 +1081,7 @@ const PayloadEditor = () => {
         
         {/* Script List */}
         {showScriptList && (
-          <div className="bg-slate-800 border border-slate-700 rounded-md shadow-sm mb-4 overflow-hidden">
+          <div className="bg-slate-800 border border-slate-700 rounded-md shadow-sm mb-6 overflow-hidden">
             <div className="border-b border-slate-700 px-4 py-2 font-medium text-white flex justify-between items-center">
               <span>Script Library</span>
               <button
@@ -1209,8 +1162,8 @@ const PayloadEditor = () => {
         )}
         
         {/* Monaco Editor */}
-        <div className="flex flex-col flex-1 min-h-0">
-          <div className="text-sm font-medium text-slate-300 mb-2">DuckyScript Editor</div>
+        <div className="flex flex-col flex-1 min-h-0 mb-6">
+          <div className="text-sm font-medium text-slate-300 mb-3">DuckyScript Editor</div>
           <div
             ref={editorContainerRef}
             className="flex-1 border border-slate-700 rounded-md overflow-hidden"
@@ -1219,8 +1172,8 @@ const PayloadEditor = () => {
         </div>
         
         {/* DuckyScript Editor Tips */}
-        <div className="mt-4 bg-slate-800/50 border border-slate-700 rounded-md p-4">
-          <div className="flex items-center text-slate-300 mb-2">
+        <div className="mt-6 bg-slate-800/50 border border-slate-700 rounded-md p-5">
+          <div className="flex items-center text-slate-300 mb-3">
             <FiInfo className="mr-2" size={16} />
             <span className="font-medium">DuckyScript Editor Tips</span>
           </div>
@@ -1234,7 +1187,7 @@ const PayloadEditor = () => {
         
         {/* Status Message */}
         {message && (
-          <div className={`mt-4 p-3 rounded-md ${message.type === 'success' ? 'bg-green-500/10 text-green-500 border border-green-500/30' : 'bg-red-500/10 text-red-500 border border-red-500/30'}`}>
+          <div className={`mt-6 p-4 rounded-md ${message.type === 'success' ? 'bg-green-500/10 text-green-500 border border-green-500/30' : 'bg-red-500/10 text-red-500 border border-red-500/30'}`}>
             <div className="flex items-center">
               {message.type === 'success' ? <FiCheckCircle className="mr-2" size={16} /> : <FiAlertCircle className="mr-2" size={16} />}
               <span>{message.text}</span>
