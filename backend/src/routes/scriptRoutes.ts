@@ -11,8 +11,10 @@ import {
   executeScript
 } from '../controllers/scriptController';
 import { authenticate, isOperator } from '../middleware/auth';
+import { createRateLimiterMiddleware } from '../middleware/rateLimiter';
 
 const router = Router();
+const scriptRateLimiter = createRateLimiterMiddleware('scripts');
 
 /**
  * SECURITY NOTICE:
@@ -26,13 +28,17 @@ const router = Router();
  * DO NOT modify this behavior without a thorough security review!
  */
 // Public endpoint for script execution (device callbacks)
-router.post('/execute/:endpoint', executeScript);
+// Apply rate limiting to prevent abuse of public endpoint
+router.post('/execute/:endpoint', scriptRateLimiter, executeScript);
 
 // Protected routes
 router.use(authenticate);
 
 // All scripts operations require operator permissions
 router.use(isOperator);
+
+// Apply rate limiting to all authenticated script routes
+router.use(scriptRateLimiter);
 
 // GET all scripts
 router.get('/', getAllScripts);

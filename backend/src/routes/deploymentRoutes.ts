@@ -8,13 +8,16 @@ import {
   updateDeployment
 } from '../controllers/deploymentController';
 import { authenticate, isOperator } from '../middleware/auth';
+import { createRateLimiterMiddleware } from '../middleware/rateLimiter';
 
 const router = Router();
+const deploymentRateLimiter = createRateLimiterMiddleware('deployments');
 
 // Public routes (none for deployments)
 
 // Protected routes
 router.use(authenticate); // Apply authentication to all deployment routes
+router.use(deploymentRateLimiter); // Apply rate limiting to all deployment routes
 
 // GET all deployments - Admin access
 router.get('/', isOperator, getAllDeployments);

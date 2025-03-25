@@ -295,10 +295,11 @@ This document outlines the plan to implement real device management functionalit
 ### Technical Tasks
 - [ ] Implement encryption for device communications
 - [ ] Enforce proper access controls for device operations
-- [ ] Add audit logging for sensitive operations
+- [x] Add audit logging for sensitive operations
 - [ ] Optimize polling frequency for balance of responsiveness and resources
 - [x] Implement connection pooling for device communications
 - [ ] Use efficient WebSocket message formats
+- [x] Add rate limiting for API endpoints
 - [ ] Add error recovery for device disconnections
 - [ ] Implement connection retries with exponential backoff
 - [ ] Add comprehensive logging for troubleshooting

@@ -54,7 +54,21 @@ export const getApiHealth = async (req: Request, res: Response) => {
       activeConnections,
       responseTime: 0, // This will be calculated on the client side
       cpuLoad,
-      lastChecked: new Date()
+      lastChecked: new Date(),
+      rateLimiting: {
+        status: 'enabled',
+        provider: 'Redis',
+        limits: {
+          auth: '5 requests per minute',
+          devices: '30 requests per minute',
+          payloads: '20 requests per minute',
+          deployments: '15 requests per minute',
+          system: '10 requests per minute',
+          users: '20 requests per minute',
+          scripts: '25 requests per minute',
+          global: '500 requests per 5 minutes'
+        }
+      }
     };
     
     return res.status(200).json({

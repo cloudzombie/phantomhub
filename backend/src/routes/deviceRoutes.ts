@@ -1,11 +1,14 @@
 import express from 'express';
 import { getAllDevices, getDevice, createDevice, updateDeviceStatus, sendPayload } from '../controllers/deviceController';
 import { authenticate, isOperator } from '../middleware/auth';
+import { createRateLimiterMiddleware } from '../middleware/rateLimiter';
 
 const router = express.Router();
+const deviceRateLimiter = createRateLimiterMiddleware('devices');
 
 // All routes are protected and require authentication
 router.use(authenticate);
+router.use(deviceRateLimiter);
 
 // Get all O.MG Cables
 router.get('/', getAllDevices);

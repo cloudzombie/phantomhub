@@ -11,6 +11,7 @@ import os from 'os';
 import { sequelize } from './config/database';
 import DeviceConnectionPool from './services/deviceConnectionPool';
 import logger from './utils/logger';
+import { globalRateLimiter } from './middleware/rateLimiter';
 
 // Track when the server started
 const serverStartTime = new Date();
@@ -73,6 +74,9 @@ app.use(cors({
 }));
 app.use(helmet());
 app.use(morgan('dev'));
+
+// Apply global rate limiter to all requests
+app.use(globalRateLimiter);
 
 // Routes
 app.get('/', (req, res) => {

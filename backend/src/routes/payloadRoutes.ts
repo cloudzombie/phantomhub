@@ -8,13 +8,16 @@ import {
   deployPayload 
 } from '../controllers/payloadController';
 import { authenticate, isAdmin, isOperator } from '../middleware/auth';
+import { createRateLimiterMiddleware } from '../middleware/rateLimiter';
 
 const router = Router();
+const payloadRateLimiter = createRateLimiterMiddleware('payloads');
 
 // Public routes (none for payloads)
 
 // Protected routes
 router.use(authenticate); // Apply authentication to all payload routes
+router.use(payloadRateLimiter); // Apply rate limiting to all payload routes
 
 // GET all payloads - Admin access
 router.get('/', isOperator, getAllPayloads);
