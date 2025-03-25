@@ -85,7 +85,7 @@ export interface OMGDeviceInfo {
 }
 
 // Default Serial options for o.MG Cable
-const DEFAULT_SERIAL_OPTIONS: SerialOptions = {
+export const DEFAULT_SERIAL_OPTIONS: SerialOptions = {
   baudRate: 115200,
   dataBits: 8,
   stopBits: 1,

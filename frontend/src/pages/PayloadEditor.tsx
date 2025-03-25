@@ -7,7 +7,10 @@ import {
   isWebSerialSupported, 
   getConnectedDevices, 
   deployPayload as deployPayloadToUsbDevice,
-  type OMGDeviceInfo
+  type OMGDeviceInfo,
+  connectToDevice,
+  requestSerialPort,
+  DEFAULT_SERIAL_OPTIONS
 } from '../utils/webSerialUtils';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001/api';
@@ -837,6 +840,83 @@ const PayloadEditor = () => {
     }
   };
   
+  // Deploy payload to connected O.MG Cable
+  const deployToDevice = async () => {
+    try {
+      setIsLoading(true);
+      setMessage(null);
+      
+      if (!editorRef.current) {
+        setMessage({
+          type: 'error',
+          text: 'Editor not initialized'
+        });
+        return;
+      }
+      
+      // Get the current payload content
+      const payloadContent = editorRef.current.getValue();
+      
+      if (!payloadContent.trim()) {
+        setMessage({
+          type: 'error',
+          text: 'Cannot deploy empty payload'
+        });
+        return;
+      }
+      
+      // First save the payload if needed
+      if (!selectedPayload) {
+        await savePayload();
+      } else {
+        await savePayload(); // Use savePayload which handles both create and update
+      }
+      
+      // Request access to a serial port
+      const port = await requestSerialPort();
+      if (!port) {
+        setMessage({
+          type: 'error',
+          text: 'No O.MG cable device selected'
+        });
+        return;
+      }
+      
+      // Connect to the device
+      const deviceInfo = await connectToDevice(port, DEFAULT_SERIAL_OPTIONS);
+      if (deviceInfo.connectionStatus !== 'connected') {
+        setMessage({
+          type: 'error',
+          text: 'Failed to connect to O.MG cable'
+        });
+        return;
+      }
+      
+      // Deploy the payload
+      const deployResult = await deployPayloadToUsbDevice(deviceInfo, payloadContent);
+      
+      if (deployResult.success) {
+        setMessage({
+          type: 'success',
+          text: 'Payload deployed successfully!'
+        });
+      } else {
+        setMessage({
+          type: 'error',
+          text: `Failed to deploy payload: ${deployResult.message}`
+        });
+      }
+    } catch (error) {
+      console.error('Error deploying payload:', error);
+      setMessage({
+        type: 'error',
+        text: `Error deploying payload: ${error instanceof Error ? error.message : String(error)}`
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  
   return (
     <div className="p-6 h-full flex flex-col">
       {/* Page Title */}
@@ -922,23 +1002,32 @@ const PayloadEditor = () => {
             )}
           </div>
           
-          <div className="flex space-x-2">
+          <div className="flex items-center space-x-2">
             <button
               onClick={savePayload}
               disabled={isLoading}
-              className="flex items-center px-3 py-2 bg-slate-700 hover:bg-slate-600 border border-slate-600 rounded-md text-white text-sm font-medium transition-colors"
+              className="flex items-center px-3 py-2 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/30 rounded-md text-blue-500 text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isLoading ? <FiRefreshCw className="mr-2 animate-spin" size={16} /> : <FiSave className="mr-2" size={16} />}
               Save
             </button>
             
             <button
-              onClick={deployPayload}
-              disabled={isLoading || !selectedDevice}
-              className="flex items-center px-3 py-2 bg-green-500/10 text-green-500 hover:bg-green-500/20 border border-green-500/30 rounded-md text-sm font-medium transition-colors"
+              onClick={() => setShowPayloadList(!showPayloadList)}
+              disabled={isLoading}
+              className="flex items-center px-3 py-2 bg-slate-700 hover:bg-slate-600 border border-slate-600 rounded-md text-white text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <FiCode className="mr-2" size={16} />
+              Payloads
+            </button>
+            
+            <button
+              onClick={deployToDevice}
+              disabled={isLoading}
+              className="flex items-center px-3 py-2 bg-green-500/10 hover:bg-green-500/20 border border-green-500/30 rounded-md text-green-500 text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isLoading ? <FiRefreshCw className="mr-2 animate-spin" size={16} /> : <FiZap className="mr-2" size={16} />}
-              Deploy
+              Deploy to Device
             </button>
           </div>
         </div>
