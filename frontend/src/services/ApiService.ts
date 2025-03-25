@@ -83,6 +83,12 @@ class ApiService {
     }
   }
 
+  // Public method to explicitly reload settings for the current user
+  public reloadSettings(): void {
+    console.log('ApiService: Reloading settings for user');
+    this.loadStoredConfig();
+  }
+
   public clearUserSettings(): void {
     const userId = this.getCurrentUserId();
     if (userId) {

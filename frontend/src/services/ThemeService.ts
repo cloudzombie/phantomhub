@@ -78,6 +78,21 @@ class ThemeService {
     }
   }
 
+  // Public method to explicitly reload settings and apply them
+  public reloadSettings(): void {
+    console.log('ThemeService: Reloading settings for user');
+    // Reload the configuration
+    this.loadStoredConfig();
+    
+    // Apply the reloaded settings
+    this.applyTheme();
+    this.applyCompactMode();
+    this.applyDateFormat();
+    
+    // Notify listeners of changes
+    this.notifyListeners();
+  }
+
   private handleSystemThemeChange = (e: MediaQueryListEvent): void => {
     if (this.config.theme === 'system') {
       // Only re-apply the theme if we're using the system theme

@@ -73,6 +73,13 @@ class NotificationService {
     }
   }
 
+  // Public method to explicitly reload settings for the current user
+  public reloadSettings(): void {
+    console.log('NotificationService: Reloading settings for user');
+    this.loadStoredSettings();
+    this.configureNotifications();
+  }
+
   private handleSettingsChange = (event: CustomEvent<NotificationSettings>): void => {
     if (event.detail) {
       this.updateSettings(event.detail);

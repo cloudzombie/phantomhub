@@ -21,6 +21,9 @@ const Layout = () => {
       try {
         const userData = JSON.parse(userStr);
         setCurrentUser(userData);
+        
+        // Reload theme settings for the current user
+        ThemeService.reloadSettings();
       } catch (error) {
         console.error('Error parsing user data:', error);
       }

@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { FiLogIn, FiShield, FiAlertCircle, FiCheckCircle } from 'react-icons/fi';
 import axios from 'axios';
 import ApiService from '../services/ApiService';
+import ThemeService from '../services/ThemeService';
+import NotificationService from '../services/NotificationService';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001/api';
 
@@ -31,6 +33,11 @@ const Login = () => {
         // Store token and user data in localStorage
         localStorage.setItem('token', response.data.token);
         localStorage.setItem('user', JSON.stringify(response.data.user));
+        
+        // Reload all service settings for the new user
+        ApiService.reloadSettings();
+        ThemeService.reloadSettings();
+        NotificationService.reloadSettings();
         
         setSuccessMessage('Login successful! Redirecting...');
         
