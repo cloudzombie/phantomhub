@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, ChangeEvent } from 'react';
-import { FiSave, FiCode, FiZap, FiInfo, FiAlertCircle, FiCheckCircle, FiRefreshCw, FiHardDrive, FiWifi, FiUpload, FiLink, FiList, FiFile, FiTrash2, FiPlusCircle } from 'react-icons/fi';
+import { FiSave, FiCode, FiZap, FiInfo, FiAlertCircle, FiCheckCircle, FiRefreshCw, FiHardDrive, FiWifi, FiUpload, FiLink, FiList, FiFile, FiTrash2, FiPlusCircle, FiX } from 'react-icons/fi';
 import axios from 'axios';
 import * as monaco from 'monaco-editor';
 import { registerDuckyScriptLanguage } from '../utils/duckyScriptLanguage';
@@ -918,454 +918,397 @@ const PayloadEditor = () => {
   };
   
   return (
-    <div className="p-6 h-full flex flex-col">
-      {/* Page Title */}
-      <div className="mb-4">
-        <h1 className="text-xl font-semibold text-white">Payload Editor</h1>
-        <p className="text-sm text-slate-400">Create, edit, and deploy DuckyScript payloads to your O.MG Cables</p>
-      </div>
-      
-      {/* Status Messages */}
-      {message && (
-        <div className={`mb-4 p-3 rounded text-sm ${
-          message.type === 'success' 
-            ? 'bg-green-900/20 border border-green-500/30 text-green-400' 
-            : 'bg-red-900/20 border border-red-500/30 text-red-400'
-        }`}>
-          <div className="flex items-center">
-            {message.type === 'success' 
-              ? <FiCheckCircle className="mr-2 flex-shrink-0" size={16} />
-              : <FiAlertCircle className="mr-2 flex-shrink-0" size={16} />
-            }
-            <p>{message.text}</p>
-          </div>
+    <div className="flex flex-col h-full">
+      <div className="border-b border-slate-700 pb-4 mb-4">
+        <div className="flex flex-col">
+          <h1 className="text-2xl font-bold text-white mb-1">Payload Editor</h1>
+          <p className="text-sm text-slate-400">Create, edit, and deploy DuckyScript payloads to your O.MG Cables</p>
         </div>
-      )}
-      
-      {/* Editor Controls */}
-      <div className="bg-slate-800 border border-slate-700 rounded-md shadow-sm mb-4 p-4">
-        <div className="flex flex-wrap items-center gap-4">
-          <div className="relative flex-grow max-w-md">
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <FiCode className="text-slate-400" size={16} />
-            </div>
-            <input
-              type="text"
-              value={payloadName}
-              onChange={(e) => setPayloadName(e.target.value)}
-              placeholder="Payload Name"
-              className="w-full pl-10 pr-3 py-2 border bg-slate-700/50 border-slate-600 rounded-md text-white focus:outline-none focus:ring-1 focus:ring-green-500/50 focus:border-green-500/50"
-            />
-          </div>
-          
-          <div className="flex space-x-2">
-            <button
-              onClick={() => setShowPayloadList(!showPayloadList)}
-              className="flex items-center px-3 py-2 bg-slate-700 hover:bg-slate-600 border border-slate-600 rounded-md text-white text-sm font-medium transition-colors"
-            >
-              {showPayloadList ? 'Hide Payloads' : 'Show Payloads'}
-            </button>
-            
-            <button
-              onClick={createNewPayload}
-              className="flex items-center px-3 py-2 bg-slate-700 hover:bg-slate-600 border border-slate-600 rounded-md text-white text-sm font-medium transition-colors"
-            >
-              + New
-            </button>
-          </div>
-          
-          <div className="relative flex-grow max-w-md">
-            <select
-              value={selectedDevice}
-              onChange={(e) => setSelectedDevice(e.target.value)}
-              className="w-full px-3 py-2 border bg-slate-700/50 border-slate-600 rounded-md text-white focus:outline-none focus:ring-1 focus:ring-green-500/50 focus:border-green-500/50"
-            >
-              <option value="" disabled>Select a device</option>
-              {devices.filter(d => d.status === 'online').map(device => (
-                <option key={device.id} value={device.id}>
-                  {getDeviceDisplayName(device)}
-                </option>
-              ))}
-              {devices.filter(d => d.status === 'online').length === 0 && (
-                <option value="" disabled>No online devices available</option>
-              )}
-            </select>
-            {selectedDevice && (
-              <div className="mt-1 text-xs text-slate-400 flex items-center">
-                Selected: {devices.find(d => d.id.toString() === selectedDevice)?.name} 
-                {selectedDevice && devices.find(d => d.id.toString() === selectedDevice) && (
-                  <span className="ml-1 flex items-center">
-                    {getDeviceConnectionIcon(devices.find(d => d.id.toString() === selectedDevice)!)}
-                  </span>
-                )}
-              </div>
-            )}
-          </div>
-          
-          <div className="flex items-center space-x-2">
-            <button
-              onClick={savePayload}
-              disabled={isLoading}
-              className="flex items-center px-3 py-2 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/30 rounded-md text-blue-500 text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {isLoading ? <FiRefreshCw className="mr-2 animate-spin" size={16} /> : <FiSave className="mr-2" size={16} />}
-              Save
-            </button>
-            
-            <button
-              onClick={() => setShowPayloadList(!showPayloadList)}
-              disabled={isLoading}
-              className="flex items-center px-3 py-2 bg-slate-700 hover:bg-slate-600 border border-slate-600 rounded-md text-white text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <FiCode className="mr-2" size={16} />
-              Payloads
-            </button>
-            
-            <button
-              onClick={deployToDevice}
-              disabled={isLoading}
-              className="flex items-center px-3 py-2 bg-green-500/10 hover:bg-green-500/20 border border-green-500/30 rounded-md text-green-500 text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {isLoading ? <FiRefreshCw className="mr-2 animate-spin" size={16} /> : <FiZap className="mr-2" size={16} />}
-              Deploy to Device
-            </button>
-          </div>
-        </div>
-      </div>
-      
-      {/* Payload List */}
-      {showPayloadList && (
-        <div className="bg-slate-800 border border-slate-700 rounded-md shadow-sm mb-4 overflow-hidden">
-          <div className="border-b border-slate-700 px-4 py-2 font-medium text-white">
-            Payload Library
-          </div>
-          
-          <div className="max-h-64 overflow-y-auto">
-            {payloads.length > 0 ? (
-              <table className="w-full text-sm text-slate-300">
-                <thead className="bg-slate-700/50 text-xs uppercase text-slate-400">
-                  <tr>
-                    <th className="px-4 py-2 text-left">Name</th>
-                    <th className="px-4 py-2 text-left">Created</th>
-                    <th className="px-4 py-2 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {payloads.map(payload => (
-                    <tr 
-                      key={payload.id} 
-                      className={`border-b border-slate-700 hover:bg-slate-700/30 ${
-                        selectedPayload?.id === payload.id ? 'bg-slate-700/20' : ''
-                      }`}
-                    >
-                      <td className="px-4 py-2">{payload.name}</td>
-                      <td className="px-4 py-2">{new Date(payload.createdAt).toLocaleDateString()}</td>
-                      <td className="px-4 py-2 text-right">
-                        <button
-                          onClick={() => loadPayload(payload)}
-                          className="ml-2 text-green-400 hover:text-green-300"
-                        >
-                          Load
-                        </button>
-                        <button
-                          onClick={() => deletePayload(payload.id)}
-                          className="ml-2 text-red-400 hover:text-red-300"
-                        >
-                          Delete
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            ) : (
-              <div className="p-4 text-center text-slate-500">
-                No payloads found. Create a new one to get started!
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-      
-      {/* Warning for browsers without WebSerial support */}
-      {!webSerialSupported && (
-        <div className="mb-4 p-3 bg-orange-900/20 border border-orange-500/30 rounded text-orange-400 text-sm">
-          <div className="flex items-center">
-            <FiInfo className="mr-2 flex-shrink-0" size={16} />
-            <p>USB device connections are not supported in this browser. For direct USB connectivity, use Google Chrome or Microsoft Edge.</p>
-          </div>
-        </div>
-      )}
-      
-      {/* Editor Container */}
-      <div className="bg-slate-800 border border-slate-700 rounded-md shadow-sm overflow-hidden mb-6">
-        <div className="border-b border-slate-700 px-4 py-2 flex items-center justify-between">
-          <h2 className="text-sm font-medium text-white">DuckyScript Editor</h2>
-        </div>
-        <div ref={editorContainerRef} className="h-[500px]"></div>
-      </div>
-      
-      {/* Editor Info */}
-      <div className="mt-auto bg-slate-800 border border-slate-700 rounded-md p-4 text-sm text-slate-400">
-        <h3 className="font-medium text-white mb-2 flex items-center">
-          <FiInfo className="mr-2 text-green-500" size={16} />
-          DuckyScript Editor Tips
-        </h3>
-        <ul className="space-y-1 list-disc pl-5">
-          <li>Use <code className="bg-slate-700/50 px-1 rounded">DELAY</code> to add pauses in milliseconds</li>
-          <li>Use <code className="bg-slate-700/50 px-1 rounded">STRING</code> to type text</li>
-          <li>Use <code className="bg-slate-700/50 px-1 rounded">REM</code> for comments</li>
-          <li>Special keys like <code className="bg-slate-700/50 px-1 rounded">CTRL</code>, <code className="bg-slate-700/50 px-1 rounded">ALT</code>, <code className="bg-slate-700/50 px-1 rounded">GUI</code> can be combined</li>
-        </ul>
-      </div>
-      
-      {/* Script Management Button */}
-      <div className="flex space-x-2">
-        <button
-          onClick={() => setShowScriptList(!showScriptList)}
-          className="flex items-center px-3 py-2 bg-slate-700 hover:bg-slate-600 border border-slate-600 rounded-md text-white text-sm font-medium transition-colors"
-        >
-          <FiList className="mr-2" size={16} />
-          {showScriptList ? 'Hide Scripts' : 'Manage Scripts'}
-        </button>
         
-        <button
-          onClick={() => setShowScriptModal(true)}
-          className="flex items-center px-3 py-2 bg-slate-700 hover:bg-slate-600 border border-slate-600 rounded-md text-white text-sm font-medium transition-colors"
-        >
-          <FiPlusCircle className="mr-2" size={16} />
-          New Script
-        </button>
-      </div>
-
-      {/* Script List */}
-      {showScriptList && (
-        <div className="bg-slate-800 border border-slate-700 rounded-md shadow-sm mb-4 overflow-hidden">
-          <div className="border-b border-slate-700 px-4 py-2 font-medium text-white flex justify-between items-center">
-            <span>Script Library</span>
-            <button
-              onClick={associateScriptsWithPayload}
-              disabled={isLoading || !selectedPayload}
-              className="px-3 py-1 text-xs bg-green-500/10 border border-green-500/30 rounded text-green-500 hover:bg-green-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {isLoading ? <FiRefreshCw className="animate-spin" size={14} /> : 'Apply Selection'}
-            </button>
-          </div>
-          
-          <div className="max-h-64 overflow-y-auto">
-            {scripts.length > 0 ? (
-              <table className="w-full text-sm text-slate-300">
-                <thead className="bg-slate-700/50 text-xs uppercase text-slate-400">
-                  <tr>
-                    <th className="w-10 px-4 py-2 text-center">#</th>
-                    <th className="px-4 py-2 text-left">Name</th>
-                    <th className="px-4 py-2 text-left">Type</th>
-                    <th className="px-4 py-2 text-left">Created</th>
-                    <th className="px-4 py-2 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {scripts.map(script => (
-                    <tr 
-                      key={script.id} 
-                      className="border-b border-slate-700 hover:bg-slate-700/30"
-                    >
-                      <td className="px-4 py-2 text-center">
-                        <input
-                          type="checkbox"
-                          checked={selectedScripts.includes(script.id)}
-                          onChange={() => toggleScriptSelection(script.id)}
-                          className="w-4 h-4 text-green-600 bg-slate-700 border-slate-600 rounded focus:ring-green-500"
-                        />
-                      </td>
-                      <td className="px-4 py-2">
-                        <div className="font-medium text-white">{script.name}</div>
-                        <div className="text-xs text-slate-400">{script.description}</div>
-                      </td>
-                      <td className="px-4 py-2">
-                        <span className="px-2 py-1 text-xs rounded-full bg-slate-700 text-slate-300">
-                          {script.type}
-                        </span>
-                      </td>
-                      <td className="px-4 py-2">{new Date(script.createdAt).toLocaleDateString()}</td>
-                      <td className="px-4 py-2 text-right">
-                        <div className="flex justify-end space-x-2">
-                          {script.endpoint && (
-                            <button
-                              onClick={() => {
-                                navigator.clipboard.writeText(`${API_URL}/scripts/execute/${script.endpoint}`);
-                                setMessage({
-                                  type: 'success',
-                                  text: 'Endpoint URL copied to clipboard!'
-                                });
-                              }}
-                              className="p-1 text-blue-400 hover:text-blue-300"
-                              title="Copy endpoint URL"
-                            >
-                              <FiLink size={16} />
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            ) : (
-              <div className="p-4 text-center text-slate-500">
-                No scripts found. Create a new script to get started!
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Create Script Modal */}
-      {showScriptModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="bg-slate-800 border border-slate-700 rounded-lg shadow-lg w-full max-w-3xl p-6 relative">
-            <button 
-              onClick={() => setShowScriptModal(false)}
-              className="absolute top-3 right-3 text-slate-400 hover:text-white"
-            >
-              <FiTrash2 size={18} />
-            </button>
-            <div className="mb-5">
-              <h2 className="text-lg font-medium text-white">Create New Script</h2>
-              <p className="text-sm text-slate-400">Create a script that can be called back by devices</p>
-            </div>
-            
-            <div className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="relative border border-slate-600 rounded-md">
-                  <label className="absolute -top-2.5 left-2 px-1 bg-slate-800 text-xs font-medium text-slate-400">
-                    Script Name
-                  </label>
-                  <input
-                    type="text"
-                    name="name"
-                    value={scriptFormData.name}
-                    onChange={handleScriptInputChange}
-                    placeholder="My Callback Script"
-                    className="w-full px-3 py-2 bg-transparent text-white text-sm focus:outline-none"
-                  />
-                </div>
-                
-                <div className="relative border border-slate-600 rounded-md">
-                  <label className="absolute -top-2.5 left-2 px-1 bg-slate-800 text-xs font-medium text-slate-400">
-                    Script Type
-                  </label>
-                  <select
-                    name="type"
-                    value={scriptFormData.type}
-                    onChange={handleScriptInputChange}
-                    className="w-full px-3 py-2 bg-transparent text-white text-sm focus:outline-none"
-                  >
-                    <option value="callback">Callback</option>
-                    <option value="exfiltration">Exfiltration</option>
-                    <option value="command">Command</option>
-                    <option value="custom">Custom</option>
-                  </select>
-                </div>
-              </div>
-              
-              <div className="relative border border-slate-600 rounded-md">
-                <label className="absolute -top-2.5 left-2 px-1 bg-slate-800 text-xs font-medium text-slate-400">
-                  Description (optional)
-                </label>
+        <div className="mt-4 flex flex-col lg:flex-row gap-4">
+          <div className="flex flex-col lg:flex-row gap-2 lg:items-center">
+            <div className="relative flex-1 min-w-[300px]">
+              <div className="border border-slate-600 rounded-md p-2 flex items-center space-x-2 bg-slate-800">
+                <FiCode className="text-slate-400" size={16} />
                 <input
                   type="text"
-                  name="description"
-                  value={scriptFormData.description}
-                  onChange={handleScriptInputChange}
-                  placeholder="A brief description of what this script does"
-                  className="w-full px-3 py-2 bg-transparent text-white text-sm focus:outline-none"
+                  value={payloadName}
+                  onChange={(e) => setPayloadName(e.target.value)}
+                  className="bg-transparent text-white flex-1 outline-none"
+                  placeholder="Payload Name"
                 />
               </div>
+            </div>
+            
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={savePayload}
+                disabled={isLoading}
+                className="flex items-center px-3 py-2 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/30 rounded-md text-blue-500 text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isLoading ? <FiRefreshCw className="mr-2 animate-spin" size={16} /> : <FiSave className="mr-2" size={16} />}
+                Save
+              </button>
               
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <button
+                onClick={() => setShowPayloadList(!showPayloadList)}
+                disabled={isLoading}
+                className="flex items-center px-3 py-2 bg-slate-700 hover:bg-slate-600 border border-slate-600 rounded-md text-white text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <FiCode className="mr-2" size={16} />
+                Payloads
+              </button>
+              
+              <button
+                onClick={deployToDevice}
+                disabled={isLoading}
+                className="flex items-center px-3 py-2 bg-green-500/10 hover:bg-green-500/20 border border-green-500/30 rounded-md text-green-500 text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isLoading ? <FiRefreshCw className="mr-2 animate-spin" size={16} /> : <FiZap className="mr-2" size={16} />}
+                Deploy to Device
+              </button>
+            </div>
+          </div>
+          
+          {selectedDevice && (
+            <div className="flex items-center justify-between lg:justify-end px-3 py-1 bg-slate-700/30 rounded-md">
+              <div className="flex items-center">
+                {(() => {
+                  const device = devices.find(d => d.id.toString() === selectedDevice);
+                  return (
+                    <>
+                      <div className={`w-2 h-2 rounded-full mr-2 ${device?.status === 'online' ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                      <span className="text-sm text-slate-300">{getDeviceDisplayName(device!)}</span>
+                    </>
+                  );
+                })()}
+              </div>
+              
+              <button
+                onClick={() => setSelectedDevice('')}
+                className="ml-2 text-slate-400 hover:text-white"
+              >
+                <FiX size={14} />
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+      
+      <div className="flex-1 flex flex-col min-h-0">
+        {/* Payload List */}
+        {showPayloadList && (
+          <div className="bg-slate-800 border border-slate-700 rounded-md shadow-sm mb-4 overflow-hidden">
+            <div className="border-b border-slate-700 px-4 py-2 font-medium text-white">Saved Payloads</div>
+            <ul className="max-h-64 overflow-y-auto">
+              {payloads.length > 0 ? (
+                payloads.map((payload) => (
+                  <li
+                    key={payload.id}
+                    className="border-b border-slate-700 last:border-none hover:bg-slate-700/30 cursor-pointer"
+                    onClick={() => loadPayload(payload)}
+                  >
+                    <div className="px-4 py-2">
+                      <div className="font-medium text-white">{payload.name}</div>
+                      {payload.description && (
+                        <div className="text-xs text-slate-400 mt-1">{payload.description}</div>
+                      )}
+                      <div className="text-xs text-slate-500 mt-1">Last updated: {new Date(payload.updatedAt).toLocaleString()}</div>
+                    </div>
+                  </li>
+                ))
+              ) : (
+                <li className="px-4 py-3 text-center text-slate-400">No payloads saved yet.</li>
+              )}
+            </ul>
+          </div>
+        )}
+
+        {/* Script Management Row - Moved above the editor */}
+        <div className="flex justify-between items-center mb-4">
+          <div className="text-lg font-semibold text-white">Payload Library</div>
+          <div className="flex space-x-2">
+            <button
+              onClick={() => setShowScriptList(!showScriptList)}
+              className="flex items-center px-3 py-2 bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/30 rounded-md text-purple-400 text-sm font-medium transition-colors"
+            >
+              <FiList className="mr-2" size={16} />
+              {showScriptList ? 'Hide Scripts' : 'Manage Scripts'}
+            </button>
+            
+            <button
+              onClick={() => setShowScriptModal(true)}
+              className="flex items-center px-3 py-2 bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/30 rounded-md text-indigo-400 text-sm font-medium transition-colors"
+            >
+              <FiPlusCircle className="mr-2" size={16} />
+              New Script
+            </button>
+          </div>
+        </div>
+        
+        {/* Script List */}
+        {showScriptList && (
+          <div className="bg-slate-800 border border-slate-700 rounded-md shadow-sm mb-4 overflow-hidden">
+            <div className="border-b border-slate-700 px-4 py-2 font-medium text-white flex justify-between items-center">
+              <span>Script Library</span>
+              <button
+                onClick={associateScriptsWithPayload}
+                disabled={isLoading || !selectedPayload}
+                className="px-3 py-1 text-xs bg-green-500/10 border border-green-500/30 rounded text-green-500 hover:bg-green-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isLoading ? <FiRefreshCw className="animate-spin" size={14} /> : 'Apply Selection'}
+              </button>
+            </div>
+            
+            <div className="max-h-64 overflow-y-auto">
+              {scripts.length > 0 ? (
+                <table className="w-full text-sm text-slate-300">
+                  <thead className="bg-slate-700/50 text-xs uppercase text-slate-400">
+                    <tr>
+                      <th className="w-10 px-4 py-2 text-center">#</th>
+                      <th className="px-4 py-2 text-left">Name</th>
+                      <th className="px-4 py-2 text-left">Type</th>
+                      <th className="px-4 py-2 text-left">Created</th>
+                      <th className="px-4 py-2 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {scripts.map(script => (
+                      <tr 
+                        key={script.id} 
+                        className="border-b border-slate-700 hover:bg-slate-700/30"
+                      >
+                        <td className="px-4 py-2 text-center">
+                          <input
+                            type="checkbox"
+                            checked={selectedScripts.includes(script.id)}
+                            onChange={() => toggleScriptSelection(script.id)}
+                            className="w-4 h-4 text-green-600 bg-slate-700 border-slate-600 rounded focus:ring-green-500"
+                          />
+                        </td>
+                        <td className="px-4 py-2">
+                          <div className="font-medium text-white">{script.name}</div>
+                          <div className="text-xs text-slate-400">{script.description}</div>
+                        </td>
+                        <td className="px-4 py-2">
+                          <span className="px-2 py-1 text-xs rounded-full bg-slate-700 text-slate-300">
+                            {script.type}
+                          </span>
+                        </td>
+                        <td className="px-4 py-2">{new Date(script.createdAt).toLocaleDateString()}</td>
+                        <td className="px-4 py-2 text-right">
+                          <div className="flex justify-end space-x-2">
+                            {script.endpoint && (
+                              <button
+                                onClick={() => {
+                                  navigator.clipboard.writeText(`${API_URL}/scripts/execute/${script.endpoint}`);
+                                  setMessage({
+                                    type: 'success',
+                                    text: 'Endpoint URL copied to clipboard!'
+                                  });
+                                }}
+                                className="p-1 text-blue-400 hover:text-blue-300"
+                                title="Copy endpoint URL"
+                              >
+                                <FiLink size={16} />
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : (
+                <div className="p-4 text-center text-slate-500">
+                  No scripts found. Create a new script to get started!
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+        
+        {/* Monaco Editor */}
+        <div className="flex flex-col flex-1 min-h-0">
+          <div className="text-sm font-medium text-slate-300 mb-2">DuckyScript Editor</div>
+          <div
+            ref={editorContainerRef}
+            className="flex-1 border border-slate-700 rounded-md overflow-hidden"
+            style={{ minHeight: '300px' }}
+          />
+        </div>
+        
+        {/* DuckyScript Editor Tips */}
+        <div className="mt-4 bg-slate-800/50 border border-slate-700 rounded-md p-4">
+          <div className="flex items-center text-slate-300 mb-2">
+            <FiInfo className="mr-2" size={16} />
+            <span className="font-medium">DuckyScript Editor Tips</span>
+          </div>
+          <ul className="text-sm text-slate-400 space-y-1 ml-6 list-disc">
+            <li>Use <code className="text-blue-400 bg-slate-700/30 px-1 rounded">DELAY</code> to add pauses in milliseconds</li>
+            <li>Use <code className="text-blue-400 bg-slate-700/30 px-1 rounded">STRING</code> to type text</li>
+            <li>Use <code className="text-green-400 bg-slate-700/30 px-1 rounded">REM</code> for comments</li>
+            <li>Special keys like <code className="text-purple-400 bg-slate-700/30 px-1 rounded">CTRL</code>, <code className="text-purple-400 bg-slate-700/30 px-1 rounded">ALT</code>, <code className="text-purple-400 bg-slate-700/30 px-1 rounded">GUI</code> can be combined</li>
+          </ul>
+        </div>
+        
+        {/* Status Message */}
+        {message && (
+          <div className={`mt-4 p-3 rounded-md ${message.type === 'success' ? 'bg-green-500/10 text-green-500 border border-green-500/30' : 'bg-red-500/10 text-red-500 border border-red-500/30'}`}>
+            <div className="flex items-center">
+              {message.type === 'success' ? <FiCheckCircle className="mr-2" size={16} /> : <FiAlertCircle className="mr-2" size={16} />}
+              <span>{message.text}</span>
+            </div>
+          </div>
+        )}
+
+        {/* Create Script Modal */}
+        {showScriptModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+            <div className="bg-slate-800 border border-slate-700 rounded-lg shadow-lg w-full max-w-3xl p-6 relative">
+              <button 
+                onClick={() => setShowScriptModal(false)}
+                className="absolute top-3 right-3 text-slate-400 hover:text-white"
+              >
+                <FiTrash2 size={18} />
+              </button>
+              <div className="mb-5">
+                <h2 className="text-lg font-medium text-white">Create New Script</h2>
+                <p className="text-sm text-slate-400">Create a script that can be called back by devices</p>
+              </div>
+              
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="relative border border-slate-600 rounded-md">
+                    <label className="absolute -top-2.5 left-2 px-1 bg-slate-800 text-xs font-medium text-slate-400">
+                      Script Name
+                    </label>
+                    <input
+                      type="text"
+                      name="name"
+                      value={scriptFormData.name}
+                      onChange={handleScriptInputChange}
+                      placeholder="My Callback Script"
+                      className="w-full px-3 py-2 bg-transparent text-white text-sm focus:outline-none"
+                    />
+                  </div>
+                  
+                  <div className="relative border border-slate-600 rounded-md">
+                    <label className="absolute -top-2.5 left-2 px-1 bg-slate-800 text-xs font-medium text-slate-400">
+                      Script Type
+                    </label>
+                    <select
+                      name="type"
+                      value={scriptFormData.type}
+                      onChange={handleScriptInputChange}
+                      className="w-full px-3 py-2 bg-transparent text-white text-sm focus:outline-none"
+                    >
+                      <option value="callback">Callback</option>
+                      <option value="exfiltration">Exfiltration</option>
+                      <option value="command">Command</option>
+                      <option value="custom">Custom</option>
+                    </select>
+                  </div>
+                </div>
+                
                 <div className="relative border border-slate-600 rounded-md">
                   <label className="absolute -top-2.5 left-2 px-1 bg-slate-800 text-xs font-medium text-slate-400">
-                    Callback URL (optional)
+                    Description (optional)
                   </label>
                   <input
                     type="text"
-                    name="callbackUrl"
-                    value={scriptFormData.callbackUrl}
+                    name="description"
+                    value={scriptFormData.description}
                     onChange={handleScriptInputChange}
-                    placeholder="https://yourdomain.com/callback"
+                    placeholder="A brief description of what this script does"
                     className="w-full px-3 py-2 bg-transparent text-white text-sm focus:outline-none"
                   />
                 </div>
                 
-                <div className="py-2 px-3 flex items-center">
-                  <input
-                    type="checkbox"
-                    id="isPublic"
-                    name="isPublic"
-                    checked={scriptFormData.isPublic}
-                    onChange={handleCheckboxChange}
-                    className="mr-2 w-4 h-4 text-green-600 bg-slate-700 border-slate-600 rounded focus:ring-green-500"
-                  />
-                  <label htmlFor="isPublic" className="text-white text-sm">
-                    Make script public (available to all users)
-                  </label>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="relative border border-slate-600 rounded-md">
+                    <label className="absolute -top-2.5 left-2 px-1 bg-slate-800 text-xs font-medium text-slate-400">
+                      Callback URL (optional)
+                    </label>
+                    <input
+                      type="text"
+                      name="callbackUrl"
+                      value={scriptFormData.callbackUrl}
+                      onChange={handleScriptInputChange}
+                      placeholder="https://yourdomain.com/callback"
+                      className="w-full px-3 py-2 bg-transparent text-white text-sm focus:outline-none"
+                    />
+                  </div>
+                  
+                  <div className="py-2 px-3 flex items-center">
+                    <input
+                      type="checkbox"
+                      id="isPublic"
+                      name="isPublic"
+                      checked={scriptFormData.isPublic}
+                      onChange={handleCheckboxChange}
+                      className="mr-2 w-4 h-4 text-green-600 bg-slate-700 border-slate-600 rounded focus:ring-green-500"
+                    />
+                    <label htmlFor="isPublic" className="text-white text-sm">
+                      Make script public (available to all users)
+                    </label>
+                  </div>
                 </div>
-              </div>
-              
-              <div className="relative border border-slate-600 rounded-md">
-                <label className="absolute -top-2.5 left-2 px-1 bg-slate-800 text-xs font-medium text-slate-400">
-                  Script Content
-                </label>
-                <textarea
-                  name="content"
-                  value={fileContent || scriptFormData.content}
-                  onChange={handleScriptInputChange}
-                  placeholder="Enter your script content here or upload a file"
-                  className="w-full h-40 px-3 py-2 bg-transparent text-white text-sm focus:outline-none resize-none"
-                  readOnly={fileContent !== null}
-                ></textarea>
-              </div>
-              
-              <div>
-                <label className="block mb-2 text-sm font-medium text-white">
-                  Or upload a script file
-                </label>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  onChange={handleFileUpload}
-                  className="block w-full text-sm text-slate-400
-                    file:mr-4 file:py-2 file:px-4
-                    file:rounded-md file:border-0
-                    file:text-sm file:font-medium
-                    file:bg-slate-700 file:text-slate-300
-                    hover:file:bg-slate-600"
-                />
-              </div>
-              
-              <div className="pt-4 flex justify-end space-x-3">
-                <button
-                  type="button"
-                  onClick={() => setShowScriptModal(false)}
-                  className="px-4 py-2 bg-slate-700 border border-slate-600 rounded-md text-sm text-slate-300 hover:bg-slate-600"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={createScript}
-                  disabled={isLoading || (!scriptFormData.content && !fileContent)}
-                  className="px-4 py-2 bg-green-500/10 border border-green-500/30 rounded-md text-sm text-green-500 hover:bg-green-500/20 flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {isLoading ? <FiRefreshCw className="mr-2 animate-spin" size={14} /> : <FiSave className="mr-2" size={14} />}
-                  Create Script
-                </button>
+                
+                <div className="relative border border-slate-600 rounded-md">
+                  <label className="absolute -top-2.5 left-2 px-1 bg-slate-800 text-xs font-medium text-slate-400">
+                    Script Content
+                  </label>
+                  <textarea
+                    name="content"
+                    value={fileContent || scriptFormData.content}
+                    onChange={handleScriptInputChange}
+                    placeholder="Enter your script content here or upload a file"
+                    className="w-full h-40 px-3 py-2 bg-transparent text-white text-sm focus:outline-none resize-none"
+                    readOnly={fileContent !== null}
+                  ></textarea>
+                </div>
+                
+                <div>
+                  <label className="block mb-2 text-sm font-medium text-white">
+                    Or upload a script file
+                  </label>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    onChange={handleFileUpload}
+                    className="block w-full text-sm text-slate-400
+                      file:mr-4 file:py-2 file:px-4
+                      file:rounded-md file:border-0
+                      file:text-sm file:font-medium
+                      file:bg-slate-700 file:text-slate-300
+                      hover:file:bg-slate-600"
+                  />
+                </div>
+                
+                <div className="pt-4 flex justify-end space-x-3">
+                  <button
+                    type="button"
+                    onClick={() => setShowScriptModal(false)}
+                    className="px-4 py-2 bg-slate-700 border border-slate-600 rounded-md text-sm text-slate-300 hover:bg-slate-600"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={createScript}
+                    disabled={isLoading || (!scriptFormData.content && !fileContent)}
+                    className="px-4 py-2 bg-green-500/10 border border-green-500/30 rounded-md text-sm text-green-500 hover:bg-green-500/20 flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isLoading ? <FiRefreshCw className="mr-2 animate-spin" size={14} /> : <FiSave className="mr-2" size={14} />}
+                    Create Script
+                  </button>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 };
