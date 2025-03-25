@@ -8,6 +8,7 @@ import { Server as SocketIOServer } from 'socket.io';
 import { initializeDatabase } from './config/database';
 import { errorHandler } from './middleware/errorHandler';
 import os from 'os';
+import { sequelize } from './config/database';
 
 // Track when the server started
 const serverStartTime = new Date();
@@ -77,7 +78,7 @@ app.get('/', (req, res) => {
 });
 
 // Simple health endpoint at the root level (no /api prefix)
-app.get('/health', (req, res) => {
+app.get('/health', async (req, res) => {
   try {
     // Calculate uptime in seconds
     const uptime = Math.floor((new Date().getTime() - serverStartTime.getTime()) / 1000);
@@ -92,6 +93,19 @@ app.get('/health', (req, res) => {
     const totalCPUUsage = cpuUsage.user + cpuUsage.system;
     // Convert from microseconds to percentage with a reasonable scaling factor
     const cpuLoad = Math.min(Math.round((totalCPUUsage / 1000000) * 5), 100);
+    
+    // Check database connection
+    let dbStatus = 'offline';
+    let dbResponseTime = 0;
+    try {
+      const dbStartTime = Date.now();
+      await sequelize.authenticate();
+      dbResponseTime = Date.now() - dbStartTime;
+      dbStatus = 'online';
+    } catch (error) {
+      console.error('Database connection error:', error);
+      dbStatus = 'error';
+    }
     
     // Get active connections 
     let activeConnections = 0;
@@ -122,7 +136,7 @@ app.get('/health', (req, res) => {
     
     // Put it all together with enriched data
     const healthData = {
-      status: 'online',
+      status: dbStatus === 'online' ? 'online' : 'degraded',
       version: 'v1.0.0 Beta',
       uptime,
       hostname,
@@ -133,6 +147,12 @@ app.get('/health', (req, res) => {
         used: Math.round(usedMemory / (1024 * 1024)), // in MB
         total: Math.round(totalMemory / (1024 * 1024)), // in MB
         percentage: Math.round((usedMemory / totalMemory) * 100)
+      },
+      database: {
+        status: dbStatus,
+        responseTime: dbResponseTime,
+        dialect: sequelize.getDialect(),
+        host: sequelize.config.host
       },
       activeConnections,
       responseTime: 0, // This will be calculated on the client side

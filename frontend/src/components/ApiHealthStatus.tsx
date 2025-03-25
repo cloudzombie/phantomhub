@@ -28,6 +28,12 @@ interface ApiHealth {
     total: number;
     percentage?: number;
   };
+  database?: {
+    status: 'online' | 'offline' | 'error';
+    responseTime: number;
+    dialect: string;
+    host: string;
+  };
   activeConnections: number;
   responseTime: number;
   cpuLoad: number;
@@ -46,6 +52,12 @@ const ApiHealthStatus = () => {
     memory: {
       used: 0,
       total: 0
+    },
+    database: {
+      status: 'offline',
+      responseTime: 0,
+      dialect: '',
+      host: ''
     },
     activeConnections: 0,
     responseTime: 0,
@@ -86,6 +98,8 @@ const ApiHealthStatus = () => {
         // Update the health data with the response from the API
         const healthData = response.data.data;
         
+        console.log('Health data:', healthData);
+        
         setApiHealth({
           ...healthData,
           responseTime,
@@ -102,16 +116,8 @@ const ApiHealthStatus = () => {
         }));
       }
     } catch (error) {
-      console.error('API health check failed:', error);
-      
-      // Provide detailed error feedback
-      if (error instanceof Error) {
-        setErrorMessage(`Error: ${error.message}`);
-      } else {
-        setErrorMessage('Unknown error checking API health');
-      }
-      
-      // Update status to offline if we can't reach the API
+      console.error('Error checking API health:', error);
+      setErrorMessage('Failed to connect to API');
       setApiHealth(prev => ({
         ...prev,
         status: 'offline',
@@ -151,19 +157,41 @@ const ApiHealthStatus = () => {
     };
   }, []);
 
-  // Format uptime as days, hours, minutes, seconds
+  // Format uptime in a human-readable format
   const formatUptime = (seconds: number) => {
     const days = Math.floor(seconds / 86400);
     const hours = Math.floor((seconds % 86400) / 3600);
     const minutes = Math.floor((seconds % 3600) / 60);
-    const secs = Math.floor(seconds % 60);
+    const remainingSeconds = seconds % 60;
     
-    if (days > 0) return `${days}d ${hours}h ${minutes}m`;
-    if (hours > 0) return `${hours}h ${minutes}m ${secs}s`;
-    if (minutes > 0) return `${minutes}m ${secs}s`;
-    return `${secs}s`;
+    if (days > 0) {
+      return `${days}d ${hours}h ${minutes}m`;
+    } else if (hours > 0) {
+      return `${hours}h ${minutes}m ${remainingSeconds}s`;
+    } else if (minutes > 0) {
+      return `${minutes}m ${remainingSeconds}s`;
+    } else {
+      return `${remainingSeconds}s`;
+    }
   };
-
+  
+  // Format memory usage
+  const formatMemory = (mb: number) => {
+    if (mb >= 1024) {
+      return `${(mb / 1024).toFixed(1)} GB`;
+    } else {
+      return `${mb} MB`;
+    }
+  };
+  
+  // Format memory usage as a human-readable string
+  const getMemoryUsage = () => {
+    const used = formatMemory(apiHealth.memory.used);
+    const total = formatMemory(apiHealth.memory.total);
+    return `${used} / ${total}`;
+  };
+  
+  // Get the appropriate color for the status indicator
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'online': return 'bg-green-500';
@@ -251,6 +279,42 @@ const ApiHealthStatus = () => {
               <div className="text-[9px] font-mono">{formatUptime(apiHealth.uptime)}</div>
             </div>
             
+            {/* Database Status */}
+            <div className="flex flex-col gap-1">
+              <div className="flex justify-between items-center">
+                <div className="text-[9px] text-slate-400 flex items-center">
+                  <FiDatabase className="mr-1" size={10} />
+                  Database
+                </div>
+                <div className="text-[9px] font-mono flex items-center">
+                  <div className={`w-1.5 h-1.5 rounded-full ${getStatusColor(apiHealth.database?.status || 'offline')} mr-1`}></div>
+                  {apiHealth.database?.status === 'online' ? 'Connected' : apiHealth.database?.status === 'error' ? 'Error' : 'Disconnected'}
+                </div>
+              </div>
+              {apiHealth.database?.status === 'online' && (
+                <div className="text-[8px] text-slate-500 flex justify-between items-center">
+                  <span>Response: {apiHealth.database.responseTime}ms</span>
+                  <span>{apiHealth.database.dialect}@{apiHealth.database.host}</span>
+                </div>
+              )}
+            </div>
+            
+            <div className="flex flex-col gap-1">
+              <div className="flex justify-between items-center">
+                <div className="text-[9px] text-slate-400 flex items-center">
+                  <FiHardDrive className="mr-1" size={10} />
+                  Memory
+                </div>
+                <div className="text-[9px] font-mono">{getMemoryUsage()}</div>
+              </div>
+              <div className="w-full h-1 bg-slate-700 rounded-full overflow-hidden">
+                <div 
+                  className={`h-full ${apiHealth.memory.percentage && apiHealth.memory.percentage > 80 ? 'bg-red-500' : 'bg-blue-500'}`}
+                  style={{ width: `${apiHealth.memory.percentage || 0}%` }}
+                />
+              </div>
+            </div>
+            
             <div className="flex flex-col gap-1">
               <div className="flex justify-between items-center">
                 <div className="text-[9px] text-slate-400 flex items-center">
@@ -266,24 +330,6 @@ const ApiHealthStatus = () => {
                   style={{ width: `${apiHealth.cpuLoad}%` }}
                 ></div>
               </div>
-            </div>
-            
-            <div className="space-y-1">
-              <div className="flex justify-between items-center">
-                <div className="text-[9px] text-slate-400 flex items-center">
-                  <FiDatabase className="mr-1" size={10} />
-                  Memory
-                </div>
-                <div className="text-[9px] font-mono">{apiHealth.memory.used}MB / {apiHealth.memory.total}MB</div>
-              </div>
-              {apiHealth.memory.percentage !== undefined && (
-                <div className="w-full h-1 bg-slate-700 rounded-full overflow-hidden">
-                  <div 
-                    className={`h-full ${getMemoryPercentageColor(apiHealth.memory.percentage)}`} 
-                    style={{ width: `${apiHealth.memory.percentage}%` }}
-                  ></div>
-                </div>
-              )}
             </div>
             
             <div className="flex justify-between items-center">

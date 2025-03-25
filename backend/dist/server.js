@@ -13,6 +13,7 @@ const socket_io_1 = require("socket.io");
 const database_1 = require("./config/database");
 const errorHandler_1 = require("./middleware/errorHandler");
 const os_1 = __importDefault(require("os"));
+const database_2 = require("./config/database");
 // Track when the server started
 const serverStartTime = new Date();
 // Import routes
@@ -74,7 +75,7 @@ app.get('/', (req, res) => {
     res.send('PHANTOM HUB API is running');
 });
 // Simple health endpoint at the root level (no /api prefix)
-app.get('/health', (req, res) => {
+app.get('/health', async (req, res) => {
     var _a;
     try {
         // Calculate uptime in seconds
@@ -88,6 +89,19 @@ app.get('/health', (req, res) => {
         const totalCPUUsage = cpuUsage.user + cpuUsage.system;
         // Convert from microseconds to percentage with a reasonable scaling factor
         const cpuLoad = Math.min(Math.round((totalCPUUsage / 1000000) * 5), 100);
+        // Check database connection
+        let dbStatus = 'offline';
+        let dbResponseTime = 0;
+        try {
+            const dbStartTime = Date.now();
+            await database_2.sequelize.authenticate();
+            dbResponseTime = Date.now() - dbStartTime;
+            dbStatus = 'online';
+        }
+        catch (error) {
+            console.error('Database connection error:', error);
+            dbStatus = 'error';
+        }
         // Get active connections 
         let activeConnections = 0;
         try {
@@ -118,7 +132,7 @@ app.get('/health', (req, res) => {
         const loadAvg = os_1.default.loadavg();
         // Put it all together with enriched data
         const healthData = {
-            status: 'online',
+            status: dbStatus === 'online' ? 'online' : 'degraded',
             version: 'v1.0.0 Beta',
             uptime,
             hostname,
@@ -129,6 +143,12 @@ app.get('/health', (req, res) => {
                 used: Math.round(usedMemory / (1024 * 1024)), // in MB
                 total: Math.round(totalMemory / (1024 * 1024)), // in MB
                 percentage: Math.round((usedMemory / totalMemory) * 100)
+            },
+            database: {
+                status: dbStatus,
+                responseTime: dbResponseTime,
+                dialect: database_2.sequelize.getDialect(),
+                host: database_2.sequelize.config.host
             },
             activeConnections,
             responseTime: 0, // This will be calculated on the client side
