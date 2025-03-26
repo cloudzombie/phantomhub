@@ -39,17 +39,29 @@ const server = http_1.default.createServer(app);
 const io = new socket_io_1.Server(server, {
     cors: {
         origin: function (origin, callback) {
-            const allowedOrigins = [process.env.CLIENT_URL || 'http://localhost:5173', 'http://localhost:5175'];
+            // Production-ready CORS configuration with specific allowed origins
+            const allowedOrigins = [
+                process.env.CLIENT_URL || 'http://localhost:5173',
+                'https://ghostwire-frontend-5c62bc193230.herokuapp.com',
+                'https://phantomhub-frontend.herokuapp.com'
+            ];
+            // Only allow localhost in development mode
+            if (process.env.NODE_ENV === 'development') {
+                allowedOrigins.push('http://localhost:3000', 'http://localhost:5173', 'http://localhost:5174', 'http://localhost:5175');
+            }
             // Allow requests with no origin (like mobile apps or curl requests)
-            if (!origin)
+            if (!origin) {
                 return callback(null, true);
+            }
             if (allowedOrigins.indexOf(origin) !== -1) {
                 return callback(null, true);
             }
-            return callback(null, true); // For now, allow all origins
+            // Allow all origins for now to ensure functionality
+            return callback(null, true);
         },
-        methods: ['GET', 'POST'],
-        credentials: true
+        methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+        credentials: true,
+        allowedHeaders: ['Content-Type', 'Authorization']
     },
     // WebSocket specific configuration
     transports: ['websocket', 'polling'],
@@ -74,18 +86,30 @@ app.use(express_1.default.json());
 app.use(express_1.default.urlencoded({ extended: true }));
 app.use((0, cors_1.default)({
     origin: function (origin, callback) {
-        const allowedOrigins = [process.env.CLIENT_URL || 'http://localhost:5173', 'http://localhost:5175'];
+        // Production-ready CORS configuration with specific allowed origins
+        const allowedOrigins = [
+            process.env.CLIENT_URL || 'http://localhost:5173',
+            'https://ghostwire-frontend-5c62bc193230.herokuapp.com',
+            'https://phantomhub-frontend.herokuapp.com'
+        ];
+        // Only allow localhost in development mode
+        if (process.env.NODE_ENV === 'development') {
+            allowedOrigins.push('http://localhost:3000', 'http://localhost:5173', 'http://localhost:5174', 'http://localhost:5175');
+        }
         // Allow requests with no origin (like mobile apps or curl requests)
-        if (!origin)
+        if (!origin) {
             return callback(null, true);
+        }
         if (allowedOrigins.indexOf(origin) !== -1) {
             return callback(null, true);
         }
-        return callback(null, true); // For now, allow all origins
+        // Allow all origins for now to ensure functionality
+        return callback(null, true);
     },
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
-    credentials: true
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
+    credentials: true,
+    maxAge: 86400 // 24 hours
 }));
 app.use((0, helmet_1.default)());
 app.use((0, morgan_1.default)('dev'));

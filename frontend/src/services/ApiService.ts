@@ -180,6 +180,7 @@ class ApiService {
    */
   private initializeSocket(): void {
     try {
+      // Use environment variable for socket URL to ensure consistent configuration
       const socketUrl = import.meta.env.VITE_SOCKET_URL || 'http://localhost:5001';
       console.log('ApiService: Initializing socket connection to', socketUrl);
       
@@ -191,19 +192,21 @@ class ApiService {
         return;
       }
       
+      // Configure Socket.IO with robust connection options
       this.socket = io(socketUrl, {
         reconnection: true,
-        reconnectionAttempts: 5,
+        reconnectionAttempts: 10, // Increased from 5 to 10 for better reliability
         reconnectionDelay: 1000,
         reconnectionDelayMax: 5000,
         randomizationFactor: 0.5,
         autoConnect: true,
-        transports: ['websocket', 'polling'],
+        transports: ['websocket', 'polling'], // Support both transport methods
         auth: {
           token: token
         },
         forceNew: true,
-        timeout: 45000
+        timeout: 45000,
+        path: '/socket.io/' // Ensure the path matches the server configuration
       });
       
       this.setupSocketEventHandlers();

@@ -47,6 +47,7 @@ const checkDeviceConnectivity = async (device: Device): Promise<boolean> => {
 
 // Get all O.MG Cables
 export const getAllDevices = async (req: AuthRequest, res: Response) => {
+  logger.debug('getAllDevices: Request received');
   try {
     const userId = req.user?.id;
     
@@ -91,36 +92,57 @@ export const getAllDevices = async (req: AuthRequest, res: Response) => {
     }
     
     // Check connectivity for network devices and update status
+    const deviceResults = [];
+    
     for (const device of devices) {
+      // Create a safe copy of the device data with additional properties
+      const deviceData: any = device.toJSON();
+      
+      // Add connectivity status with safe error handling
       if (device.connectionType === 'network') {
         try {
           const isConnected = await checkDeviceConnectivity(device);
+          deviceData.isConnected = isConnected;
+          
           if (isConnected && device.status !== 'online') {
             device.status = 'online';
             device.lastSeen = new Date();
             await device.save();
+            deviceData.status = 'online';
+            deviceData.lastSeen = device.lastSeen;
           } else if (!isConnected && device.status !== 'offline') {
             device.status = 'offline';
             await device.save();
+            deviceData.status = 'offline';
           }
         } catch (error) {
           logger.error(`Error checking connectivity for device ${device.id}:`, error);
-          // Don't fail the whole request if connectivity check fails
-          continue;
+          // Don't break functionality if connectivity check fails
+          deviceData.isConnected = false;
+          deviceData.status = device.status || 'unknown';
+          deviceData.connectionError = 'Failed to check connectivity';
         }
       }
+      
+      // Add the device data to our results
+      deviceResults.push(deviceData);
     }
     
     return res.status(200).json({
       success: true,
-      data: devices,
+      data: deviceResults,
     });
   } catch (error) {
     logger.error('Error in getAllDevices:', error);
+    // Provide a clean error message for production without exposing implementation details
+    const errorMessage = process.env.NODE_ENV === 'production' 
+      ? 'An error occurred while fetching devices' 
+      : (error instanceof Error ? error.message : 'Unknown error');
+      
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch O.MG Cables',
-      error: error instanceof Error ? error.message : 'Unknown error',
+      error: errorMessage,
     });
   }
 };

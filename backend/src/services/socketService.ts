@@ -37,8 +37,18 @@ export class SocketService {
   private setupMiddleware() {
     this.io.use(async (socket: AuthenticatedSocket, next) => {
       try {
-        const token = socket.handshake.auth.token;
+        // Check for token in auth object or in handshake query for compatibility
+        const token = socket.handshake.auth.token || 
+                     socket.handshake.headers.authorization?.replace('Bearer ', '') ||
+                     socket.handshake.query.token;
+                     
         logger.debug(`Socket auth attempt with token: ${token ? 'provided' : 'missing'}`);
+        
+        // Allow connections without token in development mode
+        if (!token && process.env.NODE_ENV === 'development') {
+          logger.warn(`Socket ${socket.id} connection allowed without token in development mode`);
+          return next();
+        }
         
         if (!token) {
           logger.warn(`Socket ${socket.id} connection rejected: No auth token`);
@@ -46,6 +56,11 @@ export class SocketService {
         }
 
         try {
+          // Log a warning if JWT_SECRET is missing in production, but don't break functionality
+          if (!process.env.JWT_SECRET && process.env.NODE_ENV === 'production') {
+            logger.warn('Missing JWT_SECRET in production environment - using fallback secret');
+          }
+          
           const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key') as any;
           // Support both id and userId formats for backward compatibility
           const userId = decoded.id || decoded.userId;

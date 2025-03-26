@@ -25,11 +25,16 @@ const getRedisConfig = () => {
                 host: redisUrl.hostname,
                 port: Number(redisUrl.port),
                 password: redisUrl.password,
-                tls: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : undefined
+                // Enable TLS only for production or secure Redis URLs
+                tls: (process.env.NODE_ENV === 'production' || process.env.REDIS_URL.startsWith('rediss://'))
+                    ? { rejectUnauthorized: false }
+                    : undefined
             };
         }
         catch (error) {
             console.error('Error parsing REDIS_URL:', error);
+            // Fallback to direct URL usage if parsing fails
+            return { url: process.env.REDIS_URL };
         }
     }
     return {
