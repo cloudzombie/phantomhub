@@ -107,18 +107,17 @@ const ApiHealthStatus: React.FC<ApiHealthStatusProps> = ({ onStatusChange }) => 
       // Get start time for response time calculation
       const startTime = Date.now();
       
-      // Get the API config for the base URL
+      // Get the API endpoint from the service (which uses environment variables)
       const apiConfig = ApiService.getConfig();
-      const baseUrl = apiConfig.endpoint.replace('/api', '');
+      const apiUrl = apiConfig.endpoint;
       
-      console.log('Checking API health at:', `${baseUrl}/health`);
+      // Use system routes health endpoint
+      const healthEndpoint = `${apiUrl}/system/health`;
+      console.log('Checking API health at:', healthEndpoint);
       
-      // Make the API request directly with axios instead of ApiService
-      // since the health endpoint is outside the API path
+      // Use a direct axios instance to make the request
       const axios = ApiService.getAxiosInstance();
-      const response = await axios.get(`${baseUrl}/health`, {
-        baseURL: '' // Override the base URL
-      });
+      const response = await axios.get('/system/health');
       
       // Calculate response time
       const responseTime = Date.now() - startTime;
