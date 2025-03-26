@@ -5,10 +5,22 @@ import { Redis } from 'ioredis';
 // Import Redis configuration function
 const getRedisConfig = () => {
   if (process.env.REDIS_URL) {
-    return {
-      url: process.env.REDIS_URL,
-      tls: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : undefined
-    };
+    try {
+      const redisUrl = new URL(process.env.REDIS_URL);
+      return {
+        host: redisUrl.hostname,
+        port: Number(redisUrl.port),
+        password: redisUrl.password,
+        // Enable TLS only for production or secure Redis URLs
+        tls: (process.env.NODE_ENV === 'production' || process.env.REDIS_URL.startsWith('rediss://')) 
+          ? { rejectUnauthorized: false } 
+          : undefined
+      };
+    } catch (error) {
+      console.error('Error parsing REDIS_URL:', error);
+      // Fallback to direct URL usage if parsing fails
+      return { url: process.env.REDIS_URL };
+    }
   }
   return {
     host: process.env.REDIS_HOST || 'localhost',
