@@ -1,11 +1,12 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { FiLogIn, FiShield, FiAlertCircle, FiCheckCircle } from 'react-icons/fi';
 import axios from 'axios';
 import ApiService from '../services/ApiService';
 import ThemeService from '../services/ThemeService';
 import NotificationService from '../services/NotificationService';
-
-const API_URL = 'https://ghostwire-backend-e0380bcf4e0e.herokuapp.com/api';
+import { useAuth } from '../contexts/AuthContext';
+import { API_URL } from '../config';
 
 const Login = () => {
   const [email, setEmail] = useState('');
@@ -13,6 +14,15 @@ const Login = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
+  const navigate = useNavigate();
+  const { isAuthenticated } = useAuth();
+  
+  // Redirect if already logged in
+  useEffect(() => {
+    if (isAuthenticated()) {
+      navigate('/');
+    }
+  }, [isAuthenticated, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -67,7 +77,7 @@ const Login = () => {
         
         // Redirect to dashboard after a short delay
         setTimeout(() => {
-          window.location.href = '/';
+          navigate('/');
         }, 1000);
       } else {
         setErrorMessage('Invalid response from server');

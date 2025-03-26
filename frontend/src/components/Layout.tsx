@@ -1,6 +1,8 @@
 import { Link as RouterLink, Outlet, useLocation } from 'react-router-dom';
 import { FiHome, FiServer, FiCode, FiFileText, FiLogOut, FiShield, FiSettings, FiUser, FiUsers, FiLock } from 'react-icons/fi';
 import { useEffect, useState } from 'react';
+import axios from 'axios';
+import { API_URL } from '../config';
 import ApiHealthStatus from './ApiHealthStatus';
 import ApiService from '../services/ApiService';
 import NotificationService from '../services/NotificationService';
@@ -17,7 +19,9 @@ const Layout = () => {
     
     // Get current user from localStorage
     const userStr = localStorage.getItem('user');
-    if (userStr) {
+    const token = localStorage.getItem('token');
+    
+    if (userStr && userStr !== 'undefined') {
       try {
         const userData = JSON.parse(userStr);
         setCurrentUser(userData);
@@ -32,7 +36,29 @@ const Layout = () => {
         }, 100); // Short delay to ensure theme is fully applied first
       } catch (error) {
         console.error('Error parsing user data:', error);
+        localStorage.removeItem('user'); // Remove invalid user data
       }
+    } else if (token) {
+      // If we have a token but no valid user data, try to fetch user info
+      const fetchUserData = async () => {
+        try {
+          const response = await axios.get(`${API_URL}/auth/me`, {
+            headers: {
+              Authorization: `Bearer ${token}`
+            }
+          });
+          
+          if (response.data.success) {
+            const userData = response.data.data;
+            localStorage.setItem('user', JSON.stringify(userData));
+            setCurrentUser(userData);
+          }
+        } catch (err) {
+          console.error('Error fetching user data:', err);
+        }
+      };
+      
+      fetchUserData();
     }
     
     // Listen for API configuration changes
@@ -133,7 +159,13 @@ const Layout = () => {
           <div className="space-y-0.5 px-1">
             <NavItem to="/settings" icon={<FiSettings size={14} />}>Settings</NavItem>
             {currentUser && currentUser.role === 'admin' && (
-              <NavItem to="/admin" icon={<FiLock size={14} />}>Admin Panel</NavItem>
+              <>
+                <div className="text-[9px] pt-3 pb-1 text-slate-500 font-medium text-center tracking-wider uppercase">
+                  Admin
+                </div>
+                <NavItem to="/admin" icon={<FiLock size={14} />}>Admin Dashboard</NavItem>
+                <NavItem to="/admin/users" icon={<FiUsers size={14} />}>User Management</NavItem>
+              </>
             )}
           </div>
           
