@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import axios from 'axios';
 import { 
   FiServer, 
   FiCpu, 
@@ -107,17 +108,20 @@ const ApiHealthStatus: React.FC<ApiHealthStatusProps> = ({ onStatusChange }) => 
       // Get start time for response time calculation
       const startTime = Date.now();
       
-      // Get the API endpoint from the service (which uses environment variables)
-      const apiConfig = ApiService.getConfig();
-      const apiUrl = apiConfig.endpoint;
+      // Determine if we're in production
+      const isProd = import.meta.env.PROD;
+      
+      // Use the Heroku URL directly in production
+      const apiUrl = isProd 
+        ? 'https://ghostwire-backend-e0380bcf4e0e.herokuapp.com/api'
+        : (import.meta.env.VITE_API_URL || 'http://localhost:5001/api');
       
       // Use system routes health endpoint
       const healthEndpoint = `${apiUrl}/system/health`;
       console.log('Checking API health at:', healthEndpoint);
       
-      // Use a direct axios instance to make the request
-      const axios = ApiService.getAxiosInstance();
-      const response = await axios.get('/system/health');
+      // Make a direct axios request without using the service
+      const response = await axios.get(healthEndpoint);
       
       // Calculate response time
       const responseTime = Date.now() - startTime;
