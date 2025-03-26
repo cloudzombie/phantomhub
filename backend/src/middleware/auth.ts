@@ -159,11 +159,24 @@ export const authenticate = async (
 
     console.log('Verifying token with JWT_SECRET');
     
-    // Verify token
-    const decoded = jwt.verify(
-      token,
-      process.env.JWT_SECRET || 'your-secret-key'
-    ) as JwtPayload;
+    // Verify token with better error handling
+    let decoded;
+    try {
+      decoded = jwt.verify(
+        token,
+        process.env.JWT_SECRET || 'your-secret-key'
+      ) as JwtPayload;
+    } catch (jwtError) {
+      logger.error('JWT verification error:', jwtError);
+      if (jwtError instanceof jwt.TokenExpiredError) {
+        res.status(401).json({ error: 'Token has expired' });
+      } else if (jwtError instanceof jwt.JsonWebTokenError) {
+        res.status(401).json({ error: 'Invalid token' });
+      } else {
+        res.status(401).json({ error: 'Token verification failed' });
+      }
+      return;
+    }
     
     console.log('Token decoded successfully:', JSON.stringify(decoded));
     

@@ -91,6 +91,15 @@ export const getAllDevices = async (req: AuthRequest, res: Response) => {
       });
     }
     
+    // If no devices found, return an empty array instead of 500 error
+    if (!devices || devices.length === 0) {
+      return res.status(200).json({
+        success: true,
+        data: [],
+        message: 'No devices found'
+      });
+    }
+
     // Check connectivity for network devices and update status
     const deviceResults = [];
     
@@ -101,6 +110,11 @@ export const getAllDevices = async (req: AuthRequest, res: Response) => {
       // Add connectivity status with safe error handling
       if (device.connectionType === 'network') {
         try {
+          // Set default values first to ensure we always have something to return
+          deviceData.isConnected = false;
+          deviceData.status = device.status || 'unknown';
+          
+          // Then try to check connectivity
           const isConnected = await checkDeviceConnectivity(device);
           deviceData.isConnected = isConnected;
           

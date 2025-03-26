@@ -13,6 +13,15 @@ export const getAllScripts = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user?.id;
     let scripts;
+    
+    // If no user is authenticated, return unauthorized
+    if (!userId) {
+      console.log('Script request missing user ID');
+      return res.status(401).json({
+        success: false,
+        message: 'User authentication required',
+      });
+    }
 
     // If user has admin role, get all scripts
     if (req.user?.role === 'admin') {
@@ -36,15 +45,23 @@ export const getAllScripts = async (req: AuthRequest, res: Response) => {
       });
     }
     
+    // Always return a valid response even if no scripts found
     return res.status(200).json({
       success: true,
-      data: scripts
+      data: scripts || [],
+      message: scripts && scripts.length > 0 ? undefined : 'No scripts found'
     });
   } catch (error) {
     console.error('Error fetching scripts:', error);
+    // Provide a clean error message for production without exposing implementation details
+    const errorMessage = process.env.NODE_ENV === 'production' 
+      ? 'An error occurred while fetching scripts' 
+      : (error instanceof Error ? error.message : 'Unknown error');
+    
     return res.status(500).json({
       success: false,
-      message: 'Failed to fetch scripts'
+      message: 'Failed to fetch scripts',
+      error: errorMessage
     });
   }
 };
@@ -462,9 +479,11 @@ export const getScriptsForPayload = async (req: AuthRequest, res: Response) => {
       ]
     });
     
+    // Always return a valid response even if no scripts found
     return res.status(200).json({
       success: true,
-      data: scripts
+      data: scripts || [],
+      message: scripts && scripts.length > 0 ? undefined : 'No scripts found'
     });
   } catch (error) {
     console.error('Error fetching scripts for payload:', error);
