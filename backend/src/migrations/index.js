@@ -253,6 +253,20 @@ exports.migrations = [
       await queryInterface.dropTable('devices');
       await queryInterface.dropTable('users');
     }
+  },
+  
+  // 002_add_missing_tables.js
+  {
+    name: '002_add_missing_tables.js',
+    up: require('./002_add_missing_tables').up,
+    down: require('./002_add_missing_tables').down
+  },
+  
+  // 003_add_complete_schema.js
+  {
+    name: '003_add_complete_schema.js',
+    up: require('./003_add_complete_schema').up,
+    down: require('./003_add_complete_schema').down
   }
   
   // Add any new migrations here...

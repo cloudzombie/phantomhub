@@ -1,4 +1,4 @@
-  /**
+/**
  * User Model
  * 
  * Represents a user in the system with proper field mapping
@@ -54,10 +54,13 @@ class User extends Model<UserAttributes> implements UserAttributes {
 
   // Instance method to check password history
   public async isPasswordReused(newPassword: string): Promise<boolean> {
-    if (!this.passwordHistory) return false;
-    
+    if (!this.passwordHistory || this.passwordHistory.length === 0) {
+      return false;
+    }
+
     for (const oldHash of this.passwordHistory) {
-      if (await bcrypt.compare(newPassword, oldHash)) {
+      const isSame = await bcrypt.compare(newPassword, oldHash);
+      if (isSame) {
         return true;
       }
     }
@@ -67,18 +70,19 @@ class User extends Model<UserAttributes> implements UserAttributes {
   // Instance method to update password
   public async updatePassword(newPassword: string): Promise<void> {
     const salt = await bcrypt.genSalt(10);
-    const hash = await bcrypt.hash(newPassword, salt);
+    this.password = await bcrypt.hash(newPassword, salt);
     
-    // Keep last 5 passwords in history
-    const history = this.passwordHistory || [];
-    history.unshift(this.password);
-    if (history.length > 5) history.pop();
+    // Maintain password history, keep only the last 10
+    if (!this.passwordHistory) {
+      this.passwordHistory = [];
+    }
+    this.passwordHistory.push(this.password);
+    if (this.passwordHistory.length > 10) {
+      this.passwordHistory = this.passwordHistory.slice(-10);
+    }
     
-    this.password = hash;
-    this.passwordHistory = history;
     this.passwordLastChanged = new Date();
     this.requirePasswordChange = false;
-    
     await this.save();
   }
 
@@ -87,7 +91,7 @@ class User extends Model<UserAttributes> implements UserAttributes {
     this.failedLoginAttempts += 1;
     this.lastFailedLogin = new Date();
     
-    // Lock account after 5 failed attempts
+    // Auto-lock account after too many attempts
     if (this.failedLoginAttempts >= 5) {
       this.isActive = false;
     }
@@ -127,7 +131,7 @@ User.init(
       allowNull: false,
     },
     role: {
-      type: DataTypes.ENUM('admin', 'operator', 'user'),
+      type: DataTypes.STRING,
       allowNull: false,
       defaultValue: 'user',
     },
@@ -192,7 +196,8 @@ User.init(
     modelName: 'User',
     tableName: 'users',
     // Use underscored instead of camelcase
-    underscored: true,
+    underscored: true, 
+    timestamps: true,
     hooks: {
       beforeCreate: async (user: User) => {
         if (user.password) {
@@ -212,4 +217,4 @@ User.init(
   }
 );
 
-export default User; 
+export default User;
