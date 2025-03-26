@@ -41,7 +41,12 @@ const server = http.createServer(app);
 const io = new SocketIOServer(server, {
   cors: {
     origin: function(origin, callback) {
-      const allowedOrigins = [process.env.CLIENT_URL || 'http://localhost:5173', 'http://localhost:5175'];
+      // Updated allowed origins to include Heroku frontend explicitly
+      const allowedOrigins = [
+        process.env.CLIENT_URL || 'http://localhost:5173',
+        'http://localhost:5175',
+        'https://ghostwire-frontend-5c62bc193230.herokuapp.com'
+      ];
       // Allow requests with no origin (like mobile apps or curl requests)
       if (!origin) return callback(null, true);
       if (allowedOrigins.indexOf(origin) !== -1) {
@@ -78,7 +83,12 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cors({
   origin: function(origin, callback) {
-    const allowedOrigins = [process.env.CLIENT_URL || 'http://localhost:5173', 'http://localhost:5175'];
+    // Updated allowed origins to include Heroku frontend explicitly
+    const allowedOrigins = [
+      process.env.CLIENT_URL || 'http://localhost:5173', 
+      'http://localhost:5175',
+      'https://ghostwire-frontend-5c62bc193230.herokuapp.com'
+    ];
     // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin) return callback(null, true);
     if (allowedOrigins.indexOf(origin) !== -1) {

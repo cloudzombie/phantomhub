@@ -15,9 +15,13 @@ class ApiService {
   private baseURL: string;
 
   private constructor() {
+    // Get API URL from environment variables for production
+    const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5001/api';
+    console.log('ApiService initializing with URL:', apiUrl);
+    
     // Default configuration
     this.config = {
-      endpoint: import.meta.env.VITE_API_URL || 'http://localhost:5001/api',
+      endpoint: apiUrl,
       pollingInterval: 60,
       timeout: 30
     };
@@ -26,6 +30,12 @@ class ApiService {
     this.axiosInstance = axios.create({
       baseURL: this.config.endpoint,
       timeout: this.config.timeout * 1000
+    });
+    
+    // Log the configuration to help with debugging
+    console.log('ApiService configured with:', {
+      baseURL: this.config.endpoint,
+      environment: import.meta.env.MODE || 'development'
     });
 
     // Add request interceptor to include auth token
@@ -46,7 +56,9 @@ class ApiService {
     // Load stored configuration
     this.loadStoredConfig();
 
-    this.baseURL = import.meta.env.VITE_API_URL || 'http://localhost:5001';
+    // Ensure baseURL is consistent with endpoint (without the /api suffix)
+    const endpoint = this.config.endpoint;
+    this.baseURL = endpoint.endsWith('/api') ? endpoint.slice(0, -4) : endpoint;
     
     // Initialize socket connection
     this.initializeSocket();
