@@ -6,20 +6,30 @@ import logger from '../utils/logger';
 
 dotenv.config();
 
-const {
-  DB_NAME = 'phantomhub',
-  DB_USER = 'joshuafisher',
-  DB_PASSWORD = '',
-  DB_HOST = 'localhost',
-  DB_PORT = '5432',
-} = process.env;
-
-const sequelize = new Sequelize(DB_NAME, DB_USER, DB_PASSWORD, {
-  host: DB_HOST,
-  port: parseInt(DB_PORT, 10),
-  dialect: 'postgres',
-  logging: (msg) => logger.debug(msg),
-});
+// Use DATABASE_URL if available (for Heroku)
+const sequelize = process.env.DATABASE_URL 
+  ? new Sequelize(process.env.DATABASE_URL, {
+      dialect: 'postgres',
+      protocol: 'postgres',
+      dialectOptions: {
+        ssl: {
+          require: true,
+          rejectUnauthorized: false
+        }
+      },
+      logging: (msg) => logger.debug(msg)
+    })
+  : new Sequelize(
+      process.env.DB_NAME || 'phantomhub',
+      process.env.DB_USER || 'joshuafisher',
+      process.env.DB_PASSWORD || '',
+      {
+        host: process.env.DB_HOST || 'localhost',
+        port: parseInt(process.env.DB_PORT || '5432', 10),
+        dialect: 'postgres',
+        logging: (msg) => logger.debug(msg),
+      }
+    );
 
 async function getCompletedMigrations(queryInterface: QueryInterface): Promise<string[]> {
   try {
@@ -53,7 +63,7 @@ async function runMigrations(): Promise<void> {
     logger.info('Database connection established successfully');
 
     const queryInterface = sequelize.getQueryInterface();
-    const migrationsPath = path.join(__dirname, '../migrations');
+    const migrationsPath = path.join(__dirname, '../../src/migrations');
     const migrationFiles = readdirSync(migrationsPath)
       .filter(file => file.endsWith('.ts') || file.endsWith('.js'))
       .sort();

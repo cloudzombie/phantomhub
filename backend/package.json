@@ -2,6 +2,9 @@
   "name": "backend",
   "version": "1.0.0",
   "main": "dist/server.js",
+  "engines": {
+    "node": "20.x"
+  },
   "scripts": {
     "start": "node dist/server.js",
     "dev": "nodemon --exec ts-node src/server.ts",
@@ -10,7 +13,8 @@
     "build": "tsc",
     "migrate": "ts-node src/scripts/migrate.ts",
     "seed": "ts-node src/scripts/seed.ts",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "heroku-postbuild": "tsc && node dist/scripts/migrate.js"
   },
   "keywords": [],
   "author": "",
