@@ -86,8 +86,11 @@ const AdminDashboard: React.FC = () => {
     const fetchSystemStats = async () => {
       try {
         setLoading(true);
+        const token = localStorage.getItem('token');
         const response = await axios.get(`${API_URL}/admin/system/stats`, {
-          withCredentials: true
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
         });
         
         if (response.data.success) {
@@ -105,8 +108,11 @@ const AdminDashboard: React.FC = () => {
 
     const fetchSystemHealth = async () => {
       try {
+        const token = localStorage.getItem('token');
         const response = await axios.get(`${API_URL}/admin/system/health`, {
-          withCredentials: true
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
         });
         
         if (response.data.success) {
@@ -126,10 +132,15 @@ const AdminDashboard: React.FC = () => {
   // Toggle maintenance mode
   const handleToggleMaintenance = async () => {
     try {
+      const token = localStorage.getItem('token');
       const response = await axios.post(
         `${API_URL}/admin/system/maintenance`,
         { enabled: !maintenanceMode },
-        { withCredentials: true }
+        { 
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        }
       );
       
       if (response.data.success) {

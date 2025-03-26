@@ -50,7 +50,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       
       try {
         const response = await axios.get(`${API_URL}/auth/me`, {
-          withCredentials: true
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
         });
         
         if (response.data.success) {
@@ -82,6 +84,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         email,
         password
       });
+      
+      // Set up axios defaults for future requests
+      if (response.data.success) {
+        axios.defaults.headers.common['Authorization'] = `Bearer ${response.data.data.token}`;
+      }
       
       if (response.data.success) {
         localStorage.setItem('token', response.data.data.token);

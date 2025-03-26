@@ -56,6 +56,7 @@ const AdminUserManagement: React.FC = () => {
     const fetchUsers = async () => {
       try {
         setLoading(true);
+        const token = localStorage.getItem('token');
         const response = await axios.get(`${API_URL}/admin/users`, {
           params: {
             page,
@@ -63,7 +64,9 @@ const AdminUserManagement: React.FC = () => {
             search: searchTerm || undefined,
             role: filterRole !== 'all' ? filterRole : undefined
           },
-          withCredentials: true
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
         });
         
         if (response.data.success) {
@@ -95,10 +98,15 @@ const AdminUserManagement: React.FC = () => {
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      const token = localStorage.getItem('token');
       const response = await axios.post(
         `${API_URL}/admin/users`,
         formData,
-        { withCredentials: true }
+        { 
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        }
       );
       
       if (response.data.success) {
@@ -113,9 +121,12 @@ const AdminUserManagement: React.FC = () => {
         
         // Refresh user list
         setPage(1);
+        const token = localStorage.getItem('token');
         const refreshResponse = await axios.get(`${API_URL}/admin/users`, {
           params: { page: 1, limit: 10 },
-          withCredentials: true
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
         });
         
         if (refreshResponse.data.success) {
@@ -136,9 +147,14 @@ const AdminUserManagement: React.FC = () => {
     }
     
     try {
+      const token = localStorage.getItem('token');
       const response = await axios.delete(
         `${API_URL}/admin/users/${userId}`,
-        { withCredentials: true }
+        { 
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        }
       );
       
       if (response.data.success) {
@@ -154,10 +170,15 @@ const AdminUserManagement: React.FC = () => {
   // Change user role
   const handleChangeRole = async (userId: string, newRole: string) => {
     try {
+      const token = localStorage.getItem('token');
       const response = await axios.put(
         `${API_URL}/admin/users/${userId}/role`,
         { role: newRole },
-        { withCredentials: true }
+        { 
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        }
       );
       
       if (response.data.success) {
@@ -178,10 +199,15 @@ const AdminUserManagement: React.FC = () => {
     if (!newPassword) return;
     
     try {
+      const token = localStorage.getItem('token');
       const response = await axios.put(
         `${API_URL}/admin/users/${userId}/reset-password`,
         { password: newPassword },
-        { withCredentials: true }
+        { 
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        }
       );
       
       if (response.data.success) {
