@@ -161,12 +161,22 @@ const Dashboard = () => {
       
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
-      setError('Failed to load dashboard data. Please try again later.');
       
       // If we get a 401, redirect to login
       if (axios.isAxiosError(error) && error.response?.status === 401) {
         localStorage.removeItem('token');
         window.location.href = '/login';
+      }
+      // Handle 500 errors gracefully - likely due to empty collections
+      else if (axios.isAxiosError(error) && error.response?.status === 500) {
+        console.log('No data available yet - setting empty values');
+        setDevices([]);
+        setRecentDeployments([]);
+        // Don't show error message for expected empty state
+        setError(null);
+      } 
+      else {
+        setError('Failed to load dashboard data. Please try again later.');
       }
     } finally {
       setIsLoading(false);
@@ -468,22 +478,13 @@ const Dashboard = () => {
             
             <DeviceInfoPanel 
               deviceInfo={{
-                port: {} as any, // Mock SerialPort object
-                reader: null,
-                writer: null,
+                name: selectedDevice.name,
+                firmwareVersion: selectedDevice.firmwareVersion || undefined,
                 connectionStatus: selectedDevice.status === 'online' ? 'connected' : 'disconnected',
-                info: {
-                  name: selectedDevice.name,
-                  firmwareVersion: selectedDevice.firmwareVersion,
-                  deviceId: selectedDevice.id.toString(),
-                  capabilities: {
-                    usbHid: true,
-                    wifi: selectedDevice.connectionType === 'network',
-                    bluetooth: false,
-                    storage: "4MB",
-                    supportedFeatures: ['DuckyScript', 'Payloads']
-                  }
-                }
+                connectionType: selectedDevice.connectionType as 'usb' | 'wifi',
+                serialPortId: selectedDevice.serialPortId,
+                ipAddress: selectedDevice.ipAddress
+                // Additional properties from the device object can be added here as needed
               }} 
               onRefresh={() => fetchData()}
             />

@@ -62,6 +62,11 @@ const ResultsViewer = () => {
         localStorage.removeItem('token');
         window.location.href = '/login';
       }
+      // Handle 500 errors gracefully - likely due to empty collections
+      else if (axios.isAxiosError(error) && error.response?.status === 500) {
+        console.log('No deployment results available yet - setting empty array');
+        setResults([]);
+      }
     } finally {
       setIsLoading(false);
     }

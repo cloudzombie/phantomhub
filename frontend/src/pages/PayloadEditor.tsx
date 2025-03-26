@@ -194,15 +194,23 @@ const PayloadEditor = () => {
       }
     } catch (error) {
       console.error('Error fetching devices:', error);
-      setMessage({
-        type: 'error',
-        text: 'Failed to fetch devices. Please try again.'
-      });
       
       // If we get a 401, redirect to login
       if (axios.isAxiosError(error) && error.response?.status === 401) {
         localStorage.removeItem('token');
         window.location.href = '/login';
+      }
+      // Handle 500 errors gracefully - likely due to empty collections
+      else if (axios.isAxiosError(error) && error.response?.status === 500) {
+        console.log('No devices available yet - setting empty array');
+        setDevices([]);
+        // Don't show error message for expected empty state
+      } 
+      else {
+        setMessage({
+          type: 'error',
+          text: 'Failed to fetch devices. Please try again.'
+        });
       }
     }
   };
@@ -230,6 +238,11 @@ const PayloadEditor = () => {
       if (axios.isAxiosError(error) && error.response?.status === 401) {
         localStorage.removeItem('token');
         window.location.href = '/login';
+      }
+      // Handle 500 errors gracefully - likely due to empty collections
+      else if (axios.isAxiosError(error) && error.response?.status === 500) {
+        console.log('No payloads available yet - setting empty array');
+        setPayloads([]);
       }
     }
   };
@@ -259,6 +272,11 @@ const PayloadEditor = () => {
       if (axios.isAxiosError(error) && error.response?.status === 401) {
         localStorage.removeItem('token');
         window.location.href = '/login';
+      }
+      // Handle 500 errors gracefully - likely due to empty collections
+      else if (axios.isAxiosError(error) && error.response?.status === 500) {
+        console.log('No scripts available yet - setting empty array');
+        setScripts([]);
       }
     }
   };
