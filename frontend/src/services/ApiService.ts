@@ -15,27 +15,22 @@ class ApiService {
   private baseURL: string;
 
   private constructor() {
-    // Get API URL from environment variables for production
-    const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5001/api';
-    console.log('ApiService initializing with URL:', apiUrl);
-    
-    // Default configuration
+    // Default configuration with the correct production URL
     this.config = {
-      endpoint: apiUrl,
+      endpoint: import.meta.env.VITE_API_URL || 'http://localhost:5001/api',
       pollingInterval: 60,
       timeout: 30
     };
+
+    // For production builds, ensure we're using the Heroku URL
+    if (import.meta.env.PROD) {
+      this.config.endpoint = 'https://ghostwire-backend-e0380bcf4e0e.herokuapp.com/api';
+    }
 
     // Initialize axios instance with default config
     this.axiosInstance = axios.create({
       baseURL: this.config.endpoint,
       timeout: this.config.timeout * 1000
-    });
-    
-    // Log the configuration to help with debugging
-    console.log('ApiService configured with:', {
-      baseURL: this.config.endpoint,
-      environment: import.meta.env.MODE || 'development'
     });
 
     // Add request interceptor to include auth token
@@ -55,10 +50,14 @@ class ApiService {
     
     // Load stored configuration
     this.loadStoredConfig();
-
-    // Ensure baseURL is consistent with endpoint (without the /api suffix)
-    const endpoint = this.config.endpoint;
-    this.baseURL = endpoint.endsWith('/api') ? endpoint.slice(0, -4) : endpoint;
+    
+    // Set baseURL (without /api suffix)
+    this.baseURL = import.meta.env.VITE_API_URL?.replace('/api', '') || 'http://localhost:5001';
+    
+    // For production builds, ensure we're using the Heroku URL
+    if (import.meta.env.PROD) {
+      this.baseURL = 'https://ghostwire-backend-e0380bcf4e0e.herokuapp.com';
+    }
     
     // Initialize socket connection
     this.initializeSocket();

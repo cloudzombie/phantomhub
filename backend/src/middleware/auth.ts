@@ -13,18 +13,26 @@ import logger from '../utils/logger';
 import User from '../models/User';
 import { RateLimiterRedis } from 'rate-limiter-flexible';
 
-// Redis configuration function
+// Parse REDIS_URL if available (Heroku provides this)
 const getRedisConfig = () => {
-  // For Heroku Redis in production
   if (process.env.REDIS_URL) {
-    // Simple direct usage of REDIS_URL with TLS configuration for production
-    return {
-      url: process.env.REDIS_URL,
-      tls: { rejectUnauthorized: false }
-    };
+    try {
+      const redisUrl = new URL(process.env.REDIS_URL);
+      return {
+        host: redisUrl.hostname,
+        port: Number(redisUrl.port),
+        password: redisUrl.password,
+        // Enable TLS only for production or secure Redis URLs
+        tls: (process.env.NODE_ENV === 'production' || process.env.REDIS_URL.startsWith('rediss://')) 
+          ? { rejectUnauthorized: false } 
+          : undefined
+      };
+    } catch (error) {
+      console.error('Error parsing REDIS_URL:', error);
+      // Fallback to direct URL usage if parsing fails
+      return { url: process.env.REDIS_URL };
+    }
   }
-  
-  // Local development fallback
   return {
     host: process.env.REDIS_HOST || 'localhost',
     port: Number(process.env.REDIS_PORT || 6379),
