@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
 import { FiServer, FiCode, FiActivity, FiCheckCircle, FiInfo, FiAlertCircle, FiRefreshCw, FiX } from 'react-icons/fi';
 import axios from 'axios';
-import { io, Socket } from 'socket.io-client';
+import { Socket } from 'socket.io-client';
 import DeviceInfoPanel from '../components/DeviceInfoPanel';
+import apiServiceInstance, { ApiService } from '../services/ApiService';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001/api';
-const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:5001';
 
 interface Device {
   id: string;
@@ -67,32 +67,37 @@ const Dashboard = () => {
   const [error, setError] = useState<string | null>(null);
   
   useEffect(() => {
-    // Connect to WebSocket
-    const socket = io(SOCKET_URL);
+    // Get socket from ApiService static method
+    const socket = ApiService.getSocket();
     
-    // Listen for device status changes
-    socket.on('device_status_changed', (data) => {
-      setDevices(prevDevices => 
-        prevDevices.map(device => 
-          device.id === data.id 
-            ? { ...device, status: data.status } 
-            : device
-        )
-      );
-      calculateStats();
-    });
-    
-    // Listen for new deployments
-    socket.on('payload_status_update', () => {
-      // Update deployments and stats as needed
-      fetchData();
-    });
+    if (socket) {
+      // Listen for device status changes
+      socket.on('device_status_changed', (data: any) => {
+        setDevices(prevDevices => 
+          prevDevices.map(device => 
+            device.id === data.id 
+              ? { ...device, status: data.status } 
+              : device
+          )
+        );
+        calculateStats();
+      });
+      
+      // Listen for new deployments
+      socket.on('payload_status_update', () => {
+        // Update deployments and stats as needed
+        fetchData();
+      });
+    } else {
+      // If socket is not available, try to reconnect
+      ApiService.reconnectSocket();
+    }
     
     // Fetch initial data
     fetchData();
     
     return () => {
-      socket.disconnect();
+      // No need to disconnect as ApiService manages the socket lifecycle
     };
   }, []);
   

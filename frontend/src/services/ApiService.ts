@@ -180,9 +180,8 @@ class ApiService {
    */
   private initializeSocket(): void {
     try {
-      // Use environment variable for socket URL to ensure consistent configuration
-      const socketUrl = import.meta.env.VITE_SOCKET_URL || 'http://localhost:5001';
-      console.log('ApiService: Initializing socket connection to', socketUrl);
+      // Use baseURL for socket connection to ensure consistency with API endpoint
+      console.log('ApiService: Initializing socket connection to', this.baseURL);
       
       // Get token for authentication
       const token = localStorage.getItem('token');
@@ -193,7 +192,7 @@ class ApiService {
       }
       
       // Configure Socket.IO with robust connection options
-      this.socket = io(socketUrl, {
+      this.socket = io(this.baseURL, {
         reconnection: true,
         reconnectionAttempts: 10, // Increased from 5 to 10 for better reliability
         reconnectionDelay: 1000,
