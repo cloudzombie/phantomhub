@@ -1,6 +1,9 @@
-import { QueryInterface, DataTypes } from 'sequelize';
+const { DataTypes } = require('sequelize');
 
-export async function up(queryInterface: QueryInterface): Promise<void> {
+/**
+ * @param {import('sequelize').QueryInterface} queryInterface
+ */
+const up = async (queryInterface) => {
   await queryInterface.createTable('SequelizeMeta', {
     name: {
       type: DataTypes.STRING,
@@ -9,8 +12,13 @@ export async function up(queryInterface: QueryInterface): Promise<void> {
       primaryKey: true
     }
   });
-}
+};
 
-export async function down(queryInterface: QueryInterface): Promise<void> {
+/**
+ * @param {import('sequelize').QueryInterface} queryInterface
+ */
+const down = async (queryInterface) => {
   await queryInterface.dropTable('SequelizeMeta');
-} 
+};
+
+module.exports = { up, down }; 

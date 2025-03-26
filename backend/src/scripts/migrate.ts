@@ -63,23 +63,36 @@ async function runMigrations(): Promise<void> {
     logger.info('Database connection established successfully');
 
     const queryInterface = sequelize.getQueryInterface();
-    const migrationsPath = path.join(__dirname, '../../src/migrations');
-    const migrationFiles = readdirSync(migrationsPath)
-      .filter(file => file.endsWith('.ts') || file.endsWith('.js'))
-      .sort();
-
     const completedMigrations = await getCompletedMigrations(queryInterface);
 
-    for (const file of migrationFiles) {
-      if (!completedMigrations.includes(file)) {
-        logger.info(`Running migration: ${file}`);
-        const migration = require(path.join(migrationsPath, file));
-        await migration.up(queryInterface);
-        await markMigrationComplete(queryInterface, file);
-        logger.info(`Completed migration: ${file}`);
-      } else {
-        logger.debug(`Skipping completed migration: ${file}`);
+    try {
+      // Load the consolidated migrations file
+      const migrationsPath = process.env.NODE_ENV === 'production'
+        ? path.join(__dirname, '../migrations/index.js')
+        : path.join(__dirname, '../../src/migrations/index.js');
+
+      logger.info(`Loading migrations from: ${migrationsPath}`);
+      const { migrations } = require(migrationsPath);
+
+      // Run each migration in sequence
+      for (const migration of migrations) {
+        if (!completedMigrations.includes(migration.name)) {
+          logger.info(`Running migration: ${migration.name}`);
+          try {
+            await migration.up(queryInterface);
+            await markMigrationComplete(queryInterface, migration.name);
+            logger.info(`Completed migration: ${migration.name}`);
+          } catch (error) {
+            logger.error(`Error running migration ${migration.name}:`, error);
+            throw error;
+          }
+        } else {
+          logger.debug(`Skipping completed migration: ${migration.name}`);
+        }
       }
+    } catch (error) {
+      logger.error('Error running migrations:', error);
+      throw error;
     }
 
     logger.info('All migrations completed successfully');

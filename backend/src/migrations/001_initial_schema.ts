@@ -1,6 +1,9 @@
-import { QueryInterface, DataTypes } from 'sequelize';
+const { DataTypes } = require('sequelize');
 
-export async function up(queryInterface: QueryInterface): Promise<void> {
+/**
+ * @param {import('sequelize').QueryInterface} queryInterface
+ */
+const up = async (queryInterface) => {
   // Create Users table
   await queryInterface.createTable('users', {
     id: {
@@ -275,7 +278,10 @@ export async function up(queryInterface: QueryInterface): Promise<void> {
   });
 }
 
-export async function down(queryInterface: QueryInterface): Promise<void> {
+/**
+ * @param {import('sequelize').QueryInterface} queryInterface
+ */
+const down = async (queryInterface) => {
   await queryInterface.dropTable('user_settings');
   await queryInterface.dropTable('deployments');
   await queryInterface.dropTable('payloads');

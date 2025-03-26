@@ -14,7 +14,8 @@
     "migrate": "ts-node src/scripts/migrate.ts",
     "seed": "ts-node src/scripts/seed.ts",
     "test": "echo \"Error: no test specified\" && exit 1",
-    "heroku-postbuild": "tsc && node dist/scripts/migrate.js"
+    "heroku-postbuild": "tsc",
+    "db:migrate": "node dist/scripts/migrate.js"
   },
   "keywords": [],
   "author": "",
