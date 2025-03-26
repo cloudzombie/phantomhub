@@ -145,7 +145,17 @@ const sequelize = process.env.DATABASE_URL
           rejectUnauthorized: false
         }
       },
-      logging: NODE_ENV === 'development' ? (msg) => logger.debug(msg) : false
+      logging: NODE_ENV === 'development' ? (msg) => logger.debug(msg) : false,
+      pool: {
+        max: parseInt(DB_POOL_MAX, 10),
+        min: parseInt(DB_POOL_MIN, 10),
+        acquire: parseInt(DB_POOL_ACQUIRE, 10),
+        idle: parseInt(DB_POOL_IDLE, 10)
+      },
+      retry: {
+        max: parseInt(DB_RETRY_ATTEMPTS, 10),
+        backoffBase: parseInt(DB_RETRY_DELAY, 10)
+      }
     })
   : new Sequelize(DB_NAME, DB_USER, DB_PASSWORD, dbConfig);
 

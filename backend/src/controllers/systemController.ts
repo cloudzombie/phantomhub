@@ -99,9 +99,28 @@ export const getApiHealth = async (req: Request, res: Response) => {
       redisStatus = 'error';
     }
     
+    // Check database status
+    let dbStatus = 'offline';
+    let dbResponseTime = 0;
+    let dbHost = '';
+    let dbDialect = '';
+    
+    try {
+      const { sequelize } = require('../config/database');
+      const dbStartTime = Date.now();
+      await sequelize.authenticate();
+      dbResponseTime = Date.now() - dbStartTime;
+      dbStatus = 'online';
+      dbHost = sequelize.config.host || '';
+      dbDialect = sequelize.getDialect() || 'postgres';
+    } catch (error) {
+      console.error('Database connection error in health check:', error);
+      dbStatus = 'error';
+    }
+    
     // Put it all together
     const healthData = {
-      status: 'online',
+      status: dbStatus === 'online' && redisStatus === 'online' ? 'online' : 'degraded',
       version: 'v1.0.0 Beta',
       uptime,
       memory: {
@@ -112,6 +131,12 @@ export const getApiHealth = async (req: Request, res: Response) => {
       responseTime: 0, // This will be calculated on the client side
       cpuLoad,
       lastChecked: new Date(),
+      database: {
+        status: dbStatus,
+        responseTime: dbResponseTime,
+        dialect: dbDialect,
+        host: dbHost
+      },
       redis: {
         status: redisStatus,
         host: redisDetails?.host || '',
