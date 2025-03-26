@@ -10,6 +10,7 @@ class ApiService {
   private static instance: ApiService;
   private axiosInstance: AxiosInstance;
   private config: ApiConfig;
+  private baseURL: string;
 
   private constructor() {
     // Default configuration
@@ -18,6 +19,9 @@ class ApiService {
       pollingInterval: 60,
       timeout: 30
     };
+
+    // Clear any stored API settings that might override our hardcoded URL
+    this.clearAllApiSettings();
 
     // Initialize axios instance with default config
     this.axiosInstance = axios.create({
@@ -40,8 +44,14 @@ class ApiService {
     // Set up listener for configuration changes
     document.addEventListener('api-config-changed', this.handleConfigChange as EventListener);
     
-    // Load stored configuration
-    this.loadStoredConfig();
+    // We're not loading stored configuration anymore
+    // this.loadStoredConfig();
+    
+    // Always use the Heroku URL for socket connections
+    this.baseURL = 'https://ghostwire-backend-e0380bcf4e0e.herokuapp.com';
+    
+    // Initialize socket connection
+    this.initializeSocket();
   }
 
   public static getInstance(): ApiService {
@@ -70,17 +80,9 @@ class ApiService {
   }
 
   private loadStoredConfig(): void {
-    try {
-      const storedSettings = localStorage.getItem(this.getSettingsKey());
-      if (storedSettings) {
-        const settings = JSON.parse(storedSettings);
-        if (settings.api) {
-          this.updateConfig(settings.api);
-        }
-      }
-    } catch (error) {
-      console.error('Error loading stored API configuration:', error);
-    }
+    // In production, we always want to use the hardcoded Heroku URL
+    // So we're not loading any stored config
+    console.log('ApiService: Using hardcoded Heroku URL for API endpoint');
   }
 
   // Public method to explicitly reload settings for the current user
@@ -97,6 +99,22 @@ class ApiService {
     localStorage.removeItem('phantomhub_settings'); // Remove legacy settings as well
   }
 
+  // Clear all API settings from localStorage to ensure we use the hardcoded URL
+  private clearAllApiSettings(): void {
+    console.log('ApiService: Clearing all stored API settings');
+    // Clear any user-specific settings
+    this.clearUserSettings();
+    
+    // Also clear any settings that might be stored with different keys
+    const keys = Object.keys(localStorage);
+    for (const key of keys) {
+      if (key.includes('phantomhub_settings') || key.includes('api')) {
+        console.log(`ApiService: Removing stored setting: ${key}`);
+        localStorage.removeItem(key);
+      }
+    }
+  }
+
   private handleConfigChange = (event: CustomEvent<ApiConfig>): void => {
     if (event.detail) {
       this.updateConfig(event.detail);
@@ -104,11 +122,12 @@ class ApiService {
   };
 
   private updateConfig(newConfig: ApiConfig): void {
-    console.log('ApiService: Updating configuration', newConfig);
-    this.config = { ...this.config, ...newConfig };
+    console.log('ApiService: Ignoring configuration update in production', newConfig);
+    // In production, we always want to use the hardcoded Heroku URL
+    // So we're not updating the config
     
-    // Update axios instance with new config
-    this.axiosInstance.defaults.baseURL = this.config.endpoint;
+    // Force the baseURL to always be the hardcoded Heroku URL
+    this.axiosInstance.defaults.baseURL = 'https://ghostwire-backend-e0380bcf4e0e.herokuapp.com/api';
     this.axiosInstance.defaults.timeout = this.config.timeout * 1000;
   }
 
@@ -121,21 +140,33 @@ class ApiService {
   }
 
   public async get<T = any>(url: string, config?: AxiosRequestConfig): Promise<T> {
+    // Force the baseURL to be the hardcoded Heroku URL before each request
+    this.axiosInstance.defaults.baseURL = 'https://ghostwire-backend-e0380bcf4e0e.herokuapp.com/api';
+    console.log(`ApiService: Making GET request to ${this.axiosInstance.defaults.baseURL}${url}`);
     const response = await this.axiosInstance.get<T>(url, config);
     return response.data;
   }
 
   public async post<T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T> {
+    // Force the baseURL to be the hardcoded Heroku URL before each request
+    this.axiosInstance.defaults.baseURL = 'https://ghostwire-backend-e0380bcf4e0e.herokuapp.com/api';
+    console.log(`ApiService: Making POST request to ${this.axiosInstance.defaults.baseURL}${url}`);
     const response = await this.axiosInstance.post<T>(url, data, config);
     return response.data;
   }
 
   public async put<T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T> {
+    // Force the baseURL to be the hardcoded Heroku URL before each request
+    this.axiosInstance.defaults.baseURL = 'https://ghostwire-backend-e0380bcf4e0e.herokuapp.com/api';
+    console.log(`ApiService: Making PUT request to ${this.axiosInstance.defaults.baseURL}${url}`);
     const response = await this.axiosInstance.put<T>(url, data, config);
     return response.data;
   }
 
   public async delete<T = any>(url: string, config?: AxiosRequestConfig): Promise<T> {
+    // Force the baseURL to be the hardcoded Heroku URL before each request
+    this.axiosInstance.defaults.baseURL = 'https://ghostwire-backend-e0380bcf4e0e.herokuapp.com/api';
+    console.log(`ApiService: Making DELETE request to ${this.axiosInstance.defaults.baseURL}${url}`);
     const response = await this.axiosInstance.delete<T>(url, config);
     return response.data;
   }
@@ -143,6 +174,11 @@ class ApiService {
   public async patch<T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T> {
     const response = await this.axiosInstance.patch<T>(url, data, config);
     return response.data;
+  }
+
+  private initializeSocket(): void {
+    console.log('Initializing socket connection to:', this.baseURL);
+    // Socket initialization logic here
   }
 }
 
