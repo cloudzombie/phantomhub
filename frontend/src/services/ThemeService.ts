@@ -57,7 +57,7 @@ class ThemeService {
 
   private getSettingsKey(): string {
     const userId = this.getCurrentUserId();
-    return userId ? `phantomhub_settings_${userId}` : 'phantomhub_settings';
+    return userId ? `ghostwire_settings_${userId}` : 'ghostwire_settings';
   }
 
   private loadStoredConfig(): void {

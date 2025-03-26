@@ -72,7 +72,7 @@ const Layout = () => {
   const handleLogout = () => {
     // Clear user-specific settings before logout
     if (currentUser && currentUser.id) {
-      localStorage.removeItem(`phantomhub_settings_${currentUser.id}`);
+      localStorage.removeItem(`ghostwire_settings_${currentUser.id}`);
     }
     
     // Use the ApiService to clear settings properly
@@ -110,7 +110,7 @@ const Layout = () => {
         <div className="h-12 flex items-center justify-center border-b border-slate-700 bg-slate-800">
           <div className="flex items-center">
             <FiShield className="text-green-500 mr-1" size={14} />
-            <div className="text-xs font-bold tracking-wide">PHANTOM<span className="text-green-500">HUB</span></div>
+            <div className="text-xs font-bold tracking-wide">GHOST<span className="text-green-500">WIRE</span></div>
           </div>
         </div>
 
