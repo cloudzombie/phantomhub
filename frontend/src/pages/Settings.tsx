@@ -372,7 +372,7 @@ const Settings = () => {
           <FiSettings className="mr-2 text-green-500" size={20} />
           Settings
         </h1>
-        <p className="text-sm text-secondary">Configure your PhantomHub preferences</p>
+        <p className="text-sm text-secondary">Configure your GhostWire preferences</p>
       </div>
 
       {/* Status Messages */}
@@ -467,7 +467,7 @@ const Settings = () => {
             <SettingItem
               icon={<FiGlobe size={16} />}
               title="System Updates"
-              description="Get notified about PhantomHub system updates"
+              description="Get notified about GhostWire system updates"
             >
               <ToggleSwitch
                 checked={settings.notifications.systemUpdates}

@@ -91,7 +91,7 @@ const Login = () => {
         <div className="flex justify-center mb-6">
           <div className="flex items-center">
             <FiShield className="text-purple-500 mr-2" size={20} />
-            <h1 className="text-2xl font-bold text-white">PHANTOM<span className="text-purple-500">HUB</span></h1>
+            <h1 className="text-2xl font-bold text-white">GHOST<span className="text-purple-500">WIRE</span></h1>
           </div>
         </div>
         <p className="text-center mb-8 text-sm text-slate-400">
@@ -178,7 +178,7 @@ const Login = () => {
         
         <div className="mt-8 pt-6 border-t border-slate-700 text-center">
           <p className="text-xs text-slate-500">
-            PhantomHub © {new Date().getFullYear()} — Advanced Penetration Testing Platform
+            GhostWire © {new Date().getFullYear()} — Advanced Penetration Testing Platform
           </p>
         </div>
       </div>
