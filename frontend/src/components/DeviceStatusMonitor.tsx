@@ -90,7 +90,7 @@ const DeviceStatusMonitor: React.FC<DeviceStatusMonitorProps> = ({
     }
 
     const newSocket = io(
-      process.env.REACT_APP_BACKEND_URL || 'http://localhost:5001',
+      'https://ghostwire-backend-e0380bcf4e0e.herokuapp.com',
       {
         auth: { token },
         transports: ['websocket'],

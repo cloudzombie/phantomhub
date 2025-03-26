@@ -599,8 +599,8 @@ const Settings = () => {
         </div>
       </div>
 
-      {/* Debug Info - Hidden in production */}
-      {process.env.NODE_ENV !== 'production' && (
+      {/* Debug Info - Always hidden in production deployment */}
+      {false && (
         <div className="mt-12 p-4 border border-dashed border-slate-700 rounded text-slate-500 text-xs">
           <h3 className="font-medium mb-2">Debug Info</h3>
           <p>User ID: {getCurrentUserId() || 'Not logged in'}</p>

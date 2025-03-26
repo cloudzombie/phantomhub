@@ -108,13 +108,8 @@ const ApiHealthStatus: React.FC<ApiHealthStatusProps> = ({ onStatusChange }) => 
       // Get start time for response time calculation
       const startTime = Date.now();
       
-      // Determine if we're in production
-      const isProd = import.meta.env.PROD;
-      
-      // Use the Heroku URL directly in production
-      const apiUrl = isProd 
-        ? 'https://ghostwire-backend-e0380bcf4e0e.herokuapp.com/api'
-        : 'https://ghostwire-backend-e0380bcf4e0e.herokuapp.com/api';
+      // Always use the Heroku URL
+      const apiUrl = 'https://ghostwire-backend-e0380bcf4e0e.herokuapp.com/api';
       
       // Use system routes health endpoint
       const healthEndpoint = `${apiUrl}/system/health`;

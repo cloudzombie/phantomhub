@@ -21,11 +21,8 @@ class Logger {
   private maxLogs: number = 1000;
 
   private constructor() {
-    // Set log level from environment variable or default to 'info'
-    const envLevel = process.env.REACT_APP_LOG_LEVEL as LogLevel;
-    if (envLevel && ['error', 'warn', 'info', 'debug'].includes(envLevel)) {
-      this.logLevel = envLevel;
-    }
+    // Always use 'info' as the default log level for production
+    this.logLevel = 'info';
   }
 
   public static getInstance(): Logger {

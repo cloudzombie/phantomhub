@@ -10,7 +10,7 @@ import {
   FiWifi,
   FiEye
 } from 'react-icons/fi';
-import ApiService from '../services/ApiService';
+import apiServiceInstance from '../services/ApiService';
 import { 
   isWebSerialSupported, 
   requestSerialPort, 
@@ -94,8 +94,8 @@ const DeviceManagement = () => {
     setErrorMessage(null);
     
     try {
-      // Use ApiService instead of direct axios call
-      const response = await ApiService.get('/devices');
+      // Use apiServiceInstance instead of direct axios call
+      const response = await apiServiceInstance.get('/devices');
       
       // Access the devices array from the data property
       if (response.success && Array.isArray(response.data)) {
@@ -207,7 +207,7 @@ const DeviceManagement = () => {
         serialPortId: deviceInfo.info.deviceId || 'unknown'
       };
       
-      const response = await ApiService.post('/devices', deviceData, {
+      const response = await apiServiceInstance.post('/devices', deviceData, {
         headers: {
           Authorization: `Bearer ${token}`
         }
@@ -260,7 +260,7 @@ const DeviceManagement = () => {
         connectionType: 'network'
       };
       
-      const response = await ApiService.post('/devices', deviceData, {
+      const response = await apiServiceInstance.post('/devices', deviceData, {
         headers: {
           Authorization: `Bearer ${token}`
         }
@@ -299,8 +299,8 @@ const DeviceManagement = () => {
   const handleUpdateStatus = async (id: number, status: 'online' | 'offline') => {
     setErrorMessage(null);
     try {
-      // Use ApiService instead of direct axios call
-      const response = await ApiService.patch(`/devices/${id}`, { status });
+      // Use apiServiceInstance instead of direct axios call
+      const response = await apiServiceInstance.patch(`/devices/${id}`, { status });
       
       if (response && response.success) {
         setSuccessMessage(`O.MG Cable status updated to ${status}`);
