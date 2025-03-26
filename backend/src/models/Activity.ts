@@ -51,6 +51,7 @@ Activity.init(
         model: Device,
         key: 'id',
       },
+      field: 'device_id',
     },
     userId: {
       type: DataTypes.UUID,
@@ -59,6 +60,7 @@ Activity.init(
         model: User,
         key: 'id',
       },
+      field: 'user_id',
     },
     type: {
       type: DataTypes.ENUM('connection', 'disconnection', 'firmware_update', 'error', 'command', 'status_change'),
@@ -77,12 +79,13 @@ Activity.init(
   {
     sequelize,
     modelName: 'Activity',
+    underscored: true,
     indexes: [
       {
-        fields: ['deviceId'],
+        fields: ['device_id'],
       },
       {
-        fields: ['userId'],
+        fields: ['user_id'],
       },
       {
         fields: ['type'],
@@ -96,12 +99,12 @@ Activity.init(
 
 // Define associations
 Activity.belongsTo(Device, {
-  foreignKey: 'deviceId',
+  foreignKey: 'device_id',
   as: 'device',
 });
 
 Activity.belongsTo(User, {
-  foreignKey: 'userId',
+  foreignKey: 'user_id',
   as: 'user',
 });
 

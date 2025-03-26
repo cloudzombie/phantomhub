@@ -65,6 +65,7 @@ Device.init(
         model: User,
         key: 'id',
       },
+      field: 'user_id',
     },
     status: {
       type: DataTypes.ENUM('online', 'offline', 'error', 'maintenance'),
@@ -74,6 +75,7 @@ Device.init(
     connectionType: {
       type: DataTypes.ENUM('usb', 'network'),
       allowNull: false,
+      field: 'connection_type',
     },
     ipAddress: {
       type: DataTypes.STRING,
@@ -81,18 +83,22 @@ Device.init(
       validate: {
         isIP: true,
       },
+      field: 'ip_address',
     },
     serialPortId: {
       type: DataTypes.STRING,
       allowNull: true,
+      field: 'serial_port_id',
     },
     firmwareVersion: {
       type: DataTypes.STRING,
       allowNull: true,
+      field: 'firmware_version',
     },
     lastSeen: {
       type: DataTypes.DATE,
       allowNull: true,
+      field: 'last_seen',
     },
     batteryLevel: {
       type: DataTypes.INTEGER,
@@ -101,6 +107,7 @@ Device.init(
         min: 0,
         max: 100,
       },
+      field: 'battery_level',
     },
     signalStrength: {
       type: DataTypes.INTEGER,
@@ -109,6 +116,7 @@ Device.init(
         min: 0,
         max: 100,
       },
+      field: 'signal_strength',
     },
     errors: {
       type: DataTypes.JSON,
@@ -120,9 +128,10 @@ Device.init(
     sequelize,
     modelName: 'Device',
     tableName: 'devices',
+    underscored: true,
     indexes: [
       {
-        fields: ['userId'],
+        fields: ['user_id'],
       },
       {
         fields: ['status'],
@@ -133,7 +142,7 @@ Device.init(
 
 // Define associations
 Device.belongsTo(User, {
-  foreignKey: 'userId',
+  foreignKey: 'user_id',
   as: 'owner',
 });
 

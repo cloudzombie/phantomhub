@@ -35,6 +35,7 @@ PayloadScript.init(
         model: Payload,
         key: 'id',
       },
+      field: 'payload_id',
     },
     scriptId: {
       type: DataTypes.UUID,
@@ -43,26 +44,29 @@ PayloadScript.init(
         model: Script,
         key: 'id',
       },
+      field: 'script_id',
     },
     executionOrder: {
       type: DataTypes.INTEGER,
       allowNull: false,
       defaultValue: 0,
+      field: 'execution_order',
     },
   },
   {
     sequelize,
     modelName: 'PayloadScript',
     tableName: 'payload_scripts',
+    underscored: true,
     indexes: [
       {
-        fields: ['payloadId'],
+        fields: ['payload_id'],
       },
       {
-        fields: ['scriptId'],
+        fields: ['script_id'],
       },
       {
-        fields: ['payloadId', 'scriptId'],
+        fields: ['payload_id', 'script_id'],
         unique: true,
       },
     ],

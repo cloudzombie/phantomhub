@@ -80,11 +80,13 @@ Script.init(
         model: User,
         key: 'id',
       },
+      field: 'user_id',
     },
     isPublic: {
       type: DataTypes.BOOLEAN,
       allowNull: false,
       defaultValue: false,
+      field: 'is_public',
     },
     endpoint: {
       type: DataTypes.STRING,
@@ -93,24 +95,28 @@ Script.init(
     callbackUrl: {
       type: DataTypes.STRING,
       allowNull: true,
+      field: 'callback_url',
     },
     lastExecuted: {
       type: DataTypes.DATE,
       allowNull: true,
+      field: 'last_executed',
     },
     executionCount: {
       type: DataTypes.INTEGER,
       allowNull: false,
       defaultValue: 0,
+      field: 'execution_count',
     },
   },
   {
     sequelize,
     modelName: 'Script',
     tableName: 'scripts',
+    underscored: true,
     indexes: [
       {
-        fields: ['userId'],
+        fields: ['user_id'],
       },
       {
         fields: ['type'],
@@ -128,20 +134,20 @@ Script.init(
         fields: ['name'],
       },
       {
-        fields: ['isPublic'],
+        fields: ['is_public'],
       },
       {
         fields: ['createdAt'],
       },
       {
         name: 'scripts_access_pattern',
-        fields: ['isPublic', 'userId']
+        fields: ['is_public', 'user_id']
       }
     ]
   }
 );
 
 // Define associations
-Script.belongsTo(User, { foreignKey: 'userId', as: 'creator' });
+Script.belongsTo(User, { foreignKey: 'user_id', as: 'creator' });
 
 export default Script; 

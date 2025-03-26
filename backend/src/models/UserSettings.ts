@@ -81,6 +81,7 @@ UserSettings.init(
         key: 'id',
       },
       unique: true,
+      field: 'user_id',
     },
     theme: {
       type: DataTypes.ENUM('dark', 'light', 'system'),
@@ -96,6 +97,7 @@ UserSettings.init(
         systemUpdates: false,
         securityAlerts: true,
       },
+      field: 'notification_settings',
     },
     apiSettings: {
       type: DataTypes.JSONB,
@@ -105,6 +107,7 @@ UserSettings.init(
         pollingInterval: 60,
         timeout: 30,
       },
+      field: 'api_settings',
     },
     displaySettings: {
       type: DataTypes.JSONB,
@@ -114,6 +117,7 @@ UserSettings.init(
         showAdvancedOptions: true,
         dateFormat: 'MM/DD/YYYY',
       },
+      field: 'display_settings',
     },
     securitySettings: {
       type: DataTypes.JSONB,
@@ -122,15 +126,17 @@ UserSettings.init(
         autoLogout: 30,
         requireConfirmation: true,
       },
+      field: 'security_settings',
     },
   },
   {
     sequelize,
     modelName: 'UserSettings',
     tableName: 'user_settings',
+    underscored: true,
     indexes: [
       {
-        fields: ['userId'],
+        fields: ['user_id'],
         unique: true,
         // Important index for quickly retrieving settings by user
       }
@@ -139,6 +145,6 @@ UserSettings.init(
 );
 
 // Define association with User model
-UserSettings.belongsTo(User, { foreignKey: 'userId', as: 'user' });
+UserSettings.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
 
 export default UserSettings; 

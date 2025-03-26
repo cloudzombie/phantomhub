@@ -49,6 +49,7 @@ Deployment.init(
         model: Payload,
         key: 'id',
       },
+      field: 'payload_id',
     },
     deviceId: {
       type: DataTypes.UUID,
@@ -57,6 +58,7 @@ Deployment.init(
         model: Device,
         key: 'id',
       },
+      field: 'device_id',
     },
     userId: {
       type: DataTypes.UUID,
@@ -65,6 +67,7 @@ Deployment.init(
         model: User,
         key: 'id',
       },
+      field: 'user_id',
     },
     status: {
       type: DataTypes.ENUM('pending', 'connected', 'executing', 'completed', 'failed'),
@@ -80,17 +83,18 @@ Deployment.init(
     sequelize,
     modelName: 'Deployment',
     tableName: 'deployments',
+    underscored: true,
     indexes: [
       {
-        fields: ['userId'],
+        fields: ['user_id'],
         // Index for finding deployments by user
       },
       {
-        fields: ['deviceId'],
+        fields: ['device_id'],
         // Index for finding deployments by device
       },
       {
-        fields: ['payloadId'],
+        fields: ['payload_id'],
         // Index for finding deployments by payload
       },
       {
@@ -103,15 +107,15 @@ Deployment.init(
       },
       {
         // Composite index for common query patterns
-        fields: ['userId', 'status']
+        fields: ['user_id', 'status']
       }
     ]
   }
 );
 
 // Define associations
-Deployment.belongsTo(Payload, { foreignKey: 'payloadId', as: 'payload' });
-Deployment.belongsTo(Device, { foreignKey: 'deviceId', as: 'device' });
-Deployment.belongsTo(User, { foreignKey: 'userId', as: 'initiator' });
+Deployment.belongsTo(Payload, { foreignKey: 'payload_id', as: 'payload' });
+Deployment.belongsTo(Device, { foreignKey: 'device_id', as: 'device' });
+Deployment.belongsTo(User, { foreignKey: 'user_id', as: 'initiator' });
 
 export default Deployment; 

@@ -57,6 +57,7 @@ Command.init(
         model: Device,
         key: 'id',
       },
+      field: 'device_id',
     },
     userId: {
       type: DataTypes.UUID,
@@ -65,6 +66,7 @@ Command.init(
         model: User,
         key: 'id',
       },
+      field: 'user_id',
     },
     type: {
       type: DataTypes.ENUM('ducky', 'firmware', 'config', 'system'),
@@ -96,12 +98,13 @@ Command.init(
   {
     sequelize,
     modelName: 'Command',
+    underscored: true,
     indexes: [
       {
-        fields: ['deviceId'],
+        fields: ['device_id'],
       },
       {
-        fields: ['userId'],
+        fields: ['user_id'],
       },
       {
         fields: ['type'],
@@ -118,12 +121,12 @@ Command.init(
 
 // Define associations
 Command.belongsTo(Device, {
-  foreignKey: 'deviceId',
+  foreignKey: 'device_id',
   as: 'device',
 });
 
 Command.belongsTo(User, {
-  foreignKey: 'userId',
+  foreignKey: 'user_id',
   as: 'user',
 });
 
