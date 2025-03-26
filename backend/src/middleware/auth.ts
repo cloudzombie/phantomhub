@@ -18,11 +18,14 @@ const getRedisConfig = () => {
   if (process.env.REDIS_URL) {
     try {
       const redisUrl = new URL(process.env.REDIS_URL);
+      // For secure Redis connections (rediss://)
+      const isSecureRedis = process.env.REDIS_URL.startsWith('rediss://');
+      
       return {
         host: redisUrl.hostname,
         port: Number(redisUrl.port),
         password: redisUrl.password,
-        tls: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : undefined
+        tls: isSecureRedis || process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : undefined
       };
     } catch (error) {
       console.error('Error parsing REDIS_URL:', error);
