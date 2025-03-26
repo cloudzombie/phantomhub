@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { FiDownload, FiRefreshCw, FiFileText, FiInfo, FiAlertCircle, FiServer } from 'react-icons/fi';
 import axios from 'axios';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001/api';
+const API_URL = 'https://ghostwire-backend-e0380bcf4e0e.herokuapp.com/api';
 
 interface DeploymentResult {
   id: number;

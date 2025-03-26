@@ -3,7 +3,7 @@ import { FiUserPlus, FiShield, FiAlertCircle, FiCheckCircle, FiArrowLeft } from 
 import axios from 'axios';
 import { Link } from 'react-router-dom';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001/api';
+const API_URL = 'https://ghostwire-backend-e0380bcf4e0e.herokuapp.com/api';
 
 const Register = () => {
   const [name, setName] = useState('');

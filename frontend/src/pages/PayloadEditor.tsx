@@ -13,7 +13,7 @@ import {
   DEFAULT_SERIAL_OPTIONS
 } from '../utils/webSerialUtils';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001/api';
+const API_URL = 'https://ghostwire-backend-e0380bcf4e0e.herokuapp.com/api';
 
 // Default empty DuckyScript template
 const DEFAULT_DUCKY_SCRIPT = `REM DuckyScript Payload Template

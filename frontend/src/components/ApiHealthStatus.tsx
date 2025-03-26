@@ -114,7 +114,7 @@ const ApiHealthStatus: React.FC<ApiHealthStatusProps> = ({ onStatusChange }) => 
       // Use the Heroku URL directly in production
       const apiUrl = isProd 
         ? 'https://ghostwire-backend-e0380bcf4e0e.herokuapp.com/api'
-        : (import.meta.env.VITE_API_URL || 'http://localhost:5001/api');
+        : 'https://ghostwire-backend-e0380bcf4e0e.herokuapp.com/api';
       
       // Use system routes health endpoint
       const healthEndpoint = `${apiUrl}/system/health`;
