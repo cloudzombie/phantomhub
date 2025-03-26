@@ -440,7 +440,7 @@ const ApiHealthStatus: React.FC<ApiHealthStatusProps> = ({ onStatusChange }) => 
               <div className="w-full h-1 bg-slate-700 rounded-full overflow-hidden">
                 <div 
                   className={`h-full ${apiHealth.memory.percentage && apiHealth.memory.percentage > 80 ? 'bg-red-500' : 'bg-blue-500'}`}
-                  style={{ width: `${apiHealth.memory.percentage || 0}%` }}
+                  style={{ width: `${apiHealth.memory.percentage || Math.round((apiHealth.memory.used / apiHealth.memory.total) * 100) || 0}%` }}
                 />
               </div>
             </div>

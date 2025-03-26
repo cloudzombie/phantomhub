@@ -118,14 +118,25 @@ export const getApiHealth = async (req: Request, res: Response) => {
       dbStatus = 'error';
     }
     
+    // Get system information
+    const hostname = os.hostname();
+    const platform = os.platform();
+    const cpuInfo = os.cpus()[0]?.model || 'Unknown CPU';
+    const loadAvg = os.loadavg();
+    
     // Put it all together
     const healthData = {
       status: dbStatus === 'online' && redisStatus === 'online' ? 'online' : 'degraded',
       version: 'v1.0.0 Beta',
       uptime,
+      hostname,
+      platform,
+      cpuInfo,
+      loadAvg: loadAvg.map(load => load.toFixed(2)),
       memory: {
         used: Math.round(usedMemory / (1024 * 1024)), // in MB
-        total: Math.round(totalMemory / (1024 * 1024)) // in MB
+        total: Math.round(totalMemory / (1024 * 1024)), // in MB
+        percentage: Math.round((usedMemory / totalMemory) * 100) // Add percentage for graph
       },
       activeConnections,
       responseTime: 0, // This will be calculated on the client side
