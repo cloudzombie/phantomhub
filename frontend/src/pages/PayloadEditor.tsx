@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, ChangeEvent } from 'react';
 import { FiSave, FiCode, FiZap, FiInfo, FiAlertCircle, FiCheckCircle, FiRefreshCw, FiHardDrive, FiWifi, FiUpload, FiLink, FiList, FiFile, FiTrash2, FiPlusCircle, FiX, FiEdit2, FiEdit, FiCheck } from 'react-icons/fi';
 import axios from 'axios';
+import apiServiceInstance from '../services/ApiService';
 import * as monaco from 'monaco-editor';
 import { registerDuckyScriptLanguage } from '../utils/duckyScriptLanguage';
 import { 
@@ -13,6 +14,7 @@ import {
   DEFAULT_SERIAL_OPTIONS
 } from '../utils/webSerialUtils';
 
+// Hardcoded Heroku URL for API calls
 const API_URL = 'https://ghostwire-backend-e0380bcf4e0e.herokuapp.com/api';
 
 // Default empty DuckyScript template
@@ -175,11 +177,8 @@ const PayloadEditor = () => {
         return;
       }
       
-      const response = await axios.get(`${API_URL}/devices`, {
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
-      });
+      // Use apiServiceInstance instead of direct axios call
+      const response = await apiServiceInstance.get('/devices');
       
       if (response.data && response.data.success) {
         const fetchedDevices = response.data.data || [];
@@ -217,11 +216,8 @@ const PayloadEditor = () => {
         return;
       }
       
-      const response = await axios.get(`${API_URL}/payloads`, {
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
-      });
+      // Use apiServiceInstance instead of direct axios call
+      const response = await apiServiceInstance.get('/payloads');
       
       if (response.data && response.data.success) {
         const fetchedPayloads = response.data.data || [];
