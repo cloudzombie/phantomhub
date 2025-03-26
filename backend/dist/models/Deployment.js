@@ -23,6 +23,7 @@ Deployment.init({
             model: Payload_1.default,
             key: 'id',
         },
+        field: 'payload_id',
     },
     deviceId: {
         type: sequelize_1.DataTypes.UUID,
@@ -31,6 +32,7 @@ Deployment.init({
             model: Device_1.default,
             key: 'id',
         },
+        field: 'device_id',
     },
     userId: {
         type: sequelize_1.DataTypes.UUID,
@@ -39,6 +41,7 @@ Deployment.init({
             model: User_1.default,
             key: 'id',
         },
+        field: 'user_id',
     },
     status: {
         type: sequelize_1.DataTypes.ENUM('pending', 'connected', 'executing', 'completed', 'failed'),
@@ -53,17 +56,18 @@ Deployment.init({
     sequelize: database_1.sequelize,
     modelName: 'Deployment',
     tableName: 'deployments',
+    underscored: true,
     indexes: [
         {
-            fields: ['userId'],
+            fields: ['user_id'],
             // Index for finding deployments by user
         },
         {
-            fields: ['deviceId'],
+            fields: ['device_id'],
             // Index for finding deployments by device
         },
         {
-            fields: ['payloadId'],
+            fields: ['payload_id'],
             // Index for finding deployments by payload
         },
         {
@@ -76,12 +80,12 @@ Deployment.init({
         },
         {
             // Composite index for common query patterns
-            fields: ['userId', 'status']
+            fields: ['user_id', 'status']
         }
     ]
 });
 // Define associations
-Deployment.belongsTo(Payload_1.default, { foreignKey: 'payloadId', as: 'payload' });
-Deployment.belongsTo(Device_1.default, { foreignKey: 'deviceId', as: 'device' });
-Deployment.belongsTo(User_1.default, { foreignKey: 'userId', as: 'initiator' });
+Deployment.belongsTo(Payload_1.default, { foreignKey: 'payload_id', as: 'payload' });
+Deployment.belongsTo(Device_1.default, { foreignKey: 'device_id', as: 'device' });
+Deployment.belongsTo(User_1.default, { foreignKey: 'user_id', as: 'initiator' });
 exports.default = Deployment;

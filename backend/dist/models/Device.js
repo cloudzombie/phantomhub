@@ -30,6 +30,7 @@ Device.init({
             model: User_1.default,
             key: 'id',
         },
+        field: 'user_id',
     },
     status: {
         type: sequelize_1.DataTypes.ENUM('online', 'offline', 'error', 'maintenance'),
@@ -39,6 +40,7 @@ Device.init({
     connectionType: {
         type: sequelize_1.DataTypes.ENUM('usb', 'network'),
         allowNull: false,
+        field: 'connection_type',
     },
     ipAddress: {
         type: sequelize_1.DataTypes.STRING,
@@ -46,18 +48,22 @@ Device.init({
         validate: {
             isIP: true,
         },
+        field: 'ip_address',
     },
     serialPortId: {
         type: sequelize_1.DataTypes.STRING,
         allowNull: true,
+        field: 'serial_port_id',
     },
     firmwareVersion: {
         type: sequelize_1.DataTypes.STRING,
         allowNull: true,
+        field: 'firmware_version',
     },
     lastSeen: {
         type: sequelize_1.DataTypes.DATE,
         allowNull: true,
+        field: 'last_seen',
     },
     batteryLevel: {
         type: sequelize_1.DataTypes.INTEGER,
@@ -66,6 +72,7 @@ Device.init({
             min: 0,
             max: 100,
         },
+        field: 'battery_level',
     },
     signalStrength: {
         type: sequelize_1.DataTypes.INTEGER,
@@ -74,6 +81,7 @@ Device.init({
             min: 0,
             max: 100,
         },
+        field: 'signal_strength',
     },
     errors: {
         type: sequelize_1.DataTypes.JSON,
@@ -84,9 +92,10 @@ Device.init({
     sequelize: database_1.sequelize,
     modelName: 'Device',
     tableName: 'devices',
+    underscored: true,
     indexes: [
         {
-            fields: ['userId'],
+            fields: ['user_id'],
         },
         {
             fields: ['status'],
@@ -95,7 +104,7 @@ Device.init({
 });
 // Define associations
 Device.belongsTo(User_1.default, {
-    foreignKey: 'userId',
+    foreignKey: 'user_id',
     as: 'owner',
 });
 exports.default = Device;

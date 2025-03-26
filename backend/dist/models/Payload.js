@@ -33,14 +33,16 @@ Payload.init({
             model: User_1.default,
             key: 'id',
         },
+        field: 'user_id',
     },
 }, {
     sequelize: database_1.sequelize,
     modelName: 'Payload',
     tableName: 'payloads',
+    underscored: true,
     indexes: [
         {
-            fields: ['userId'],
+            fields: ['user_id'],
             // Index for quickly finding payloads by user
         },
         {
@@ -54,5 +56,5 @@ Payload.init({
     ]
 });
 // Define associations
-Payload.belongsTo(User_1.default, { foreignKey: 'userId', as: 'creator' });
+Payload.belongsTo(User_1.default, { foreignKey: 'user_id', as: 'creator' });
 exports.default = Payload;

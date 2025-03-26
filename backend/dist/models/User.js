@@ -1,9 +1,9 @@
 "use strict";
 /**
- * User Model
- *
- * Represents a user in the system
- */
+* User Model
+*
+* Represents a user in the system with proper field mapping
+*/
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -89,52 +89,64 @@ User.init({
     lastLogin: {
         type: sequelize_1.DataTypes.DATE,
         allowNull: true,
+        field: 'last_login',
     },
     isActive: {
         type: sequelize_1.DataTypes.BOOLEAN,
         allowNull: false,
         defaultValue: true,
+        field: 'is_active',
     },
     failedLoginAttempts: {
         type: sequelize_1.DataTypes.INTEGER,
         allowNull: false,
         defaultValue: 0,
+        field: 'failed_login_attempts',
     },
     lastFailedLogin: {
         type: sequelize_1.DataTypes.DATE,
         allowNull: true,
+        field: 'last_failed_login',
     },
     passwordLastChanged: {
         type: sequelize_1.DataTypes.DATE,
         allowNull: true,
+        field: 'password_last_changed',
     },
     passwordHistory: {
-        type: sequelize_1.DataTypes.ARRAY(sequelize_1.DataTypes.STRING),
+        type: sequelize_1.DataTypes.JSONB,
         allowNull: true,
+        field: 'password_history',
     },
     mfaEnabled: {
         type: sequelize_1.DataTypes.BOOLEAN,
         allowNull: false,
         defaultValue: false,
+        field: 'mfa_enabled',
     },
     mfaSecret: {
         type: sequelize_1.DataTypes.STRING,
         allowNull: true,
+        field: 'mfa_secret',
     },
     sessionTimeout: {
         type: sequelize_1.DataTypes.INTEGER,
         allowNull: false,
         defaultValue: 3600, // 1 hour in seconds
+        field: 'session_timeout',
     },
     requirePasswordChange: {
         type: sequelize_1.DataTypes.BOOLEAN,
         allowNull: false,
         defaultValue: true,
+        field: 'require_password_change',
     },
 }, {
     sequelize: database_1.sequelize,
     modelName: 'User',
     tableName: 'users',
+    // Use underscored instead of camelcase
+    underscored: true,
     hooks: {
         beforeCreate: async (user) => {
             if (user.password) {

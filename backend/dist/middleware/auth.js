@@ -16,14 +16,30 @@ const ioredis_1 = require("ioredis");
 const logger_1 = __importDefault(require("../utils/logger"));
 const User_1 = __importDefault(require("../models/User"));
 const rate_limiter_flexible_1 = require("rate-limiter-flexible");
+// Parse REDIS_URL if available (Heroku provides this)
+const getRedisConfig = () => {
+    if (process.env.REDIS_URL) {
+        try {
+            const redisUrl = new URL(process.env.REDIS_URL);
+            return {
+                host: redisUrl.hostname,
+                port: Number(redisUrl.port),
+                password: redisUrl.password,
+                tls: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : undefined
+            };
+        }
+        catch (error) {
+            console.error('Error parsing REDIS_URL:', error);
+        }
+    }
+    return {
+        host: process.env.REDIS_HOST || 'localhost',
+        port: Number(process.env.REDIS_PORT || 6379),
+        password: process.env.REDIS_PASSWORD || undefined
+    };
+};
 // Initialize Redis client for token blacklist and rate limiting
-const redis = new ioredis_1.Redis({
-    host: process.env.REDIS_HOST || 'localhost',
-    port: Number(process.env.REDIS_PORT || 6379),
-    password: process.env.REDIS_PASSWORD || undefined,
-    enableReadyCheck: true,
-    maxRetriesPerRequest: 3
-});
+const redis = new ioredis_1.Redis(getRedisConfig());
 // Rate limiter configuration
 const rateLimiter = new rate_limiter_flexible_1.RateLimiterRedis({
     storeClient: redis,
