@@ -52,6 +52,11 @@ interface ApiHealth {
     dialect: string;
     host: string;
   };
+  redis?: {
+    status: 'online' | 'offline' | 'error';
+    host?: string;
+    port?: number;
+  };
   activeConnections: number;
   responseTime: number;
   cpuLoad: number;
@@ -76,6 +81,11 @@ const ApiHealthStatus: React.FC<ApiHealthStatusProps> = ({ onStatusChange }) => 
       responseTime: 0,
       dialect: '',
       host: ''
+    },
+    redis: {
+      status: 'offline',
+      host: '',
+      port: 0
     },
     activeConnections: 0,
     responseTime: 0,
@@ -392,6 +402,26 @@ const ApiHealthStatus: React.FC<ApiHealthStatusProps> = ({ onStatusChange }) => 
                 <div className="text-[8px] text-slate-500 flex justify-between items-center">
                   <span>Response: {apiHealth.database.responseTime}ms</span>
                   <span>{apiHealth.database.dialect}@{apiHealth.database.host}</span>
+                </div>
+              )}
+            </div>
+            
+            {/* Redis Status */}
+            <div className="flex flex-col gap-1">
+              <div className="flex justify-between items-center">
+                <div className="text-[9px] text-slate-400 flex items-center">
+                  <FiDatabase className="mr-1" size={10} />
+                  Redis
+                </div>
+                <div className="text-[9px] font-mono flex items-center">
+                  <div className={`w-1.5 h-1.5 rounded-full ${getStatusColor(apiHealth.redis?.status || 'offline')} mr-1`}></div>
+                  {apiHealth.redis?.status === 'online' ? 'Connected' : apiHealth.redis?.status === 'error' ? 'Error' : 'Disconnected'}
+                </div>
+              </div>
+              {apiHealth.redis?.status === 'online' && apiHealth.redis.host && (
+                <div className="text-[8px] text-slate-500 flex justify-between items-center">
+                  <span>Cache System</span>
+                  <span>{apiHealth.redis.host}{apiHealth.redis.port ? `:${apiHealth.redis.port}` : ''}</span>
                 </div>
               )}
             </div>

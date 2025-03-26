@@ -1,5 +1,28 @@
 import { Request, Response } from 'express';
 import os from 'os';
+import { Redis } from 'ioredis';
+
+// Import Redis configuration function
+const getRedisConfig = () => {
+  if (process.env.REDIS_URL) {
+    try {
+      const redisUrl = new URL(process.env.REDIS_URL);
+      return {
+        host: redisUrl.hostname,
+        port: Number(redisUrl.port),
+        password: redisUrl.password,
+        tls: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : undefined
+      };
+    } catch (error) {
+      console.error('Error parsing REDIS_URL:', error);
+    }
+  }
+  return {
+    host: process.env.REDIS_HOST || 'localhost',
+    port: Number(process.env.REDIS_PORT || 6379),
+    password: process.env.REDIS_PASSWORD || undefined
+  };
+};
 
 // Track when the server started
 const serverStartTime = new Date();
@@ -42,6 +65,35 @@ export const getApiHealth = async (req: Request, res: Response) => {
       console.error('Error counting active socket connections:', error);
     }
     
+    // Check Redis status
+    let redisStatus = 'offline';
+    let redisConfig = getRedisConfig();
+    let redisDetails = null;
+    
+    try {
+      // Create a Redis client specifically for this health check
+      const redisClient = new Redis(redisConfig);
+      
+      // Ping Redis to check status
+      const pingResult = await redisClient.ping();
+      if (pingResult === 'PONG') {
+        redisStatus = 'online';
+        redisDetails = {
+          host: redisConfig.host,
+          port: redisConfig.port
+        };
+      } else {
+        redisStatus = 'error';
+      }
+      
+      // Disconnect this test client
+      await redisClient.quit();
+      
+    } catch (error) {
+      console.error('Error checking Redis health:', error);
+      redisStatus = 'error';
+    }
+    
     // Put it all together
     const healthData = {
       status: 'online',
@@ -55,6 +107,11 @@ export const getApiHealth = async (req: Request, res: Response) => {
       responseTime: 0, // This will be calculated on the client side
       cpuLoad,
       lastChecked: new Date(),
+      redis: {
+        status: redisStatus,
+        host: redisDetails?.host || '',
+        port: redisDetails?.port || 0
+      },
       rateLimiting: {
         status: 'enabled',
         provider: 'Redis',

@@ -2,30 +2,43 @@ import { Model, DataTypes, Association } from 'sequelize';
 import { sequelize } from '../config/database';
 import User from './User';
 
+// Define nested interface types for better organization
+interface NotificationSettings {
+  deviceStatus: boolean;
+  deploymentAlerts: boolean;
+  systemUpdates: boolean;
+  securityAlerts: boolean;
+}
+
+interface ApiSettings {
+  endpoint: string;
+  pollingInterval: number;
+  timeout: number;
+}
+
+interface DisplaySettings {
+  compactView: boolean;
+  showAdvancedOptions: boolean;
+  dateFormat: string;
+}
+
+interface SecuritySettings {
+  autoLogout: number;
+  requireConfirmation: boolean;
+}
+
+interface SettingsObject {
+  theme: 'dark' | 'light' | 'system';
+  notificationSettings: NotificationSettings;
+  apiSettings: ApiSettings;
+  displaySettings: DisplaySettings;
+  securitySettings: SecuritySettings;
+}
+
 interface UserSettingsAttributes {
   id?: string;
   userId: string;
-  theme: 'dark' | 'light' | 'system';
-  notificationSettings: {
-    deviceStatus: boolean;
-    deploymentAlerts: boolean;
-    systemUpdates: boolean;
-    securityAlerts: boolean;
-  };
-  apiSettings: {
-    endpoint: string;
-    pollingInterval: number;
-    timeout: number;
-  };
-  displaySettings: {
-    compactView: boolean;
-    showAdvancedOptions: boolean;
-    dateFormat: string;
-  };
-  securitySettings: {
-    autoLogout: number;
-    requireConfirmation: boolean;
-  };
+  settings: SettingsObject;
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -35,30 +48,53 @@ interface UserSettingsCreationAttributes extends Omit<UserSettingsAttributes, 'i
 class UserSettings extends Model<UserSettingsAttributes, UserSettingsCreationAttributes> implements UserSettingsAttributes {
   public id!: string;
   public userId!: string;
-  public theme!: 'dark' | 'light' | 'system';
-  public notificationSettings!: {
-    deviceStatus: boolean;
-    deploymentAlerts: boolean;
-    systemUpdates: boolean;
-    securityAlerts: boolean;
-  };
-  public apiSettings!: {
-    endpoint: string;
-    pollingInterval: number;
-    timeout: number;
-  };
-  public displaySettings!: {
-    compactView: boolean;
-    showAdvancedOptions: boolean;
-    dateFormat: string;
-  };
-  public securitySettings!: {
-    autoLogout: number;
-    requireConfirmation: boolean;
+  public settings!: {
+    theme: 'dark' | 'light' | 'system';
+    notificationSettings: {
+      deviceStatus: boolean;
+      deploymentAlerts: boolean;
+      systemUpdates: boolean;
+      securityAlerts: boolean;
+    };
+    apiSettings: {
+      endpoint: string;
+      pollingInterval: number;
+      timeout: number;
+    };
+    displaySettings: {
+      compactView: boolean;
+      showAdvancedOptions: boolean;
+      dateFormat: string;
+    };
+    securitySettings: {
+      autoLogout: number;
+      requireConfirmation: boolean;
+    };
   };
 
   public readonly createdAt!: Date;
   public readonly updatedAt!: Date;
+  
+  // Getter methods to make it easier to access nested fields
+  get theme(): 'dark' | 'light' | 'system' {
+    return this.settings.theme;
+  }
+  
+  get notificationSettings(): NotificationSettings {
+    return this.settings.notificationSettings;
+  }
+  
+  get apiSettings(): ApiSettings {
+    return this.settings.apiSettings;
+  }
+  
+  get displaySettings(): DisplaySettings {
+    return this.settings.displaySettings;
+  }
+  
+  get securitySettings(): SecuritySettings {
+    return this.settings.securitySettings;
+  }
 
   // Define associations
   public static associations: {
@@ -83,50 +119,32 @@ UserSettings.init(
       unique: true,
       field: 'user_id',
     },
-    theme: {
-      type: DataTypes.ENUM('dark', 'light', 'system'),
-      allowNull: false,
-      defaultValue: 'dark',
-    },
-    notificationSettings: {
+    settings: {
       type: DataTypes.JSONB,
       allowNull: false,
       defaultValue: {
-        deviceStatus: true,
-        deploymentAlerts: true,
-        systemUpdates: false,
-        securityAlerts: true,
+        theme: 'dark',
+        notificationSettings: {
+          deviceStatus: true,
+          deploymentAlerts: true,
+          systemUpdates: false,
+          securityAlerts: true,
+        },
+        apiSettings: {
+          endpoint: 'http://localhost:5001/api',
+          pollingInterval: 60,
+          timeout: 30,
+        },
+        displaySettings: {
+          compactView: false,
+          showAdvancedOptions: true,
+          dateFormat: 'MM/DD/YYYY',
+        },
+        securitySettings: {
+          autoLogout: 30,
+          requireConfirmation: true,
+        },
       },
-      field: 'notification_settings',
-    },
-    apiSettings: {
-      type: DataTypes.JSONB,
-      allowNull: false,
-      defaultValue: {
-        endpoint: 'http://localhost:5001/api',
-        pollingInterval: 60,
-        timeout: 30,
-      },
-      field: 'api_settings',
-    },
-    displaySettings: {
-      type: DataTypes.JSONB,
-      allowNull: false,
-      defaultValue: {
-        compactView: false,
-        showAdvancedOptions: true,
-        dateFormat: 'MM/DD/YYYY',
-      },
-      field: 'display_settings',
-    },
-    securitySettings: {
-      type: DataTypes.JSONB,
-      allowNull: false,
-      defaultValue: {
-        autoLogout: 30,
-        requireConfirmation: true,
-      },
-      field: 'security_settings',
     },
   },
   {
