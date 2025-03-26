@@ -127,7 +127,7 @@ const Login = () => {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="w-full px-3 py-2 bg-transparent text-white text-sm focus:outline-none"
-                placeholder="admin@phantomhub.io"
+                placeholder="admin@ghostwire.io"
               />
             </div>
             

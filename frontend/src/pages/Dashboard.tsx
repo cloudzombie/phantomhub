@@ -421,7 +421,7 @@ const Dashboard = () => {
       <div className="bg-slate-800 border border-slate-700 rounded-md p-4 shadow-sm">
         <h3 className="text-sm font-medium text-white flex items-center mb-2">
           <FiInfo className="mr-2 text-green-500" size={16} />
-          Getting Started with PhantomHub
+          Getting Started with GhostWire
         </h3>
         <p className="text-xs text-slate-400 mb-3">
           Connect your O.MG cables via the Devices page and create custom payloads in the Payload Editor. View attack results and captured data in the Results section.

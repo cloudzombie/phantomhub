@@ -182,7 +182,7 @@ const Layout = () => {
           
           {/* Footer */}
           <footer className="py-2 px-4 border-t border-slate-800/50 text-center text-xs text-slate-500">
-            PhantomHub © {new Date().getFullYear()} — Advanced Penetration Testing Platform
+            GhostWire © {new Date().getFullYear()} — Advanced Penetration Testing Platform
           </footer>
         </main>
       </div>
