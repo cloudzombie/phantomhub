@@ -1,13 +1,13 @@
-# PhantomHub API Documentation
+# GhostWire API Documentation
 
-This document provides a comprehensive guide to the PhantomHub REST API endpoints, their methods, required parameters, and expected responses.
+This document provides a comprehensive guide to the GhostWire REST API endpoints, their methods, required parameters, and expected responses.
 
 ## Base URL
 
 All API endpoints are relative to:
 
 ```
-http://localhost:5001/api
+https://ghostwire-backend-e0380bcf4e0e.herokuapp.com/api
 ```
 
 ## Authentication
@@ -18,20 +18,928 @@ Most API endpoints require authentication. Include a valid JWT token in the Auth
 Authorization: Bearer YOUR_JWT_TOKEN
 ```
 
-### Authentication Endpoints
+## Rate Limiting
+
+All API endpoints are protected by rate limiting to prevent abuse. Different endpoints have different rate limits based on their sensitivity.
+
+## API Endpoints
+
+### Authentication
 
 #### Register a new user
 - **URL**: `/auth/register`
 - **Method**: `POST`
 - **Auth required**: No
+- **Rate limited**: Yes
 - **Body**:
   ```json
   {
-    "username": "string",
+    "name": "string",
+    "email": "string",
+    "password": "string",
+    "role": "string" // Optional, defaults to "user"
+  }
+  ```
+- **Response**:
+  ```json
+  {
+    "success": true,
+    "message": "User registered successfully",
+    "token": "JWT_TOKEN",
+    "user": {
+      "id": "string",
+      "name": "string",
+      "email": "string",
+      "role": "string"
+    }
+  }
+  ```
+
+#### Login
+- **URL**: `/auth/login`
+- **Method**: `POST`
+- **Auth required**: No
+- **Rate limited**: Yes
+- **Body**:
+  ```json
+  {
     "email": "string",
     "password": "string"
   }
   ```
+- **Response**:
+  ```json
+  {
+    "success": true,
+    "token": "JWT_TOKEN",
+    "user": {
+      "id": "string",
+      "name": "string",
+      "email": "string",
+      "role": "string"
+    }
+  }
+  ```
+
+#### Get Current User
+- **URL**: `/auth/me`
+- **Method**: `GET`
+- **Auth required**: Yes
+- **Response**:
+  ```json
+  {
+    "success": true,
+    "user": {
+      "id": "string",
+      "name": "string",
+      "email": "string",
+      "role": "string"
+    }
+  }
+  ```
+
+### Devices
+
+#### Get All Devices
+- **URL**: `/devices`
+- **Method**: `GET`
+- **Auth required**: Yes
+- **Rate limited**: Yes
+- **Response**:
+  ```json
+  {
+    "success": true,
+    "data": [
+      {
+        "id": "number",
+        "name": "string",
+        "ipAddress": "string",
+        "firmwareVersion": "string",
+        "status": "online|offline|busy",
+        "connectionType": "network|usb",
+        "serialPortId": "string",
+        "lastCheckIn": "string",
+        "createdAt": "string",
+        "updatedAt": "string",
+        "userId": "number"
+      }
+    ]
+  }
+  ```
+
+#### Get Single Device
+- **URL**: `/devices/:id`
+- **Method**: `GET`
+- **Auth required**: Yes
+- **Rate limited**: Yes
+- **Response**:
+  ```json
+  {
+    "success": true,
+    "data": {
+      "id": "number",
+      "name": "string",
+      "ipAddress": "string",
+      "firmwareVersion": "string",
+      "status": "online|offline|busy",
+      "connectionType": "network|usb",
+      "serialPortId": "string",
+      "lastCheckIn": "string",
+      "createdAt": "string",
+      "updatedAt": "string",
+      "userId": "number"
+    }
+  }
+  ```
+
+#### Get Device Activities
+- **URL**: `/devices/:id/activities`
+- **Method**: `GET`
+- **Auth required**: Yes
+- **Rate limited**: Yes
+- **Response**:
+  ```json
+  {
+    "success": true,
+    "data": [
+      {
+        "id": "number",
+        "deviceId": "number",
+        "activityType": "string",
+        "details": "object",
+        "timestamp": "string"
+      }
+    ]
+  }
+  ```
+
+#### Create Device
+- **URL**: `/devices`
+- **Method**: `POST`
+- **Auth required**: Yes (Operator or Admin)
+- **Rate limited**: Yes
+- **Body**:
+  ```json
+  {
+    "name": "string",
+    "ipAddress": "string",
+    "firmwareVersion": "string",
+    "connectionType": "network|usb",
+    "serialPortId": "string"
+  }
+  ```
+- **Response**:
+  ```json
+  {
+    "success": true,
+    "data": {
+      "id": "number",
+      "name": "string",
+      "ipAddress": "string",
+      "firmwareVersion": "string",
+      "status": "offline",
+      "connectionType": "network|usb",
+      "serialPortId": "string",
+      "createdAt": "string",
+      "updatedAt": "string",
+      "userId": "number"
+    }
+  }
+  ```
+
+#### Update Device Status
+- **URL**: `/devices/:id/status`
+- **Method**: `PATCH`
+- **Auth required**: Yes (Operator or Admin)
+- **Rate limited**: Yes
+- **Body**:
+  ```json
+  {
+    "status": "online|offline|busy"
+  }
+  ```
+- **Response**:
+  ```json
+  {
+    "success": true,
+    "data": {
+      "id": "number",
+      "status": "string",
+      "updatedAt": "string"
+    }
+  }
+  ```
+
+#### Send Payload to Device
+- **URL**: `/devices/:id/send-payload`
+- **Method**: `POST`
+- **Auth required**: Yes (Operator or Admin)
+- **Rate limited**: Yes
+- **Body**:
+  ```json
+  {
+    "payloadId": "number"
+  }
+  ```
+- **Response**:
+  ```json
+  {
+    "success": true,
+    "data": {
+      "deploymentId": "number",
+      "message": "Payload sent successfully"
+    }
+  }
+  ```
+
+### Payloads
+
+#### Get All Payloads
+- **URL**: `/payloads`
+- **Method**: `GET`
+- **Auth required**: Yes (Operator or Admin)
+- **Rate limited**: Yes
+- **Response**:
+  ```json
+  {
+    "success": true,
+    "data": [
+      {
+        "id": "string",
+        "name": "string",
+        "script": "string",
+        "description": "string",
+        "createdAt": "string",
+        "updatedAt": "string",
+        "userId": "string"
+      }
+    ]
+  }
+  ```
+
+#### Get Single Payload
+- **URL**: `/payloads/:id`
+- **Method**: `GET`
+- **Auth required**: Yes (Operator or Admin)
+- **Rate limited**: Yes
+- **Response**:
+  ```json
+  {
+    "success": true,
+    "data": {
+      "id": "string",
+      "name": "string",
+      "script": "string",
+      "description": "string",
+      "createdAt": "string",
+      "updatedAt": "string",
+      "userId": "string"
+    }
+  }
+  ```
+
+#### Create Payload
+- **URL**: `/payloads`
+- **Method**: `POST`
+- **Auth required**: Yes (Operator or Admin)
+- **Rate limited**: Yes
+- **Body**:
+  ```json
+  {
+    "name": "string",
+    "script": "string",
+    "description": "string"
+  }
+  ```
+- **Response**:
+  ```json
+  {
+    "success": true,
+    "data": {
+      "id": "string",
+      "name": "string",
+      "script": "string",
+      "description": "string",
+      "createdAt": "string",
+      "updatedAt": "string",
+      "userId": "string"
+    }
+  }
+  ```
+
+#### Update Payload
+- **URL**: `/payloads/:id`
+- **Method**: `PUT`
+- **Auth required**: Yes (Operator or Admin)
+- **Rate limited**: Yes
+- **Body**:
+  ```json
+  {
+    "name": "string",
+    "script": "string",
+    "description": "string"
+  }
+  ```
+- **Response**:
+  ```json
+  {
+    "success": true,
+    "data": {
+      "id": "string",
+      "name": "string",
+      "script": "string",
+      "description": "string",
+      "updatedAt": "string"
+    }
+  }
+  ```
+
+#### Delete Payload
+- **URL**: `/payloads/:id`
+- **Method**: `DELETE`
+- **Auth required**: Yes
+- **Rate limited**: Yes
+- **Response**:
+  ```json
+  {
+    "success": true,
+    "message": "Payload deleted successfully"
+  }
+  ```
+
+#### Deploy Payload
+- **URL**: `/payloads/deploy`
+- **Method**: `POST`
+- **Auth required**: Yes (Operator or Admin)
+- **Rate limited**: Yes
+- **Body**:
+  ```json
+  {
+    "payloadId": "string",
+    "deviceId": "number"
+  }
+  ```
+- **Response**:
+  ```json
+  {
+    "success": true,
+    "data": {
+      "deploymentId": "number",
+      "message": "Payload deployed successfully"
+    }
+  }
+  ```
+
+### Deployments
+
+#### Get All Deployments
+- **URL**: `/deployments`
+- **Method**: `GET`
+- **Auth required**: Yes (Operator or Admin)
+- **Rate limited**: Yes
+- **Response**:
+  ```json
+  {
+    "success": true,
+    "data": [
+      {
+        "id": "number",
+        "deviceId": "number",
+        "payloadId": "number",
+        "userId": "number",
+        "status": "string",
+        "result": "string",
+        "createdAt": "string",
+        "updatedAt": "string",
+        "device": {
+          "id": "number",
+          "name": "string",
+          "ipAddress": "string",
+          "status": "string"
+        },
+        "payload": {
+          "id": "number",
+          "name": "string",
+          "description": "string"
+        }
+      }
+    ]
+  }
+  ```
+
+#### Get Single Deployment
+- **URL**: `/deployments/:id`
+- **Method**: `GET`
+- **Auth required**: Yes (Operator or Admin)
+- **Rate limited**: Yes
+- **Response**:
+  ```json
+  {
+    "success": true,
+    "data": {
+      "id": "number",
+      "deviceId": "number",
+      "payloadId": "number",
+      "userId": "number",
+      "status": "string",
+      "result": "string",
+      "createdAt": "string",
+      "updatedAt": "string",
+      "device": {
+        "id": "number",
+        "name": "string",
+        "ipAddress": "string",
+        "status": "string"
+      },
+      "payload": {
+        "id": "number",
+        "name": "string",
+        "description": "string"
+      }
+    }
+  }
+  ```
+
+#### Get Device Deployments
+- **URL**: `/deployments/device/:deviceId`
+- **Method**: `GET`
+- **Auth required**: Yes (Operator or Admin)
+- **Rate limited**: Yes
+- **Response**:
+  ```json
+  {
+    "success": true,
+    "data": [
+      {
+        "id": "number",
+        "deviceId": "number",
+        "payloadId": "number",
+        "userId": "number",
+        "status": "string",
+        "result": "string",
+        "createdAt": "string",
+        "updatedAt": "string"
+      }
+    ]
+  }
+  ```
+
+#### Get Payload Deployments
+- **URL**: `/deployments/payload/:payloadId`
+- **Method**: `GET`
+- **Auth required**: Yes (Operator or Admin)
+- **Rate limited**: Yes
+- **Response**:
+  ```json
+  {
+    "success": true,
+    "data": [
+      {
+        "id": "number",
+        "deviceId": "number",
+        "payloadId": "number",
+        "userId": "number",
+        "status": "string",
+        "result": "string",
+        "createdAt": "string",
+        "updatedAt": "string"
+      }
+    ]
+  }
+  ```
+
+#### Get User Deployments
+- **URL**: `/deployments/user/me`
+- **Method**: `GET`
+- **Auth required**: Yes
+- **Rate limited**: Yes
+- **Response**:
+  ```json
+  {
+    "success": true,
+    "data": [
+      {
+        "id": "number",
+        "deviceId": "number",
+        "payloadId": "number",
+        "userId": "number",
+        "status": "string",
+        "result": "string",
+        "createdAt": "string",
+        "updatedAt": "string"
+      }
+    ]
+  }
+  ```
+
+#### Update Deployment
+- **URL**: `/deployments/:id`
+- **Method**: `PATCH`
+- **Auth required**: Yes
+- **Rate limited**: Yes
+- **Body**:
+  ```json
+  {
+    "status": "string",
+    "result": "string"
+  }
+  ```
+- **Response**:
+  ```json
+  {
+    "success": true,
+    "data": {
+      "id": "number",
+      "status": "string",
+      "result": "string",
+      "updatedAt": "string"
+    }
+  }
+  ```
+
+### Scripts
+
+#### Get All Scripts
+- **URL**: `/scripts`
+- **Method**: `GET`
+- **Auth required**: Yes (Operator or Admin)
+- **Rate limited**: Yes
+- **Response**:
+  ```json
+  {
+    "success": true,
+    "data": [
+      {
+        "id": "string",
+        "name": "string",
+        "content": "string",
+        "type": "callback|exfiltration|command|custom",
+        "description": "string",
+        "isPublic": "boolean",
+        "endpoint": "string",
+        "callbackUrl": "string",
+        "lastExecuted": "string",
+        "executionCount": "number",
+        "createdAt": "string",
+        "updatedAt": "string"
+      }
+    ]
+  }
+  ```
+
+#### Get Single Script
+- **URL**: `/scripts/:id`
+- **Method**: `GET`
+- **Auth required**: Yes (Operator or Admin)
+- **Rate limited**: Yes
+- **Response**:
+  ```json
+  {
+    "success": true,
+    "data": {
+      "id": "string",
+      "name": "string",
+      "content": "string",
+      "type": "callback|exfiltration|command|custom",
+      "description": "string",
+      "isPublic": "boolean",
+      "endpoint": "string",
+      "callbackUrl": "string",
+      "lastExecuted": "string",
+      "executionCount": "number",
+      "createdAt": "string",
+      "updatedAt": "string"
+    }
+  }
+  ```
+
+#### Create Script
+- **URL**: `/scripts`
+- **Method**: `POST`
+- **Auth required**: Yes (Operator or Admin)
+- **Rate limited**: Yes
+- **Body**:
+  ```json
+  {
+    "name": "string",
+    "content": "string",
+    "type": "callback|exfiltration|command|custom",
+    "description": "string",
+    "isPublic": "boolean",
+    "endpoint": "string",
+    "callbackUrl": "string"
+  }
+  ```
+- **Response**:
+  ```json
+  {
+    "success": true,
+    "data": {
+      "id": "string",
+      "name": "string",
+      "content": "string",
+      "type": "callback|exfiltration|command|custom",
+      "description": "string",
+      "isPublic": "boolean",
+      "endpoint": "string",
+      "callbackUrl": "string",
+      "lastExecuted": null,
+      "executionCount": 0,
+      "createdAt": "string",
+      "updatedAt": "string"
+    }
+  }
+  ```
+
+#### Update Script
+- **URL**: `/scripts/:id`
+- **Method**: `PUT`
+- **Auth required**: Yes (Operator or Admin)
+- **Rate limited**: Yes
+- **Body**:
+  ```json
+  {
+    "name": "string",
+    "content": "string",
+    "type": "callback|exfiltration|command|custom",
+    "description": "string",
+    "isPublic": "boolean",
+    "endpoint": "string",
+    "callbackUrl": "string"
+  }
+  ```
+- **Response**:
+  ```json
+  {
+    "success": true,
+    "data": {
+      "id": "string",
+      "name": "string",
+      "content": "string",
+      "type": "callback|exfiltration|command|custom",
+      "description": "string",
+      "isPublic": "boolean",
+      "endpoint": "string",
+      "callbackUrl": "string",
+      "updatedAt": "string"
+    }
+  }
+  ```
+
+#### Delete Script
+- **URL**: `/scripts/:id`
+- **Method**: `DELETE`
+- **Auth required**: Yes (Operator or Admin)
+- **Rate limited**: Yes
+- **Response**:
+  ```json
+  {
+    "success": true,
+    "message": "Script deleted successfully"
+  }
+  ```
+
+#### Get Scripts for Payload
+- **URL**: `/scripts/payload/:payloadId`
+- **Method**: `GET`
+- **Auth required**: Yes (Operator or Admin)
+- **Rate limited**: Yes
+- **Response**:
+  ```json
+  {
+    "success": true,
+    "data": [
+      {
+        "id": "string",
+        "name": "string",
+        "content": "string",
+        "type": "callback|exfiltration|command|custom",
+        "description": "string",
+        "isPublic": "boolean",
+        "endpoint": "string",
+        "callbackUrl": "string",
+        "lastExecuted": "string",
+        "executionCount": "number",
+        "createdAt": "string",
+        "updatedAt": "string"
+      }
+    ]
+  }
+  ```
+
+#### Associate Script with Payload
+- **URL**: `/scripts/associate`
+- **Method**: `POST`
+- **Auth required**: Yes (Operator or Admin)
+- **Rate limited**: Yes
+- **Body**:
+  ```json
+  {
+    "scriptId": "string",
+    "payloadId": "string"
+  }
+  ```
+- **Response**:
+  ```json
+  {
+    "success": true,
+    "message": "Script associated with payload successfully"
+  }
+  ```
+
+#### Remove Script from Payload
+- **URL**: `/scripts/disassociate`
+- **Method**: `POST`
+- **Auth required**: Yes (Operator or Admin)
+- **Rate limited**: Yes
+- **Body**:
+  ```json
+  {
+    "scriptId": "string",
+    "payloadId": "string"
+  }
+  ```
+- **Response**:
+  ```json
+  {
+    "success": true,
+    "message": "Script removed from payload successfully"
+  }
+  ```
+
+#### Execute Script (Public Endpoint)
+- **URL**: `/scripts/execute/:endpoint`
+- **Method**: `POST`
+- **Auth required**: No
+- **Rate limited**: Yes
+- **Body**: Varies based on script type
+- **Response**: Varies based on script type
+
+### User Settings
+
+#### Get User Settings
+- **URL**: `/users/settings`
+- **Method**: `GET`
+- **Auth required**: Yes
+- **Rate limited**: Yes
+- **Response**:
+  ```json
+  {
+    "success": true,
+    "data": {
+      "theme": "string",
+      "notificationSettings": {
+        "deviceStatus": "boolean",
+        "deploymentAlerts": "boolean",
+        "systemUpdates": "boolean",
+        "securityAlerts": "boolean"
+      }
+    }
+  }
+  ```
+
+#### Update User Settings
+- **URL**: `/users/settings`
+- **Method**: `POST`
+- **Auth required**: Yes
+- **Rate limited**: Yes
+- **Body**:
+  ```json
+  {
+    "theme": "string",
+    "notificationSettings": {
+      "deviceStatus": "boolean",
+      "deploymentAlerts": "boolean",
+      "systemUpdates": "boolean",
+      "securityAlerts": "boolean"
+    }
+  }
+  ```
+- **Response**:
+  ```json
+  {
+    "success": true,
+    "message": "User settings updated successfully",
+    "data": {
+      "theme": "string",
+      "notificationSettings": {
+        "deviceStatus": "boolean",
+        "deploymentAlerts": "boolean",
+        "systemUpdates": "boolean",
+        "securityAlerts": "boolean"
+      }
+    }
+  }
+  ```
+
+### System
+
+#### Get API Health
+- **URL**: `/system/health`
+- **Method**: `GET`
+- **Auth required**: No
+- **Rate limited**: Yes
+- **Response**:
+  ```json
+  {
+    "success": true,
+    "data": {
+      "status": "online|degraded",
+      "version": "string",
+      "uptime": "number",
+      "hostname": "string",
+      "platform": "string",
+      "cpuInfo": "string",
+      "loadAvg": ["string"],
+      "memory": {
+        "used": "number",
+        "total": "number",
+        "percentage": "number"
+      },
+      "database": {
+        "status": "online|offline|error",
+        "responseTime": "number",
+        "dialect": "string",
+        "host": "string"
+      },
+      "activeConnections": "number",
+      "responseTime": "number",
+      "cpuLoad": "number",
+      "processes": {
+        "pid": "number",
+        "memoryUsage": "number"
+      },
+      "lastChecked": "string"
+    }
+  }
+  ```
+
+#### Test Socket
+- **URL**: `/system/test-socket`
+- **Method**: `GET`
+- **Auth required**: Yes
+- **Rate limited**: Yes
+- **Response**:
+  ```json
+  {
+    "success": true,
+    "message": "Socket test event emitted"
+  }
+  ```
+
+#### Socket Ping
+- **URL**: `/system/socket-ping`
+- **Method**: `GET`
+- **Auth required**: Yes
+- **Rate limited**: Yes
+- **Response**:
+  ```json
+  {
+    "success": true,
+    "message": "Socket ping test initiated"
+  }
+  ```
+
+## Root Endpoints
+
+#### Health Check
+- **URL**: `/health`
+- **Method**: `GET`
+- **Auth required**: No
+- **Response**:
+  ```json
+  {
+    "success": true,
+    "data": {
+      "status": "online|degraded",
+      "version": "string",
+      "uptime": "number",
+      "hostname": "string",
+      "platform": "string",
+      "cpuInfo": "string",
+      "loadAvg": ["string"],
+      "memory": {
+        "used": "number",
+        "total": "number",
+        "percentage": "number"
+      },
+      "database": {
+        "status": "online|offline|error",
+        "responseTime": "number",
+        "dialect": "string",
+        "host": "string"
+      },
+      "activeConnections": "number",
+      "responseTime": "number",
+      "cpuLoad": "number",
+      "processes": {
+        "pid": "number",
+        "memoryUsage": "number"
+      },
+      "lastChecked": "string"
+    }
+  }
+  ```  ```
 - **Response**: 
   ```json
   {

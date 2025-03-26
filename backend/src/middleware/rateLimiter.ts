@@ -43,7 +43,7 @@ const getRedisConfig = () => {
 const redis = new Redis(getRedisConfig());
 
 // Type for API routes
-export type ApiEndpoint = 'auth' | 'devices' | 'payloads' | 'deployments' | 'system' | 'users' | 'scripts';
+export type ApiEndpoint = 'auth' | 'devices' | 'payloads' | 'deployments' | 'system' | 'users' | 'scripts' | 'admin';
 
 // Advanced rate limiter configuration
 interface RateLimiterConfig {
@@ -56,6 +56,13 @@ interface RateLimiterConfig {
 
 // Configure rate limits for different endpoint groups
 const rateLimiterConfigs: Record<ApiEndpoint, RateLimiterConfig> = {
+  admin: {
+    points: 30,          // 30 requests
+    duration: 60,        // per 60 seconds (1 minute)
+    blockDuration: 120,  // Block for 2 minutes if limit is exceeded
+    keyPrefix: 'rlflx:admin:',
+    errorMessage: 'Too many admin requests. Please try again later.'
+  },
   auth: {
     points: 5,           // 5 requests
     duration: 60,        // per 60 seconds (1 minute)

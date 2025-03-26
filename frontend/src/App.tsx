@@ -7,35 +7,41 @@ import DeviceManagement from './pages/DeviceManagement';
 import PayloadEditor from './pages/PayloadEditor';
 import ResultsViewer from './pages/ResultsViewer';
 import Settings from './pages/Settings';
+import AdminDashboard from './pages/AdminDashboard';
+import AdminUserManagement from './pages/AdminUserManagement';
 import { useEffect, useState } from 'react';
 
-// Create a simple authentication context
-const isAuthenticated = () => {
-  return localStorage.getItem('token') !== null;
-};
+import { useAuth } from './contexts/AuthContext';
 
 // Protected route component
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
+  const { isAuthenticated } = useAuth();
+  
   if (!isAuthenticated()) {
     return <Navigate to="/login" replace />;
   }
   return <>{children}</>;
 };
 
+// Admin route component
+const AdminRoute = ({ children }: { children: React.ReactNode }) => {
+  const { user, isAuthenticated } = useAuth();
+  
+  if (!isAuthenticated()) {
+    return <Navigate to="/login" replace />;
+  }
+  
+  if (user?.role !== 'admin') {
+    return <Navigate to="/" replace />;
+  }
+  
+  return <>{children}</>;
+};
+
 function App() {
-  const [initialized, setInitialized] = useState(false);
+  const { loading } = useAuth();
 
-  useEffect(() => {
-    // For demo purposes, ensure there's always a token
-    if (!localStorage.getItem('token')) {
-      localStorage.setItem('token', 'demo-token');
-    }
-    
-    // Check if user is logged in
-    setInitialized(true);
-  }, []);
-
-  if (!initialized) {
+  if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-dark">
         <div className="text-white text-xl">Loading...</div>
@@ -63,6 +69,18 @@ function App() {
           <Route path="payload-editor" element={<PayloadEditor />} />
           <Route path="results" element={<ResultsViewer />} />
           <Route path="settings" element={<Settings />} />
+          
+          {/* Admin routes */}
+          <Route path="admin" element={
+            <AdminRoute>
+              <AdminDashboard />
+            </AdminRoute>
+          } />
+          <Route path="admin/users" element={
+            <AdminRoute>
+              <AdminUserManagement />
+            </AdminRoute>
+          } />
         </Route>
       </Routes>
     </BrowserRouter>

@@ -26,6 +26,7 @@ import deploymentRoutes from './routes/deploymentRoutes';
 import systemRoutes from './routes/systemRoutes';
 import userRoutes from './routes/userRoutes';
 import scriptRoutes from './routes/scriptRoutes';
+import adminRoutes from './routes/adminRoutes';
 
 // Load environment variables
 dotenv.config();
@@ -260,6 +261,7 @@ app.use('/api/deployments', deploymentRoutes);
 app.use('/api/system', systemRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/scripts', scriptRoutes);
+app.use('/api/admin', adminRoutes);
 
 // Error handling middleware
 app.use(errorHandler);

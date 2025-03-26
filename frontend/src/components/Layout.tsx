@@ -1,5 +1,5 @@
 import { Link as RouterLink, Outlet, useLocation } from 'react-router-dom';
-import { FiHome, FiServer, FiCode, FiFileText, FiLogOut, FiShield, FiSettings, FiUser } from 'react-icons/fi';
+import { FiHome, FiServer, FiCode, FiFileText, FiLogOut, FiShield, FiSettings, FiUser, FiUsers, FiLock } from 'react-icons/fi';
 import { useEffect, useState } from 'react';
 import ApiHealthStatus from './ApiHealthStatus';
 import ApiService from '../services/ApiService';
@@ -132,6 +132,9 @@ const Layout = () => {
           </div>
           <div className="space-y-0.5 px-1">
             <NavItem to="/settings" icon={<FiSettings size={14} />}>Settings</NavItem>
+            {currentUser && currentUser.role === 'admin' && (
+              <NavItem to="/admin" icon={<FiLock size={14} />}>Admin Panel</NavItem>
+            )}
           </div>
           
           {/* System Status - replaced with ApiHealthStatus */}
