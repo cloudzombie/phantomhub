@@ -137,11 +137,14 @@ export const requestSerialPort = async (): Promise<SerialPort | null> => {
   }
 
   try {
-    // Request port with o.MG cable filters if available
-    // Note: Serial port filters may not work for all o.MG cables depending on their USB identifiers
-    const port = await navigator.serial.requestPort({
-      // O.MG Elite filters - exact VID/PID will need to be confirmed
-      filters: [{ usbVendorId: 0x1d6b, usbProductId: 0x0104 }]
+    // Request port without filters to allow any USB device
+    const port = await navigator.serial.requestPort();
+    
+    // Log the device info for debugging
+    const portInfo = port.getInfo();
+    console.log('Selected device:', {
+      vendorId: portInfo.usbVendorId,
+      productId: portInfo.usbProductId
     });
     
     return port;
@@ -161,28 +164,28 @@ export const connectToDevice = async (
   port: SerialPort,
   options: SerialOptions = DEFAULT_SERIAL_OPTIONS
 ): Promise<OMGDeviceInfo> => {
+  // Create a device info object
+  const deviceInfo: OMGDeviceInfo = {
+    port,
+    reader: null,
+    writer: null,
+    connectionStatus: 'connecting',
+    info: {
+      name: 'O.MG Cable',  // Default name until we get actual info
+      firmwareVersion: null,
+      deviceId: null,
+      capabilities: {
+        usbHid: false,
+        wifi: false,
+        bluetooth: false,
+        storage: null
+      },
+    },
+  };
+
   try {
     // Open the port with the specified options
     await port.open(options);
-    
-    // Create a device info object
-    const deviceInfo: OMGDeviceInfo = {
-      port,
-      reader: null,
-      writer: null,
-      connectionStatus: 'connecting',
-      info: {
-        name: 'O.MG Cable',  // Default name until we get actual info
-        firmwareVersion: null,
-        deviceId: null,
-        capabilities: {
-          usbHid: false,
-          wifi: false,
-          bluetooth: false,
-          storage: null
-        }
-      },
-    };
     
     // Setup reader and writer
     deviceInfo.reader = port.readable?.getReader() || null;
@@ -199,60 +202,35 @@ export const connectToDevice = async (
     try {
       // Get basic device info
       const infoResponse = await sendCommand(deviceInfo, OMG_COMMANDS.GET_INFO);
-      
       if (infoResponse.success) {
-        // Parse the device info from the response
-        const infoLines = infoResponse.data.split('\n');
-        deviceInfo.info.name = infoLines[0] || 'O.MG Cable';
-        
-        // Extract firmware version
-        const firmwareMatch = infoLines.find(line => line.startsWith('FW:'));
-        if (firmwareMatch) {
-          deviceInfo.info.firmwareVersion = firmwareMatch.replace('FW:', '').trim();
-        }
-        
-        // Extract device ID
-        const idMatch = infoLines.find(line => line.startsWith('ID:'));
-        if (idMatch) {
-          deviceInfo.info.deviceId = idMatch.replace('ID:', '').trim();
-        }
+        const info = JSON.parse(infoResponse.data);
+        deviceInfo.info.name = info.name || 'O.MG Cable';
+        deviceInfo.info.firmwareVersion = info.firmwareVersion;
+        deviceInfo.info.deviceId = info.deviceId;
       }
       
       // Get device capabilities
       const capabilitiesResponse = await sendCommand(deviceInfo, OMG_COMMANDS.GET_CAPABILITIES);
-      
       if (capabilitiesResponse.success) {
-        const capLines = capabilitiesResponse.data.split('\n');
-        
+        const capabilities = JSON.parse(capabilitiesResponse.data);
         deviceInfo.info.capabilities = {
-          usbHid: capLines.some(line => line.includes('USB_HID: ENABLED')),
-          wifi: capLines.some(line => line.includes('WIFI: ENABLED')),
-          bluetooth: capLines.some(line => line.includes('BT: ENABLED')),
-          storage: null
+          ...deviceInfo.info.capabilities,
+          ...capabilities
         };
-        
-        // Extract storage capacity if available
-        const storageMatch = capLines.find(line => line.includes('STORAGE:'));
-        if (storageMatch) {
-          const storageValue = storageMatch.split(':')[1]?.trim();
-          if (storageValue) {
-            deviceInfo.info.capabilities.storage = storageValue;
-          }
-        }
-      }
-      
-      // If we have a device ID, store the connected device
-      if (deviceInfo.info.deviceId) {
-        connectedDevices.set(deviceInfo.info.deviceId, deviceInfo);
       }
     } catch (error) {
-      console.warn('Could not retrieve full device information:', error);
-      // Still return the basic device info even if detailed info retrieval failed
+      console.warn('Could not get device info, using defaults:', error);
+      // Continue with default values if we can't get device info
     }
+    
+    // Store the connected device
+    const deviceId = deviceInfo.info.deviceId || `device-${Date.now()}`;
+    connectedDevices.set(deviceId, deviceInfo);
     
     return deviceInfo;
   } catch (error) {
-    console.error('Error connecting to o.MG Cable device:', error);
+    console.error('Error connecting to device:', error);
+    deviceInfo.connectionStatus = 'error';
     throw error;
   }
 };
