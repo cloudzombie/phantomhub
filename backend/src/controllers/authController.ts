@@ -123,6 +123,68 @@ export const login = async (req: Request, res: Response): Promise<Response> => {
   }
 };
 
+// Sync token endpoint to persist authentication tokens on the server
+export const syncToken = async (req: Request, res: Response): Promise<Response> => {
+  try {
+    const { token } = req.body;
+    
+    if (!token) {
+      return res.status(400).json({
+        success: false,
+        message: 'Token is required'
+      });
+    }
+    
+    // Verify the token is valid before storing it
+    try {
+      const secret = process.env.JWT_SECRET || 'default_secret';
+      const decoded = jwt.verify(token, secret);
+      const userId = (decoded as any).id;
+      
+      if (!userId) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid token format'
+        });
+      }
+      
+      // Find the user to ensure they exist
+      const user = await User.findByPk(userId);
+      if (!user) {
+        return res.status(404).json({
+          success: false,
+          message: 'User not found'
+        });
+      }
+      
+      // Store the token in user's session data (you could create a Session model for this)
+      // For now, we'll just update a lastActive timestamp as a simple way to track sessions
+      await user.update({ 
+        lastLogin: new Date(),
+        sessionToken: token // Adding token to user record for persistence
+      });
+      
+      logger.info(`Token synchronized for user ${userId}`);
+      return res.status(200).json({
+        success: true,
+        message: 'Token synchronized successfully'
+      });
+    } catch (jwtError) {
+      logger.error('Token sync error - Invalid token:', jwtError);
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid token'
+      });
+    }
+  } catch (error) {
+    logger.error('Token sync error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Error synchronizing token'
+    });
+  }
+};
+
 // Get current user
 export const getCurrentUser = async (req: AuthenticatedRequest, res: Response): Promise<Response> => {
   try {

@@ -39,25 +39,36 @@ export const storeToken = (token: string): void => {
   // Set the Authorization header for axios
   axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
   
-  // Attempt to sync token with database for server-side persistence
-  try {
-    // Only if we have a valid-looking token that's worth syncing
-    if (token && token.length > 20) {
+  // Sync token with backend database for true persistence
+  if (token && token.length > 20) {
+    // Add a slight delay to ensure the token is properly set in storage first
+    setTimeout(() => {
       console.log('TokenManager: Syncing token with database...');
-      setTimeout(() => {
-        apiServiceInstance.post('/auth/sync-token', { token })
-          .then(response => {
+      
+      // Call our new /auth/sync-token endpoint
+      apiServiceInstance.post('/auth/sync-token', { token })
+        .then(response => {
+          if (response.data?.success) {
             console.log('TokenManager: Token synced with database successfully');
-          })
-          .catch(err => {
-            // Just log the error, don't remove token
-            console.warn('TokenManager: Failed to sync token with database', err);
-          });
-      }, 100);
-    }
-  } catch (e) {
-    // Non-critical operation, just log error
-    console.warn('TokenManager: Error in token sync attempt', e);
+          } else {
+            console.warn('TokenManager: Token sync response indicated failure:', response.data);
+          }
+        })
+        .catch(err => {
+          // Critical: Don't remove token on sync errors - just log
+          console.warn('TokenManager: Failed to sync token with database', err);
+          
+          // Retry once after 5 seconds if network or server error
+          if (err.code === 'ECONNABORTED' || err.response?.status >= 500) {
+            console.log('TokenManager: Will retry token sync in 5 seconds...');
+            setTimeout(() => {
+              apiServiceInstance.post('/auth/sync-token', { token })
+                .then(res => console.log('TokenManager: Retry token sync succeeded'))
+                .catch(e => console.warn('TokenManager: Retry token sync failed', e));
+            }, 5000);
+          }
+        });
+    }, 500);  // Increased delay for more reliable sequencing
   }
   
   console.log('TokenManager: Token stored and Authorization header set');

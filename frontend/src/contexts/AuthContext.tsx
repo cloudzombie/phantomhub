@@ -43,15 +43,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     const checkAuthStatus = async () => {
       console.log('AuthContext: Checking auth status on load/refresh');
-      // Get token directly from localStorage for simplicity
-      const token = localStorage.getItem('token');
-      const storedUser = localStorage.getItem('user');
+      // Use tokenManager instead of direct localStorage access for consistency
+      const token = getToken();
+      const storedUser = getUserData();
       
       // If we have a stored user, set it immediately to prevent flashing of login screen
       if (storedUser) {
-        try {
-          const parsedUser = JSON.parse(storedUser);
-          setUser(parsedUser);
+        // getUserData already handles parsing and validation, so we can use it directly
+        setUser(storedUser);
+        console.log('AuthContext: Restored user from storage, role:', storedUser.role);
           
           // CRITICAL: Set axios default headers immediately
           if (token) {

@@ -24,6 +24,7 @@ export interface UserAttributes {
   mfaSecret?: string | null;
   sessionTimeout: number;
   requirePasswordChange: boolean;
+  sessionToken?: string | null; // Add sessionToken for persistence
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -44,6 +45,7 @@ class User extends Model<UserAttributes> implements UserAttributes {
   public mfaSecret!: string | null;
   public sessionTimeout!: number;
   public requirePasswordChange!: boolean;
+  public sessionToken!: string | null; // Add sessionToken for persistence
   public readonly createdAt!: Date;
   public readonly updatedAt!: Date;
 
