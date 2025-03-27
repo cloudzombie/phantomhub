@@ -60,9 +60,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             
             // Dispatch authentication event to ensure other components know we're authenticated
             setTimeout(() => {
-              document.dispatchEvent(new CustomEvent('user-authenticated', { 
-                detail: { userId: parsedUser.id, role: parsedUser.role } 
-              }));
+              // Add safety check to ensure parsedUser is valid
+              if (parsedUser && parsedUser.id) {
+                document.dispatchEvent(new CustomEvent('user-authenticated', { 
+                  detail: { userId: parsedUser.id, role: parsedUser.role || 'user' } 
+                }));
+              } else {
+                console.warn('AuthContext: Invalid user data when restoring from localStorage');
+              }
             }, 100);
           }
           
@@ -107,9 +112,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             ApiService.reconnectSocket();
             
             // Dispatch user-authenticated event for other services to listen to
-            document.dispatchEvent(new CustomEvent('user-authenticated', { 
-              detail: { userId: response.data.data.id, role: response.data.data.role } 
-            }));
+            if (response.data && response.data.data && response.data.data.id) {
+              document.dispatchEvent(new CustomEvent('user-authenticated', { 
+                detail: { userId: response.data.data.id, role: response.data.data.role || 'user' } 
+              }));
+            } else {
+              console.warn('AuthContext: Invalid response data, cannot dispatch user-authenticated event');
+            }
           }, 500); // Small delay to ensure everything is ready
         } else {
           console.error('AuthContext: Token validation failed', response.data);
@@ -198,9 +207,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           ApiService.reconnectSocket();
           
           // Dispatch user-authenticated event for other services to listen to
-          document.dispatchEvent(new CustomEvent('user-authenticated', { 
-            detail: { userId: userData.id, role: userData.role } 
-          }));
+          if (userData && userData.id) {
+            document.dispatchEvent(new CustomEvent('user-authenticated', { 
+              detail: { userId: userData.id, role: userData.role || 'user' } 
+            }));
+          } else {
+            console.warn('AuthContext: Invalid user data, cannot dispatch user-authenticated event');
+          }
           
           // Verify the token is still in localStorage
           const verifyToken = localStorage.getItem('token');
@@ -260,9 +273,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           ApiService.reconnectSocket();
           
           // Dispatch user-authenticated event for other services to listen to
-          document.dispatchEvent(new CustomEvent('user-authenticated', { 
-            detail: { userId: userData.id, role: userData.role } 
-          }));
+          if (userData && userData.id) {
+            document.dispatchEvent(new CustomEvent('user-authenticated', { 
+              detail: { userId: userData.id, role: userData.role || 'user' } 
+            }));
+          } else {
+            console.warn('AuthContext: Invalid user data, cannot dispatch user-authenticated event');
+          }
         }, 500); // Small delay to ensure token is stored before socket init
         
         return true;

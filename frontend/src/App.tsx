@@ -62,8 +62,15 @@ const AdminRoute = ({ children }: { children: React.ReactNode }) => {
         });
         
         if (token && storedUser) {
-          const parsedUser = JSON.parse(storedUser);
-          console.log('AdminRoute - Found stored user with role:', parsedUser.role);
+          try {
+            const parsedUser = JSON.parse(storedUser);
+            console.log('AdminRoute - Found stored user with role:', parsedUser?.role);
+            
+            // Safety check for valid user object
+            if (!parsedUser || !parsedUser.role) {
+              console.warn('AdminRoute - Invalid user data in storage, but keeping token');
+              return null;
+            }
           
           // CRITICAL: Set axios default headers with token
           if (token && !axios.defaults.headers.common['Authorization']) {
@@ -72,6 +79,11 @@ const AdminRoute = ({ children }: { children: React.ReactNode }) => {
           }
           
           return parsedUser.role;
+          } catch (parseErr) {
+            console.error('AdminRoute - Error parsing stored user JSON:', parseErr);
+            // Don't remove token on parse error
+            return null;
+          }
         }
       } catch (err) {
         console.error('AdminRoute - Error checking stored user:', err);
