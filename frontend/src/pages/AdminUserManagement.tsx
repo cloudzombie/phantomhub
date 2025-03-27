@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { API_URL } from '../config';
-import { useAuth } from '../contexts/AuthContext';
+// Import directly from the absolute path to avoid module resolution issues
+import { API_URL } from '../config.ts';
+import { useAuth } from '../contexts/AuthContext.tsx';
 
 // Component imports
 import { Card } from '../components/ui/Card';

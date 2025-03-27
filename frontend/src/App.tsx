@@ -1,4 +1,5 @@
 import { Routes, Route, Navigate, BrowserRouter } from 'react-router-dom';
+import axios from 'axios';
 import Layout from './components/Layout';
 import Dashboard from './pages/Dashboard';
 import Login from './pages/Login';
@@ -28,28 +29,80 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
 // Admin route component
 const AdminRoute = ({ children }: { children: React.ReactNode }) => {
   const { user, isAuthenticated, loading } = useAuth();
+  const [isVerifyingAdmin, setIsVerifyingAdmin] = useState(true);
+  const [hasCheckedStorage, setHasCheckedStorage] = useState(false);
   
-  // Debug logging
-  console.log('AdminRoute - Checking authentication');
-  console.log('AdminRoute - isAuthenticated:', isAuthenticated());
-  console.log('AdminRoute - user:', user);
-  console.log('AdminRoute - user role:', user?.role);
-  console.log('AdminRoute - auth loading:', loading);
+  // Enhanced debug logging
+  useEffect(() => {
+    console.log('AdminRoute - Component mounted/updated');
+    console.log('AdminRoute - Auth state:', {
+      isAuthenticated: isAuthenticated(),
+      user: user?.role,
+      loading,
+      hasCheckedStorage
+    });
+    
+    // Finish verification process once we have all the data we need
+    if (!loading && hasCheckedStorage) {
+      setIsVerifyingAdmin(false);
+    }
+  }, [user, loading, isAuthenticated, hasCheckedStorage]);
   
   // Check for stored user data in localStorage as a fallback
-  const checkStoredUserRole = (): string | null => {
-    try {
-      const storedUser = localStorage.getItem('user');
-      if (storedUser) {
-        const parsedUser = JSON.parse(storedUser);
-        console.log('AdminRoute - Found stored user with role:', parsedUser.role);
-        return parsedUser.role;
+  useEffect(() => {
+    const checkStoredUserRole = (): string | null => {
+      try {
+        // Get token and user from localStorage
+        const token = localStorage.getItem('token');
+        const storedUser = localStorage.getItem('user');
+        
+        console.log('AdminRoute - Checking localStorage:', {
+          hasToken: !!token,
+          hasStoredUser: !!storedUser
+        });
+        
+        if (token && storedUser) {
+          const parsedUser = JSON.parse(storedUser);
+          console.log('AdminRoute - Found stored user with role:', parsedUser.role);
+          
+          // CRITICAL: Set axios default headers with token
+          if (token && !axios.defaults.headers.common['Authorization']) {
+            axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+            console.log('AdminRoute - Set Authorization header from localStorage');
+          }
+          
+          return parsedUser.role;
+        }
+      } catch (err) {
+        console.error('AdminRoute - Error checking stored user:', err);
       }
-    } catch (err) {
-      console.error('AdminRoute - Error checking stored user:', err);
+      return null;
+    };
+    
+    // Only run this check once
+    if (!hasCheckedStorage && !loading) {
+      const role = checkStoredUserRole();
+      setHasCheckedStorage(true);
     }
-    return null;
-  };
+  }, [loading, hasCheckedStorage]);
+  
+  // If still verifying or loading, show enhanced loading UI
+  if (loading || isVerifyingAdmin) {
+    return (
+      <div className="flex flex-col justify-center items-center h-screen">
+        <div className="flex items-center mb-4">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-green-500 mr-3"></div>
+          <p className="text-gray-600">Verifying admin access...</p>
+        </div>
+        <button 
+          onClick={() => window.location.reload()}
+          className="mt-4 px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
+        >
+          Refresh
+        </button>
+      </div>
+    );
+  }
   
   // If not authenticated, redirect to login
   if (!isAuthenticated()) {
@@ -57,19 +110,11 @@ const AdminRoute = ({ children }: { children: React.ReactNode }) => {
     return <Navigate to="/login" replace />;
   }
   
-  // If auth is still loading, show loading spinner
-  if (loading) {
-    console.log('AdminRoute - Auth is still loading');
-    return <div className="flex justify-center items-center h-screen">
-      <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-green-500"></div>
-      <p className="ml-3 text-gray-600">Verifying admin access...</p>
-    </div>;
-  }
-  
   // If user is null but we're authenticated, check localStorage
   if (!user) {
     console.log('AdminRoute - User is null despite token, checking localStorage');
-    const storedRole = checkStoredUserRole();
+    const storedRole = localStorage.getItem('user') ? 
+      JSON.parse(localStorage.getItem('user') || '{}').role : null;
     
     if (storedRole === 'admin') {
       console.log('AdminRoute - Found admin role in localStorage, granting access');

@@ -50,6 +50,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         try {
           const parsedUser = JSON.parse(storedUser);
           setUser(parsedUser);
+          // Set axios default headers immediately
+          if (token) {
+            axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+          }
           console.log('AuthContext: Restored user from localStorage', parsedUser.role);
         } catch (err) {
           console.error('AuthContext: Error parsing stored user', err);
@@ -64,10 +68,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       
       try {
         console.log('AuthContext: Verifying token with backend');
+        // Ensure the token is in the headers for this request
+        const headers = { Authorization: `Bearer ${token}` };
+        console.log('AuthContext: Using token for verification:', token ? token.substring(0, 10) + '...' : 'none');
+        
         const response = await axios.get(`${API_URL}/auth/me`, {
-          headers: {
-            Authorization: `Bearer ${token}`
-          },
+          headers,
           // Add timeout to prevent hanging requests
           timeout: 8000
         });
@@ -80,6 +86,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           
           // Set axios default headers for all future requests
           axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+          console.log('AuthContext: Set default Authorization header for future requests');
           
           // Import ApiService and ensure socket connection is initialized
           const { ApiService } = await import('../services/ApiService');
@@ -101,15 +108,28 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         console.error('AuthContext: Error checking auth status:', err);
         
         // Don't clear token on network errors - this prevents logout on temporary connectivity issues
-        if (axios.isAxiosError(err) && (err.code === 'ECONNABORTED' || !err.response)) {
-          console.log('AuthContext: Network error, keeping existing auth state');
-          // Keep the existing user state from localStorage to prevent logout on network issues
+        if (axios.isAxiosError(err)) {
+          if (err.code === 'ECONNABORTED' || !err.response) {
+            console.log('AuthContext: Network error, keeping existing auth state');
+            // Keep the existing user state from localStorage to prevent logout on network issues
+            
+            // Still set loading to false to allow the app to proceed
+            setLoading(false);
+            
+            // CRITICAL: Return early to prevent clearing credentials on network issues
+            return;
+          } else if (err.response && err.response.status === 401) {
+            console.log('AuthContext: Token invalid (401), clearing credentials');
+            localStorage.removeItem('token');
+            localStorage.removeItem('user');
+            setUser(null);
+          } else {
+            console.log('AuthContext: Non-auth error, keeping credentials');
+            // For other errors, keep the credentials
+          }
         } else {
-          // Only clear token for actual auth errors (401, 403)
-          console.log('AuthContext: Auth error, clearing credentials');
-          localStorage.removeItem('token');
-          localStorage.removeItem('user');
-          setUser(null);
+          console.log('AuthContext: Unknown error type, keeping credentials');
+          // For unknown error types, keep the credentials
         }
       } finally {
         setLoading(false);
@@ -123,20 +143,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const login = async (email: string, password: string): Promise<boolean> => {
     setError(null);
     try {
+      console.log('AuthContext: Attempting login for', email);
       const response = await axios.post(`${API_URL}/auth/login`, {
         email,
         password
       });
       
-      // Set up axios defaults for future requests
       if (response.data.success) {
-        axios.defaults.headers.common['Authorization'] = `Bearer ${response.data.data.token}`;
-      }
-      
-      if (response.data.success) {
-        localStorage.setItem('token', response.data.data.token);
+        console.log('AuthContext: Login successful');
+        const token = response.data.data.token;
+        
+        // Store authentication data
+        localStorage.setItem('token', token);
         localStorage.setItem('user', JSON.stringify(response.data.data.user));
+        
+        // Set user state
         setUser(response.data.data.user);
+        
+        // CRITICAL: Set up axios defaults for future requests
+        axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+        console.log('AuthContext: Set Authorization header for all future requests');
         
         // Import ApiService and initialize socket connection after successful login
         const { ApiService } = await import('../services/ApiService');
@@ -150,6 +176,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         
         return true;
       } else {
+        console.error('AuthContext: Login failed', response.data.message);
         setError(response.data.message || 'Login failed');
         return false;
       }
