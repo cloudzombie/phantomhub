@@ -10,7 +10,7 @@ import {
   FiWifi,
   FiEye
 } from 'react-icons/fi';
-import apiServiceInstance from '../services/ApiService';
+import apiServiceInstance, { ApiService } from '../services/ApiService';
 import { handleAuthError, isAuthError } from '../utils/tokenManager';
 import { 
   isWebSerialSupported, 
@@ -65,6 +65,18 @@ interface UsbDeviceFormData {
   firmwareVersion: string;
 }
 
+interface DeviceStatusUpdate {
+  deviceId: number;
+  status: 'online' | 'offline' | 'busy';
+  lastCheckIn?: string;
+}
+
+interface DeviceRegistration extends Device {
+  id: number;
+  name: string;
+  status: 'online' | 'offline' | 'busy';
+}
+
 const DeviceManagement: React.FC = () => {
   const [devices, setDevices] = useState<Device[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -73,6 +85,7 @@ const DeviceManagement: React.FC = () => {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [selectedDevice, setSelectedDevice] = useState<Device | null>(null);
+  const [lastFetchTime, setLastFetchTime] = useState<number>(0);
   const [formData, setFormData] = useState<DeviceFormData>({
     name: '',
     ipAddress: '',
@@ -83,57 +96,81 @@ const DeviceManagement: React.FC = () => {
     firmwareVersion: ''
   });
   
-  // Fetch devices on component mount
+  // Fetch devices on component mount and set up socket listeners
   useEffect(() => {
+    const socket = ApiService.getSocket();
+    let intervalId: NodeJS.Timeout;
+
+    const fetchIfNeeded = async () => {
+      const now = Date.now();
+      // Only fetch if more than 5 minutes have passed since last fetch
+      if (now - lastFetchTime >= 300000 && !isLoading) {
+        await fetchDevices();
+        setLastFetchTime(now);
+      }
+    };
+
+    // Initial fetch
     fetchDevices();
     
-    // Set up refresh interval with a more reasonable delay
-    const intervalId = setInterval(() => {
-      // Only fetch if we're not currently loading
-      if (!isLoading) {
-        fetchDevices();
+    // Set up socket event listeners for real-time updates
+    if (socket) {
+      socket.on('device_status_changed', (data: DeviceStatusUpdate) => {
+        setDevices(prev => prev.map(device => 
+          device.id === data.deviceId ? { ...device, ...data } : device
+        ));
+      });
+
+      socket.on('device_registered', (data: DeviceRegistration) => {
+        setDevices(prev => [...prev, data]);
+        setSuccessMessage('New device registered successfully!');
+      });
+
+      socket.on('device_removed', (deviceId: number) => {
+        setDevices(prev => prev.filter(device => device.id !== deviceId));
+      });
+    }
+
+    // Set up polling interval as backup (every 5 minutes)
+    intervalId = setInterval(fetchIfNeeded, 300000);
+
+    // Cleanup
+    return () => {
+      clearInterval(intervalId);
+      if (socket) {
+        socket.off('device_status_changed');
+        socket.off('device_registered');
+        socket.off('device_removed');
       }
-    }, 60000); // Increased to 60 seconds
-    
-    // Clean up interval on unmount
-    return () => clearInterval(intervalId);
-  }, [isLoading]); // Add isLoading to dependencies
+    };
+  }, [isLoading, lastFetchTime]);
   
-  // Fetch devices from API with debounce
+  // Fetch devices from API with debounce and caching
   const fetchDevices = async () => {
-    if (isLoading) return; // Prevent concurrent fetches
+    if (isLoading) return;
     
     setIsLoading(true);
+    setErrorMessage(null);
     
     try {
       const response = await apiServiceInstance.get('/devices');
       
       if (response.data && response.data.success) {
-        // Process devices to add connection status
         const updatedDevices = response.data.data.map((device: Device) => {
-          // Add connection status based on last check-in time
           const lastCheckIn = device.lastCheckIn ? new Date(device.lastCheckIn) : null;
           const now = new Date();
           const diffMs = lastCheckIn ? now.getTime() - lastCheckIn.getTime() : Infinity;
           const diffMins = diffMs / 60000;
           
-          // If last check-in was more than 5 minutes ago, mark as offline
-          if (diffMins > 5) {
-            device.status = 'offline';
-          }
-          
-          return device;
+          return {
+            ...device,
+            status: diffMins > 5 ? 'offline' : device.status
+          };
         });
         
-        // Only update devices if the data has changed
+        // Only update if data has changed
         if (JSON.stringify(devices) !== JSON.stringify(updatedDevices)) {
           setDevices(updatedDevices);
-        }
-      } else {
-        console.error('Invalid response format:', response);
-        // Don't show error message for empty device list
-        if (response.data?.message) {
-          setErrorMessage(response.data.message);
         }
       }
     } catch (error) {
@@ -141,11 +178,8 @@ const DeviceManagement: React.FC = () => {
       
       if (isAuthError(error)) {
         handleAuthError(error, 'Authentication error in DeviceManagement');
-      } else {
-        // Only show error if it's not a 404 (no devices found)
-        if ((error as any)?.response?.status !== 404) {
-          setErrorMessage((error as any)?.response?.data?.message || 'Error fetching devices');
-        }
+      } else if ((error as any)?.response?.status !== 404) {
+        setErrorMessage((error as any)?.response?.data?.message || 'Error fetching devices');
       }
     } finally {
       setIsLoading(false);
