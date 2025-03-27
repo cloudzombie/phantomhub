@@ -50,8 +50,6 @@ class NotificationService {
       // Delay initial connection attempt to allow ApiService to initialize
       setTimeout(() => this.connect(), 1000);
     }
-
-    this.initializeSocket();
   }
 
   public static getInstance(): NotificationService {
@@ -453,72 +451,19 @@ class NotificationService {
     }
   }
 
-  private initializeSocket() {
-    if (this.socket) {
-      this.socket.disconnect();
-    }
-
-    this.socket = io(API_ENDPOINT, {
-      auth: {
-        token: tokenManager.getToken()
-      },
-      reconnection: true,
-      reconnectionDelay: this.socketReconnectDelay,
-      reconnectionDelayMax: this.socketReconnectDelay * 2,
-      reconnectionAttempts: this.maxReconnectAttempts,
-      timeout: 30000
-    });
-
-    this.socket.on('connect', () => {
-      console.log('Notification socket connected');
-      this.isReconnecting = false;
-      this.reconnectAttempts = 0;
-    });
-
-    this.socket.on('disconnect', () => {
-      console.log('Notification socket disconnected');
-      this.isReconnecting = true;
-      this.reconnectAttempts++;
-    });
-
-    this.socket.on('error', (error) => {
-      console.error('Notification socket error:', error);
-      this.isReconnecting = true;
-    });
-
-    this.socket.on('notification', (notification: Notification) => {
-      this.handleNotification(notification);
-    });
-  }
-
-  private handleReconnectFailure() {
-    if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-      console.warn('Max reconnection attempts reached for notification socket');
-      return;
-    }
-
-    // Clear any existing timeout
-    if (this.reconnectTimeout) {
-      clearTimeout(this.reconnectTimeout);
-    }
-
-    // Set new timeout for next attempt
-    const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), this.socketReconnectDelay);
-    this.reconnectTimeout = setTimeout(() => {
-      if (!this.isReconnecting) {
-        this.initializeSocket();
-      }
-    }, delay);
-  }
-
   public cleanup() {
     if (this.socket) {
-      this.socket.disconnect();
+      this.socket.off('connect');
+      this.socket.off('disconnect');
+      this.socket.off('connect_error');
+      this.socket.off('device_status_changed');
+      this.socket.off('deployment_status_changed');
+      this.socket.off('payload_status_update');
+      this.socket.off('system_update_available');
+      this.socket.off('security_alert');
+      
       this.socket = null;
-    }
-    if (this.reconnectTimeout) {
-      clearTimeout(this.reconnectTimeout);
-      this.reconnectTimeout = null;
+      this.isConnected = false;
     }
   }
 }

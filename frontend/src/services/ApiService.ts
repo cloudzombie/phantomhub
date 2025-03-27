@@ -1,19 +1,13 @@
 import axios, { AxiosInstance, AxiosRequestConfig } from 'axios';
 import { io, Socket } from 'socket.io-client';
 import { getToken, getUserData } from '../utils/tokenManager';
+import { API_CONFIG } from '../config/api';
 
 interface ApiConfig {
   endpoint: string;
   pollingInterval: number;
   timeout: number;
 }
-
-// Update config to use more reasonable polling intervals
-export const DEFAULT_CONFIG: ApiConfig = {
-  endpoint: 'https://ghostwire-backend-e0380bcf4e0e.herokuapp.com/api',
-  pollingInterval: 300, // 5 minutes
-  timeout: 30
-};
 
 class ApiService {
   private static instance: ApiService;
@@ -22,18 +16,21 @@ class ApiService {
   private socket: Socket | null = null;
   private baseURL: string;
   private lastSocketAttempt: number = 0;
-  private socketReconnectDelay: number = 30000; // 30 seconds between reconnection attempts
+  private socketReconnectDelay: number = API_CONFIG.reconnectDelay;
   private deviceSubscribers: ((devices: any[]) => void)[] = [];
   private lastDeviceUpdate: number = 0;
   private deviceUpdateThrottle: number = 5000; // 5 seconds minimum between updates
   private isReconnecting: boolean = false;
   private reconnectAttempts: number = 0;
-  private maxReconnectAttempts: number = 5;
+  private maxReconnectAttempts: number = API_CONFIG.maxReconnectAttempts;
   private subscriptionTimeout: NodeJS.Timeout | null = null;
 
   private constructor() {
-    // Always use the Heroku URL for API endpoint
-    this.config = DEFAULT_CONFIG;
+    this.config = {
+      endpoint: API_CONFIG.endpoint,
+      pollingInterval: API_CONFIG.pollingInterval,
+      timeout: API_CONFIG.timeout
+    };
 
     // Initialize axios instance with default config
     this.axiosInstance = axios.create({
@@ -66,7 +63,7 @@ class ApiService {
       }
     );
     
-    this.baseURL = 'https://ghostwire-backend-e0380bcf4e0e.herokuapp.com';
+    this.baseURL = API_CONFIG.socketEndpoint;
   }
 
   public static getInstance(): ApiService {

@@ -207,7 +207,7 @@ const DeviceManagement: React.FC = () => {
 
   // Manual refresh function with debounce
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const refreshTimeoutRef = useRef<NodeJS.Timeout>();
+  const refreshTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const handleRefresh = async () => {
     if (isLoading || isRefreshing) return;
@@ -385,7 +385,14 @@ const DeviceManagement: React.FC = () => {
       }
 
       // Connect to the device
-      const deviceInfo = await connectToDevice(port, DEFAULT_SERIAL_OPTIONS);
+      const deviceInfo = await connectToDevice(port, {
+        baudRate: 115200,
+        dataBits: 8,
+        stopBits: 1,
+        parity: 'none',
+        flowControl: 'none'
+      });
+
       if (deviceInfo.connectionStatus !== 'connected') {
         setErrorMessage('Failed to connect to USB device');
         return;
@@ -393,7 +400,7 @@ const DeviceManagement: React.FC = () => {
 
       // Register the device
       const response = await apiServiceInstance.post('/devices', {
-        name: deviceInfo.info.deviceName || 'USB Device',
+        name: deviceInfo.info.name || 'USB Device',
         serialPortId: deviceInfo.info.deviceId,
         connectionType: 'usb',
         firmwareVersion: deviceInfo.info.firmwareVersion || null
