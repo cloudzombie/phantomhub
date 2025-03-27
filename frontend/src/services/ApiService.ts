@@ -8,6 +8,13 @@ interface ApiConfig {
   timeout: number;
 }
 
+// Update config to use more reasonable polling intervals
+export const DEFAULT_CONFIG: ApiConfig = {
+  endpoint: 'https://ghostwire-backend-e0380bcf4e0e.herokuapp.com/api',
+  pollingInterval: 300, // 5 minutes
+  timeout: 30
+};
+
 class ApiService {
   private static instance: ApiService;
   private axiosInstance: AxiosInstance;
@@ -16,33 +23,28 @@ class ApiService {
   private baseURL: string;
   private lastSocketAttempt: number = 0;
   private socketReconnectDelay: number = 5000; // 5 seconds between reconnection attempts
+  private deviceStatusSubscribers: Set<(devices: any[]) => void> = new Set();
+  private lastDeviceUpdate: number = 0;
+  private deviceUpdateThrottle: number = 2000; // 2 seconds minimum between updates
 
   private constructor() {
     // Always use the Heroku URL for API endpoint
-    this.config = {
-      endpoint: 'https://ghostwire-backend-e0380bcf4e0e.herokuapp.com/api',
-      pollingInterval: 300, // 5 minutes
-      timeout: 30
-    };
-
-    // Clear any stored API settings that might override our hardcoded URL
-    this.clearAllApiSettings();
+    this.config = DEFAULT_CONFIG;
 
     // Initialize axios instance with default config
     this.axiosInstance = axios.create({
       baseURL: this.config.endpoint,
       timeout: this.config.timeout * 1000,
-      withCredentials: true // Always send cookies with requests
+      withCredentials: true
     });
 
-    // Add request interceptor to include auth token - use tokenManager for consistency
+    // Add request interceptor to include auth token
     this.axiosInstance.interceptors.request.use(
       (config) => {
-        const token = getToken(); // Use tokenManager instead of direct localStorage access
+        const token = getToken();
         if (token) {
           config.headers.Authorization = `Bearer ${token}`;
         }
-        // Always set withCredentials to true for all requests
         config.withCredentials = true;
         return config;
       },
@@ -53,26 +55,14 @@ class ApiService {
     this.axiosInstance.interceptors.response.use(
       (response) => response,
       (error) => {
-        // Special handling for auth errors
         if (error.response && error.response.status === 401) {
           console.warn('ApiService: Received 401 Unauthorized response');
-          // Don't clear auth data here to prevent unexpected logouts
         }
         return Promise.reject(error);
       }
     );
-
-    // Set up listener for configuration changes
-    document.addEventListener('api-config-changed', this.handleConfigChange as EventListener);
     
-    // We're not loading stored configuration anymore
-    // this.loadStoredConfig();
-    
-    // Always use the Heroku URL for socket connections
     this.baseURL = 'https://ghostwire-backend-e0380bcf4e0e.herokuapp.com';
-    
-    // We'll initialize the socket connection when needed, not during construction
-    // This ensures we have a token available when connecting
   }
 
   public static getInstance(): ApiService {
@@ -248,6 +238,33 @@ class ApiService {
   }
 
   /**
+   * Subscribe to device status updates
+   * @param callback Function to call when device status updates
+   */
+  public subscribeToDeviceUpdates(callback: (devices: any[]) => void): () => void {
+    this.deviceStatusSubscribers.add(callback);
+    
+    // Return unsubscribe function
+    return () => {
+      this.deviceStatusSubscribers.delete(callback);
+    };
+  }
+
+  /**
+   * Notify all subscribers of device updates
+   * @param devices Updated device list
+   */
+  private notifyDeviceSubscribers(devices: any[]): void {
+    const now = Date.now();
+    if (now - this.lastDeviceUpdate < this.deviceUpdateThrottle) {
+      return; // Throttle updates
+    }
+    
+    this.lastDeviceUpdate = now;
+    this.deviceStatusSubscribers.forEach(callback => callback(devices));
+  }
+
+  /**
    * Initialize Socket.IO connection with proper authentication
    */
   private initializeSocket(): void {
@@ -296,8 +313,13 @@ class ApiService {
   private setupSocketEventHandlers(): void {
     if (!this.socket) return;
     
+    // Remove existing listeners
+    this.socket.removeAllListeners();
+    
     this.socket.on('connect', () => {
       console.log('ApiService: Socket connected');
+      // Request initial device state on connection
+      this.socket.emit('subscribe_device_updates');
     });
     
     this.socket.on('disconnect', (reason) => {
@@ -306,6 +328,15 @@ class ApiService {
     
     this.socket.on('error', (error) => {
       console.error('ApiService: Socket error:', error);
+    });
+
+    // Handle device updates via socket
+    this.socket.on('device_status_update', (devices: any[]) => {
+      this.notifyDeviceSubscribers(devices);
+    });
+
+    this.socket.on('device_status_changed', (update: any) => {
+      this.notifyDeviceSubscribers([update]);
     });
   }
   

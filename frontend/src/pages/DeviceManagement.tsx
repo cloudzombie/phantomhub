@@ -102,7 +102,6 @@ const DeviceManagement: React.FC = () => {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [selectedDevice, setSelectedDevice] = useState<Device | null>(null);
-  const [lastFetchTime, setLastFetchTime] = useState<number>(0);
   const [formData, setFormData] = useState<DeviceFormData>({
     name: '',
     ipAddress: '',
@@ -120,76 +119,69 @@ const DeviceManagement: React.FC = () => {
     stealthMode: false
   });
   
-  // Fetch devices on component mount and set up socket listeners
+  // Fetch devices and set up socket subscription
   useEffect(() => {
     let isMounted = true;
-    const socket = ApiService.getSocket();
-    let intervalId: NodeJS.Timeout | null = null;
+    let unsubscribe: (() => void) | null = null;
 
-    const fetchIfNeeded = async () => {
-      const now = Date.now();
-      // Only fetch if more than 5 minutes have passed since last fetch and component is still mounted
-      if (now - lastFetchTime >= 300000 && !isLoading && isMounted) {
-        await fetchDevices();
+    const initializeDevices = async () => {
+      if (!isMounted) return;
+      
+      setIsLoading(true);
+      try {
+        // Initial fetch
+        const response = await apiServiceInstance.get('/devices/detailed');
+        if (response.data?.success && isMounted) {
+          setDevices(response.data.data);
+        }
+
+        // Subscribe to device updates
         if (isMounted) {
-          setLastFetchTime(now);
+          unsubscribe = apiServiceInstance.subscribeToDeviceUpdates((updatedDevices) => {
+            if (isMounted) {
+              setDevices(prev => {
+                // If it's a single device update
+                if (updatedDevices.length === 1) {
+                  const update = updatedDevices[0];
+                  return prev.map(device => 
+                    device.id === update.id ? { ...device, ...update } : device
+                  );
+                }
+                // If it's a full device list update
+                return updatedDevices;
+              });
+            }
+          });
+        }
+      } catch (error) {
+        console.error('Error fetching devices:', error);
+        if (isMounted) {
+          if (isAuthError(error)) {
+            handleAuthError(error, 'Authentication error in DeviceManagement');
+          } else {
+            setErrorMessage((error as any)?.response?.data?.message || 'Error fetching devices');
+          }
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoading(false);
         }
       }
     };
 
-    // Initial fetch only if no devices loaded
-    if (devices.length === 0) {
-      fetchDevices();
-    }
-    
-    // Set up socket event listeners for real-time updates
-    if (socket) {
-      // Remove any existing listeners first to prevent duplicates
-      socket.off('device_status_changed');
-      socket.off('device_registered');
-      socket.off('device_removed');
-
-      socket.on('device_status_changed', (data: DeviceStatusUpdate) => {
-        if (isMounted) {
-          setDevices(prev => prev.map(device => 
-            device.id === data.deviceId ? { ...device, ...data } : device
-          ));
-        }
-      });
-
-      socket.on('device_registered', (data: DeviceRegistration) => {
-        if (isMounted) {
-          setDevices(prev => [...prev, data]);
-          setSuccessMessage('New device registered successfully!');
-        }
-      });
-
-      socket.on('device_removed', (deviceId: number) => {
-        if (isMounted) {
-          setDevices(prev => prev.filter(device => device.id !== deviceId));
-        }
-      });
-    }
-
-    // Set up polling interval as backup (every 5 minutes)
-    intervalId = setInterval(fetchIfNeeded, 300000);
+    initializeDevices();
 
     // Cleanup
     return () => {
       isMounted = false;
-      if (intervalId) {
-        clearInterval(intervalId);
-      }
-      if (socket) {
-        socket.off('device_status_changed');
-        socket.off('device_registered');
-        socket.off('device_removed');
+      if (unsubscribe) {
+        unsubscribe();
       }
     };
-  }, []); // Remove lastFetchTime and isLoading from dependencies
-  
-  // Fetch devices from API with debounce and caching
-  const fetchDevices = async () => {
+  }, []); // No dependencies needed as we're using the subscription pattern
+
+  // Manual refresh function
+  const handleRefresh = async () => {
     if (isLoading) return;
     
     setIsLoading(true);
@@ -197,46 +189,15 @@ const DeviceManagement: React.FC = () => {
     
     try {
       const response = await apiServiceInstance.get('/devices/detailed');
-      
-      if (response.data && response.data.success) {
-        const updatedDevices = response.data.data.map((device: Device) => {
-          const lastCheckIn = device.lastCheckIn ? new Date(device.lastCheckIn) : null;
-          const now = new Date();
-          const diffMs = lastCheckIn ? now.getTime() - lastCheckIn.getTime() : Infinity;
-          const diffMins = diffMs / 60000;
-          
-          return {
-            ...device,
-            status: device.status === 'attacking' ? 'attacking' : 
-                   diffMins > 5 ? 'offline' : device.status,
-            capabilities: {
-              ...device.capabilities,
-              maxPayloadSize: device.capabilities?.maxPayloadSize || 4096,
-              availableSlots: device.capabilities?.availableSlots || 8,
-              supportedFeatures: [
-                'DuckyScript',
-                'Payloads',
-                'HID Injection',
-                'Keystroke Injection',
-                'Mass Storage',
-                'Bluetooth Beacon',
-                'WiFi AP'
-              ]
-            }
-          };
-        });
-        
-        if (JSON.stringify(devices) !== JSON.stringify(updatedDevices)) {
-          setDevices(updatedDevices);
-        }
+      if (response.data?.success) {
+        setDevices(response.data.data);
       }
     } catch (error) {
-      console.error('Error fetching devices:', error);
-      
+      console.error('Error refreshing devices:', error);
       if (isAuthError(error)) {
         handleAuthError(error, 'Authentication error in DeviceManagement');
-      } else if ((error as any)?.response?.status !== 404) {
-        setErrorMessage((error as any)?.response?.data?.message || 'Error fetching devices');
+      } else {
+        setErrorMessage((error as any)?.response?.data?.message || 'Error refreshing devices');
       }
     } finally {
       setIsLoading(false);
@@ -349,7 +310,7 @@ const DeviceManagement: React.FC = () => {
         
         // Wait a moment before refreshing the device list
         setTimeout(() => {
-          fetchDevices();
+          handleRefresh();
         }, 1000);
       } else {
         throw new Error(response.data?.message || 'Failed to register device');
@@ -411,7 +372,7 @@ const DeviceManagement: React.FC = () => {
         setIsUsbModalOpen(false);
         
         // Refresh device list
-        fetchDevices();
+        handleRefresh();
       } else {
         setErrorMessage('Failed to register USB O.MG Cable. Please try again.');
       }
@@ -632,30 +593,33 @@ const DeviceManagement: React.FC = () => {
   };
   
   return (
-    <div className="flex flex-col h-full p-6">
-      <div className="border-b border-slate-700 pb-6 mb-6">
-        <div className="flex justify-between items-center">
-          <div className="flex flex-col">
-            <h1 className="text-2xl font-bold text-white mb-1">O.MG Cable Management</h1>
-            <p className="text-sm text-slate-400">Register and manage your O.MG Cables</p>
-          </div>
-          <div className="flex space-x-2">
+    <div className="container mx-auto px-4 py-8">
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-2xl font-bold text-gray-100">Device Management</h1>
+        <div className="flex items-center space-x-4">
+          <button
+            onClick={handleRefresh}
+            disabled={isLoading}
+            className="flex items-center px-3 py-2 bg-slate-700 hover:bg-slate-600 disabled:bg-slate-800 disabled:cursor-not-allowed border border-slate-600 rounded-md text-white text-sm font-medium transition-colors"
+          >
+            <FiRefreshCw className={`mr-2 ${isLoading ? 'animate-spin' : ''}`} />
+            Refresh
+          </button>
+          <button 
+            className="flex items-center px-3 py-2 bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/30 rounded-md text-purple-500 text-sm font-medium transition-colors" 
+            onClick={() => setIsModalOpen(true)}
+          >
+            <FiWifi className="mr-2" size={16} /> Register Network Device
+          </button>
+          
+          {isWebSerialSupported() && (
             <button 
-              className="flex items-center px-3 py-2 bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/30 rounded-md text-purple-500 text-sm font-medium transition-colors" 
-              onClick={() => setIsModalOpen(true)}
+              className="flex items-center px-3 py-2 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/30 rounded-md text-blue-500 text-sm font-medium transition-colors" 
+              onClick={() => setIsUsbModalOpen(true)}
             >
-              <FiWifi className="mr-2" size={16} /> Register Network Device
+              <FiHardDrive className="mr-2" size={16} /> Register USB Device
             </button>
-            
-            {isWebSerialSupported() && (
-              <button 
-                className="flex items-center px-3 py-2 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/30 rounded-md text-blue-500 text-sm font-medium transition-colors" 
-                onClick={() => setIsUsbModalOpen(true)}
-              >
-                <FiHardDrive className="mr-2" size={16} /> Register USB Device
-              </button>
-            )}
-          </div>
+          )}
         </div>
       </div>
       
@@ -681,14 +645,6 @@ const DeviceManagement: React.FC = () => {
         <div className="border-b border-slate-700 px-4 py-3">
           <div className="flex justify-between items-center">
             <h2 className="text-lg font-medium text-white">Registered Devices</h2>
-            <button 
-              className="flex items-center px-2 py-1 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/30 rounded-md text-blue-500 text-xs font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed" 
-              onClick={fetchDevices}
-              disabled={isLoading}
-            >
-              <FiRefreshCw className={`mr-1 ${isLoading ? 'animate-spin' : ''}`} size={14} />
-              Refresh
-            </button>
           </div>
         </div>
         <div className="p-4">
@@ -972,7 +928,7 @@ const DeviceManagement: React.FC = () => {
                       }
                     }
                   }}
-                  onRefresh={() => fetchDevices()}
+                  onRefresh={() => handleRefresh()}
                 />
                 {renderDeviceCapabilities(selectedDevice)}
                 
