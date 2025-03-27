@@ -52,8 +52,8 @@ class ApiService {
     // Always use the Heroku URL for socket connections
     this.baseURL = 'https://ghostwire-backend-e0380bcf4e0e.herokuapp.com';
     
-    // Initialize socket connection
-    this.initializeSocket();
+    // We'll initialize the socket connection when needed, not during construction
+    // This ensures we have a token available when connecting
   }
 
   public static getInstance(): ApiService {
@@ -64,14 +64,28 @@ class ApiService {
   }
 
   public static getSocket(): Socket | null {
-    return ApiService.getInstance().socket;
+    const instance = ApiService.getInstance();
+    
+    // If socket doesn't exist yet but we have a token, initialize it
+    if (!instance.socket && localStorage.getItem('token')) {
+      instance.initializeSocket();
+    }
+    
+    return instance.socket;
   }
 
   /**
    * Static method to reconnect the socket if disconnected
    */
   public static reconnectSocket(): void {
-    ApiService.getInstance().reconnectSocket();
+    const instance = ApiService.getInstance();
+    
+    // Only try to reconnect if we have a token
+    if (localStorage.getItem('token')) {
+      instance.reconnectSocket();
+    } else {
+      console.warn('ApiService: Cannot reconnect socket without authentication token');
+    }
   }
 
   private getCurrentUserId(): string | null {
@@ -205,6 +219,12 @@ class ApiService {
         return;
       }
       
+      // If socket already exists, disconnect it first
+      if (this.socket) {
+        console.log('ApiService: Disconnecting existing socket before creating a new one');
+        this.socket.disconnect();
+      }
+      
       // Configure Socket.IO with robust connection options
       this.socket = io(this.baseURL, {
         reconnection: true,
@@ -261,12 +281,23 @@ class ApiService {
    * Reconnect socket if disconnected
    */
   public reconnectSocket(): void {
+    const token = localStorage.getItem('token');
+    
+    if (!token) {
+      console.warn('ApiService: Cannot reconnect socket without authentication token');
+      return;
+    }
+    
     if (this.socket && !this.socket.connected) {
       console.log('ApiService: Attempting to reconnect socket');
+      // Update the auth token in case it changed
+      this.socket.auth = { token };
       this.socket.connect();
     } else if (!this.socket) {
       console.log('ApiService: Initializing new socket connection');
       this.initializeSocket();
+    } else {
+      console.log('ApiService: Socket already connected');
     }
   }
 }

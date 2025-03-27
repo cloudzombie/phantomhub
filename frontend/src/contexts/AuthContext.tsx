@@ -58,6 +58,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (response.data.success) {
           setUser(response.data.data);
           localStorage.setItem('user', JSON.stringify(response.data.data));
+          
+          // Import ApiService and ensure socket connection is initialized
+          const { ApiService } = await import('../services/ApiService');
+          setTimeout(() => {
+            console.log('AuthContext: Ensuring socket connection after auth check');
+            ApiService.reconnectSocket();
+          }, 500); // Small delay to ensure everything is ready
         } else {
           // Clear invalid token
           localStorage.removeItem('token');
@@ -94,6 +101,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         localStorage.setItem('token', response.data.data.token);
         localStorage.setItem('user', JSON.stringify(response.data.data.user));
         setUser(response.data.data.user);
+        
+        // Import ApiService and initialize socket connection after successful login
+        const { ApiService } = await import('../services/ApiService');
+        setTimeout(() => {
+          console.log('AuthContext: Initializing socket connection after login');
+          ApiService.reconnectSocket();
+        }, 500); // Small delay to ensure token is stored before socket init
+        
         return true;
       } else {
         setError(response.data.message || 'Login failed');
