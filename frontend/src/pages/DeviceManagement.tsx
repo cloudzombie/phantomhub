@@ -99,6 +99,7 @@ const DeviceManagement: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isUsbModalOpen, setIsUsbModalOpen] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [selectedDevice, setSelectedDevice] = useState<Device | null>(null);
@@ -119,12 +120,14 @@ const DeviceManagement: React.FC = () => {
     stealthMode: false
   });
   
-  // Manual refresh function with debounce
-  const [isRefreshing, setIsRefreshing] = useState(false);
+  // Refs for managing state and cleanup
+  const isMountedRef = useRef(true);
+  const unsubscribeRef = useRef<(() => void) | null>(null);
   const refreshTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const lastRefreshTimeRef = useRef<number>(0);
   const REFRESH_COOLDOWN = 5000; // 5 second cooldown between refreshes
 
+  // Manual refresh function with debounce
   const handleRefresh = async () => {
     const now = Date.now();
     if (isLoading || isRefreshing || (now - lastRefreshTimeRef.current < REFRESH_COOLDOWN)) {
@@ -141,7 +144,7 @@ const DeviceManagement: React.FC = () => {
     
     try {
       const response = await apiServiceInstance.get('/devices/detailed');
-      if (response.data?.success) {
+      if (response.data?.success && isMountedRef.current) {
         setDevices(response.data.data);
         lastRefreshTimeRef.current = now;
       }
@@ -153,26 +156,19 @@ const DeviceManagement: React.FC = () => {
         setErrorMessage((error as any)?.response?.data?.message || 'Error refreshing devices');
       }
     } finally {
-      // Set a timeout before allowing another refresh
-      refreshTimeoutRef.current = setTimeout(() => {
-        setIsRefreshing(false);
-      }, REFRESH_COOLDOWN);
+      if (isMountedRef.current) {
+        // Set a timeout before allowing another refresh
+        refreshTimeoutRef.current = setTimeout(() => {
+          setIsRefreshing(false);
+        }, REFRESH_COOLDOWN);
+      }
     }
   };
 
-  // Cleanup refresh timeout
-  useEffect(() => {
-    return () => {
-      if (refreshTimeoutRef.current) {
-        clearTimeout(refreshTimeoutRef.current);
-      }
-    };
-  }, []);
-  
-  // Fetch devices and set up socket subscription
+  // Initialize devices and set up socket subscription
   useEffect(() => {
     let isMounted = true;
-    let unsubscribe: (() => void) | null = null;
+    isMountedRef.current = true;
 
     const initializeDevices = async () => {
       if (!isMounted) return;
@@ -189,7 +185,7 @@ const DeviceManagement: React.FC = () => {
 
         // Subscribe to device updates
         if (isMounted) {
-          unsubscribe = apiServiceInstance.subscribeToDeviceUpdates((updatedDevices) => {
+          unsubscribeRef.current = apiServiceInstance.subscribeToDeviceUpdates((updatedDevices) => {
             if (isMounted) {
               setDevices(updatedDevices);
             }
@@ -216,8 +212,12 @@ const DeviceManagement: React.FC = () => {
     // Cleanup
     return () => {
       isMounted = false;
-      if (unsubscribe) {
-        unsubscribe();
+      isMountedRef.current = false;
+      if (unsubscribeRef.current) {
+        unsubscribeRef.current();
+      }
+      if (refreshTimeoutRef.current) {
+        clearTimeout(refreshTimeoutRef.current);
       }
     };
   }, []); // No dependencies needed as we're using the subscription pattern
@@ -384,8 +384,10 @@ const DeviceManagement: React.FC = () => {
     }
   };
   
-  // Update device status
+  // Update device status without triggering a refresh
   const updateDeviceStatus = async (deviceId: number, status: 'online' | 'offline' | 'busy') => {
+    if (!isMountedRef.current) return;
+    
     setErrorMessage(null);
     
     try {
@@ -396,28 +398,29 @@ const DeviceManagement: React.FC = () => {
       if (response.data && response.data.success) {
         setSuccessMessage(`Device status updated to ${status}`);
         
-        // Update devices list
+        // Update devices list without triggering a refresh
         setDevices(prev => 
           prev.map(device => 
             device.id === deviceId ? { ...device, status } : device
           )
         );
       } else {
-        setErrorMessage('Failed to update O.MG Cable status. Please try again.');
+        setErrorMessage('Failed to update device status. Please try again.');
       }
     } catch (error) {
       console.error('Error updating device status:', error);
-      setErrorMessage('Failed to update O.MG Cable status. Please try again.');
+      setErrorMessage('Failed to update device status. Please try again.');
       
-      // If we get an unauthorized error, use tokenManager to handle it properly
       if (isAuthError(error)) {
         handleAuthError(error, 'Authentication error while updating device status');
       }
     }
   };
   
-  // Deploy payload to device
+  // Deploy payload without triggering a refresh
   const deployPayload = async (deviceId: number, payloadId: string) => {
+    if (!isMountedRef.current) return;
+
     try {
       const response = await apiServiceInstance.post(`/devices/${deviceId}/deploy`, {
         payloadId,
@@ -429,7 +432,7 @@ const DeviceManagement: React.FC = () => {
 
       if (response.data && response.data.success) {
         setSuccessMessage('Payload deployment initiated');
-        // Update device status to attacking
+        // Update device status without triggering a refresh
         setDevices(prev => prev.map(device => 
           device.id === deviceId ? 
           { 

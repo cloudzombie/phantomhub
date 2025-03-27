@@ -24,6 +24,7 @@ class ApiService {
   private maxReconnectAttempts: number = API_CONFIG.maxReconnectAttempts;
   private socketReconnectDelay: number = API_CONFIG.reconnectDelay;
   private subscriptionTimeout: NodeJS.Timeout | null = null;
+  private isInitialized: boolean = false;
 
   private constructor() {
     this.config = {
@@ -418,6 +419,20 @@ class ApiService {
     this.deviceSubscribers.clear();
     this.isReconnecting = false;
     this.reconnectAttempts = 0;
+    this.isInitialized = false;
+  }
+
+  // Add method to check if service is initialized
+  public isInitialized(): boolean {
+    return this.isInitialized;
+  }
+
+  // Add method to initialize service
+  public initialize(): void {
+    if (!this.isInitialized) {
+      this.initializeSocket();
+      this.isInitialized = true;
+    }
   }
 }
 
