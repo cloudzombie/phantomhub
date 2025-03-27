@@ -40,7 +40,7 @@ interface Device {
   name: string;
   ipAddress: string;
   firmwareVersion: string | null;
-  status: 'online' | 'offline' | 'busy';
+  status: 'online' | 'offline' | 'busy' | 'attacking';
   lastCheckIn: string | null;
   createdAt: string;
   updatedAt: string;
@@ -51,6 +51,23 @@ interface Device {
     id: number;
     username: string;
     email: string;
+  };
+  capabilities?: {
+    usbHid: boolean;
+    wifi: boolean;
+    bluetooth: boolean;
+    storage: string;
+    supportedFeatures: string[];
+    maxPayloadSize: number;
+    availableSlots: number;
+    currentSlot?: number;
+  };
+  attackState?: {
+    currentPayload?: string;
+    targetSystem?: string;
+    progress?: number;
+    startTime?: string;
+    estimatedDuration?: number;
   };
 }
 
@@ -94,6 +111,13 @@ const DeviceManagement: React.FC = () => {
   const [usbFormData, setUsbFormData] = useState<UsbDeviceFormData>({
     name: '',
     firmwareVersion: ''
+  });
+  const [selectedPayload, setSelectedPayload] = useState<string | null>(null);
+  const [attackConfig, setAttackConfig] = useState({
+    targetSystem: '',
+    delayBetweenKeystrokes: 0,
+    autoReconnect: true,
+    stealthMode: false
   });
   
   // Fetch devices on component mount and set up socket listeners
@@ -172,7 +196,7 @@ const DeviceManagement: React.FC = () => {
     setErrorMessage(null);
     
     try {
-      const response = await apiServiceInstance.get('/devices');
+      const response = await apiServiceInstance.get('/devices/detailed');
       
       if (response.data && response.data.success) {
         const updatedDevices = response.data.data.map((device: Device) => {
@@ -183,11 +207,25 @@ const DeviceManagement: React.FC = () => {
           
           return {
             ...device,
-            status: diffMins > 5 ? 'offline' : device.status
+            status: device.status === 'attacking' ? 'attacking' : 
+                   diffMins > 5 ? 'offline' : device.status,
+            capabilities: {
+              ...device.capabilities,
+              maxPayloadSize: device.capabilities?.maxPayloadSize || 4096,
+              availableSlots: device.capabilities?.availableSlots || 8,
+              supportedFeatures: [
+                'DuckyScript',
+                'Payloads',
+                'HID Injection',
+                'Keystroke Injection',
+                'Mass Storage',
+                'Bluetooth Beacon',
+                'WiFi AP'
+              ]
+            }
           };
         });
         
-        // Only update if data has changed
         if (JSON.stringify(devices) !== JSON.stringify(updatedDevices)) {
           setDevices(updatedDevices);
         }
@@ -422,9 +460,53 @@ const DeviceManagement: React.FC = () => {
     }
   };
   
+  // Deploy payload to device
+  const deployPayload = async (deviceId: number, payloadId: string) => {
+    try {
+      const response = await apiServiceInstance.post(`/devices/${deviceId}/deploy`, {
+        payloadId,
+        config: {
+          ...attackConfig,
+          timestamp: new Date().toISOString()
+        }
+      });
+
+      if (response.data && response.data.success) {
+        setSuccessMessage('Payload deployment initiated');
+        // Update device status to attacking
+        setDevices(prev => prev.map(device => 
+          device.id === deviceId ? 
+          { 
+            ...device, 
+            status: 'attacking',
+            attackState: {
+              currentPayload: payloadId,
+              targetSystem: attackConfig.targetSystem,
+              progress: 0,
+              startTime: new Date().toISOString(),
+              estimatedDuration: response.data.estimatedDuration
+            }
+          } : device
+        ));
+      }
+    } catch (error) {
+      console.error('Error deploying payload:', error);
+      setErrorMessage('Failed to deploy payload. Please try again.');
+    }
+  };
+  
   // Get status badge based on device status
   const getStatusBadge = (status: string, device: Device) => {
     switch (status) {
+      case 'attacking':
+        return (
+          <span className="flex items-center px-2 py-1 text-xs font-medium rounded-md bg-red-500/10 text-red-500 border border-red-500/30">
+            <FiAlertCircle className="mr-1 animate-pulse" /> Attacking
+            {device.attackState?.progress && (
+              <span className="ml-1">({Math.round(device.attackState.progress)}%)</span>
+            )}
+          </span>
+        );
       case 'online':
         return (
           <span className="flex items-center px-2 py-1 text-xs font-medium rounded-md bg-green-500/10 text-green-500 border border-green-500/30">
@@ -496,6 +578,57 @@ const DeviceManagement: React.FC = () => {
   // Close device details
   const handleCloseDeviceDetails = () => {
     setSelectedDevice(null);
+  };
+  
+  // Add to the device details panel
+  const renderDeviceCapabilities = (device: Device) => {
+    if (!device.capabilities) return null;
+    
+    return (
+      <div className="mt-4 space-y-4">
+        <h4 className="text-sm font-medium text-white">Device Capabilities</h4>
+        <div className="grid grid-cols-2 gap-4">
+          <div className="bg-slate-700/30 p-3 rounded-md">
+            <h5 className="text-xs font-medium text-slate-300 mb-2">Storage</h5>
+            <p className="text-sm text-white">{device.capabilities.storage}</p>
+          </div>
+          <div className="bg-slate-700/30 p-3 rounded-md">
+            <h5 className="text-xs font-medium text-slate-300 mb-2">Payload Slots</h5>
+            <p className="text-sm text-white">{device.capabilities.availableSlots}</p>
+          </div>
+          <div className="bg-slate-700/30 p-3 rounded-md col-span-2">
+            <h5 className="text-xs font-medium text-slate-300 mb-2">Features</h5>
+            <div className="flex flex-wrap gap-2">
+              {device.capabilities.supportedFeatures.map(feature => (
+                <span key={feature} className="px-2 py-1 text-xs bg-slate-600/50 text-slate-300 rounded-md">
+                  {feature}
+                </span>
+              ))}
+            </div>
+          </div>
+        </div>
+        
+        {device.status === 'attacking' && device.attackState && (
+          <div className="bg-red-900/20 border border-red-500/30 rounded-md p-4 mt-4">
+            <h4 className="text-sm font-medium text-red-400 mb-2">Active Attack</h4>
+            <div className="space-y-2">
+              <p className="text-sm text-red-300">
+                Target: {device.attackState.targetSystem}
+              </p>
+              <p className="text-sm text-red-300">
+                Started: {formatDateTime(device.attackState.startTime || '')}
+              </p>
+              <div className="w-full bg-red-900/30 rounded-full h-2 mt-2">
+                <div 
+                  className="bg-red-500 h-2 rounded-full transition-all duration-500"
+                  style={{ width: `${device.attackState.progress || 0}%` }}
+                ></div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
   };
   
   return (
@@ -792,7 +925,7 @@ const DeviceManagement: React.FC = () => {
         </div>
       )}
       
-      {/* Device Details Modal */}
+      {/* Enhanced Device Details Modal */}
       {selectedDevice && (
         <div className="fixed inset-0 z-50 overflow-y-auto" tabIndex={-1}>
           <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center">
@@ -812,34 +945,112 @@ const DeviceManagement: React.FC = () => {
                 <DeviceInfoPanel 
                   deviceInfo={{
                     name: selectedDevice.name,
-                    port: {} as SerialPort, // Mock SerialPort object
+                    port: {} as SerialPort,
                     reader: null,
                     writer: null,
-                    connectionStatus: selectedDevice.status === 'online' ? 'connected' : 'disconnected',
+                    connectionStatus: selectedDevice.status === 'attacking' ? 'connected' : 
+                                    selectedDevice.status === 'online' ? 'connected' : 
+                                    selectedDevice.status === 'busy' ? 'connecting' : 'disconnected',
                     info: {
                       name: selectedDevice.name,
                       firmwareVersion: selectedDevice.firmwareVersion,
                       deviceId: selectedDevice.id.toString(),
-                      capabilities: {
+                      capabilities: selectedDevice.capabilities || {
                         usbHid: true,
                         wifi: selectedDevice.connectionType === 'network',
                         bluetooth: false,
                         storage: "4MB",
-                        supportedFeatures: ['DuckyScript', 'Payloads']
+                        supportedFeatures: [
+                          'DuckyScript',
+                          'Payloads',
+                          'HID Injection',
+                          'Keystroke Injection',
+                          'Mass Storage',
+                          'Bluetooth Beacon',
+                          'WiFi AP'
+                        ]
                       }
                     }
-                  }} 
+                  }}
                   onRefresh={() => fetchDevices()}
                 />
-              </div>
-              <div className="flex justify-end pt-4 border-t border-slate-700">
-                <button 
-                  type="button" 
-                  className="px-3 py-2 bg-slate-700 hover:bg-slate-600 border border-slate-600 rounded-md text-white text-sm font-medium transition-colors" 
-                  onClick={handleCloseDeviceDetails}
-                >
-                  Close
-                </button>
+                {renderDeviceCapabilities(selectedDevice)}
+                
+                {/* Attack Configuration */}
+                {selectedDevice.status !== 'attacking' && (
+                  <div className="mt-6 border-t border-slate-700 pt-6">
+                    <h4 className="text-sm font-medium text-white mb-4">Attack Configuration</h4>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-slate-300 mb-1">
+                          Target System
+                        </label>
+                        <input
+                          type="text"
+                          className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-md text-white text-sm"
+                          value={attackConfig.targetSystem}
+                          onChange={(e) => setAttackConfig(prev => ({
+                            ...prev,
+                            targetSystem: e.target.value
+                          }))}
+                          placeholder="Windows 10, macOS, etc."
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-300 mb-1">
+                          Keystroke Delay (ms)
+                        </label>
+                        <input
+                          type="number"
+                          className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-md text-white text-sm"
+                          value={attackConfig.delayBetweenKeystrokes}
+                          onChange={(e) => setAttackConfig(prev => ({
+                            ...prev,
+                            delayBetweenKeystrokes: parseInt(e.target.value) || 0
+                          }))}
+                        />
+                      </div>
+                      <div className="col-span-2">
+                        <div className="flex items-center space-x-4">
+                          <label className="flex items-center space-x-2">
+                            <input
+                              type="checkbox"
+                              checked={attackConfig.autoReconnect}
+                              onChange={(e) => setAttackConfig(prev => ({
+                                ...prev,
+                                autoReconnect: e.target.checked
+                              }))}
+                              className="form-checkbox bg-slate-700 border-slate-600 text-purple-500 rounded"
+                            />
+                            <span className="text-sm text-slate-300">Auto Reconnect</span>
+                          </label>
+                          <label className="flex items-center space-x-2">
+                            <input
+                              type="checkbox"
+                              checked={attackConfig.stealthMode}
+                              onChange={(e) => setAttackConfig(prev => ({
+                                ...prev,
+                                stealthMode: e.target.checked
+                              }))}
+                              className="form-checkbox bg-slate-700 border-slate-600 text-purple-500 rounded"
+                            />
+                            <span className="text-sm text-slate-300">Stealth Mode</span>
+                          </label>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div className="mt-4">
+                      <button
+                        className="px-4 py-2 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 rounded-md text-red-500 text-sm font-medium transition-colors disabled:opacity-50"
+                        onClick={() => selectedPayload && deployPayload(selectedDevice.id, selectedPayload)}
+                        disabled={!selectedPayload || isLoading}
+                      >
+                        Deploy Payload
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>
