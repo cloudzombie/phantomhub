@@ -112,9 +112,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       
       try {
         console.log('AuthContext: Verifying token with backend');
-        // Ensure the token is in the headers for this request
+        // CRITICAL: Force set the token in axios defaults before making the request
+        axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+        
+        // Also set it in the request headers for this specific request
         const headers = { Authorization: `Bearer ${token}` };
         console.log('AuthContext: Using token for verification:', token ? token.substring(0, 10) + '...' : 'none');
+        
+        // Force token into localStorage and sessionStorage again for maximum persistence
+        localStorage.setItem('token', token);
+        sessionStorage.setItem('token', token);
         
         const response = await axios.get(`${API_URL}/auth/me`, {
           headers,
@@ -224,12 +231,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           return false;
         }
         
-        // Store authentication data in multiple places for redundancy
-        localStorage.setItem('token', token);
-        localStorage.setItem('user', JSON.stringify(userData));
+        // Use tokenManager utilities for consistent token storage
+        storeToken(token);
+        storeUserData(userData);
         
-        // Also store in sessionStorage as a backup
+        // CRITICAL: Force token into localStorage and sessionStorage for maximum persistence
+        localStorage.setItem('token', token);
         sessionStorage.setItem('token', token);
+        localStorage.setItem('user', JSON.stringify(userData));
         sessionStorage.setItem('user', JSON.stringify(userData));
         
         // Set user state
@@ -299,12 +308,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           return false;
         }
         
-        // Store authentication data in multiple places for redundancy
-        localStorage.setItem('token', token);
-        localStorage.setItem('user', JSON.stringify(userData));
+        // Use tokenManager utilities for consistent token storage
+        storeToken(token);
+        storeUserData(userData);
         
-        // Also store in sessionStorage as a backup
+        // CRITICAL: Force token into localStorage and sessionStorage for maximum persistence
+        localStorage.setItem('token', token);
         sessionStorage.setItem('token', token);
+        localStorage.setItem('user', JSON.stringify(userData));
         sessionStorage.setItem('user', JSON.stringify(userData));
         
         // Set user state

@@ -12,17 +12,62 @@ import AdminDashboard from './pages/AdminDashboard';
 import AdminUserManagement from './pages/AdminUserManagement';
 import AdminNotFound from './pages/AdminNotFound';
 import AdminLayout from './components/admin/AdminLayout';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 
 import { useAuth } from './contexts/AuthContext';
 
-// Protected route component
+// Protected route component with enhanced authentication checking
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
+  const [isChecking, setIsChecking] = useState(true);
   
-  if (!isAuthenticated()) {
+  useEffect(() => {
+    // Enhanced authentication check that ensures token is properly set
+    const checkAuth = async () => {
+      console.log('ProtectedRoute: Checking authentication status');
+      
+      // First check via AuthContext
+      const authenticated = isAuthenticated();
+      
+      // Double-check with tokenManager directly as a fallback
+      if (!authenticated) {
+        console.log('ProtectedRoute: Not authenticated via AuthContext, checking tokenManager');
+        const token = getToken();
+        const userData = getUserData();
+        
+        if (token && userData) {
+          console.log('ProtectedRoute: Found valid token and user data via tokenManager');
+          // Force token into axios headers
+          axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+          // We'll let the component render since we have valid credentials
+          setIsChecking(false);
+          return;
+        }
+      } else {
+        console.log('ProtectedRoute: Authenticated via AuthContext');
+      }
+      
+      setIsChecking(false);
+    };
+    
+    checkAuth();
+  }, [isAuthenticated, user]);
+  
+  // Show loading state while checking authentication
+  if (isChecking) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-dark">
+        <div className="text-white text-xl">Verifying authentication...</div>
+      </div>
+    );
+  }
+  
+  // Check authentication after verification is complete
+  if (!isAuthenticated() && !getToken()) {
+    console.log('ProtectedRoute: Not authenticated, redirecting to login');
     return <Navigate to="/login" replace />;
   }
+  
   return <>{children}</>;
 };
 

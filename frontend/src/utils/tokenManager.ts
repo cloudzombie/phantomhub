@@ -48,11 +48,19 @@ export const getToken = (): string | null => {
       }
     }
     
-    // If we found a token, ensure axios headers are set
+    // If we found a token, ALWAYS ensure axios headers are set
     if (token) {
-      if (!axios.defaults.headers.common['Authorization']) {
-        console.log('TokenManager: Setting missing Authorization header in getToken');
-        axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+      // CRITICAL: Always set the Authorization header, even if it might already exist
+      // This ensures the header is always present for API requests
+      console.log('TokenManager: Setting Authorization header in getToken');
+      axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+      
+      // Force token into localStorage and sessionStorage
+      try {
+        localStorage.setItem('token', token);
+        sessionStorage.setItem('token', token);
+      } catch (err) {
+        console.warn('TokenManager: Error ensuring token in storage:', err);
       }
     }
   } catch (err) {
@@ -109,9 +117,18 @@ export const storeToken = (token: string): void => {
       console.log('TokenManager: Syncing token with database...');
       
       // Use direct axios call instead of ApiService to avoid circular dependency
+      // Always use the Heroku URL as specified in the application configuration
       const apiUrl = 'https://ghostwire-backend-e0380bcf4e0e.herokuapp.com/api';
+      
+      // Set the Authorization header globally before making the request
+      axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+      
+      // Make the request with explicit headers as well for redundancy
       axios.post(`${apiUrl}/auth/sync-token`, { token }, {
-        headers: { 'Authorization': `Bearer ${token}` }
+        headers: { 
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
       })
       .then(() => {
         console.log('TokenManager: Token synced with database successfully');
