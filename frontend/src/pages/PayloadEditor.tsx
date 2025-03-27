@@ -62,6 +62,32 @@ interface Script {
 }
 
 const PayloadEditor = () => {
+  // Helper function to get current user from storage
+  const getCurrentUserFromStorage = () => {
+    try {
+      const userData = getUserData();
+      // userData is already parsed by getUserData, no need to parse again
+      return userData;
+    } catch (error) {
+      console.error('Error parsing user data:', error);
+    }
+    return null;
+  };
+  
+  // Helper function to get current user role
+  const getCurrentUserRole = (): string => {
+    try {
+      const userData = getUserData();
+      if (userData) {
+        // userData is already parsed by getUserData, no need to parse again
+        return userData.role || 'user';
+      }
+    } catch (error) {
+      console.error('Error parsing user data:', error);
+    }
+    return 'user';
+  };
+
   const [payloadName, setPayloadName] = useState('New Payload');
   const [payloads, setPayloads] = useState<Payload[]>([]);
   const [selectedPayload, setSelectedPayload] = useState<Payload | null>(null);
@@ -346,7 +372,6 @@ const PayloadEditor = () => {
         userRole = userData.role || 'user';
         console.log('User role from tokenManager:', userRole);
       }
-      }
       
       // Check if user has permission to delete
       const currentUser = getCurrentUserFromStorage();
@@ -443,7 +468,7 @@ const PayloadEditor = () => {
     }
   };
   
-  const handleDeleteClick = (payload: Payload, e: React.MouseEvent) => {
+  const handleDeleteClick = (payload: Payload, e: React.MouseEvent<HTMLButtonElement>) => {
     e.stopPropagation(); // Prevent triggering the payload selection
     
     if (window.confirm(`Are you sure you want to delete "${payload.name}"? This action cannot be undone.`)) {
@@ -1254,31 +1279,7 @@ const PayloadEditor = () => {
     }
   };
   
-  // Add this helper function to get the current user from storage
-  const getCurrentUserFromStorage = () => {
-    try {
-      const userData = getUserData();
-      // userData is already parsed by getUserData, no need to parse again
-      return userData;
-    } catch (error) {
-      console.error('Error parsing user data:', error);
-    }
-    return null;
-  };
-  
-  // Add this function near the top of the component, before it's used
-  const getCurrentUserRole = (): string => {
-    try {
-      const userData = getUserData();
-      if (userData) {
-        // userData is already parsed by getUserData, no need to parse again
-        return userData.role || 'user';
-      }
-    } catch (error) {
-      console.error('Error parsing user data:', error);
-    }
-    return 'user';
-  };
+
   
   return (
     <div className="flex flex-col h-full p-6">
