@@ -165,24 +165,40 @@ const PayloadEditor = () => {
     }
     
     // Setup interval to refresh USB devices
-    const intervalId = setInterval(() => {
-      if (isWebSerialSupported()) {
-        checkUsbDevices();
+    let isMounted = true;
+    let intervalId: NodeJS.Timeout | null = null;
+
+    const refreshUsbDevices = async () => {
+      if (!isMounted) return;
+      
+      try {
+        const response = await apiServiceInstance.get('/devices/usb');
+        if (response.data?.success && isMounted) {
+          setUsbDevices(response.data.data);
+        }
+      } catch (error) {
+        console.error('Error refreshing USB devices:', error);
       }
-    }, 5000);
-    
+    };
+
+    // Initial fetch
+    refreshUsbDevices();
+
+    // Set up interval for periodic refresh
+    intervalId = setInterval(refreshUsbDevices, 10000); // Refresh every 10 seconds
+
     // Fetch available scripts
     fetchScripts();
     
     // Get user role when component mounts
     setUserRole(getCurrentUserRole());
     
-    // Cleanup
+    // Cleanup function
     return () => {
-      if (editorRef.current) {
-        editorRef.current.dispose();
+      isMounted = false;
+      if (intervalId) {
+        clearInterval(intervalId);
       }
-      clearInterval(intervalId);
     };
   }, []);
   

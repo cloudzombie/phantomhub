@@ -26,6 +26,11 @@ class NotificationService {
   private subscribers: Map<string, Set<NotificationCallback>> = new Map();
   private connectionAttempts: number = 0;
   private maxConnectionAttempts: number = 5;
+  private isReconnecting: boolean = false;
+  private reconnectAttempts: number = 0;
+  private maxReconnectAttempts: number = 5;
+  private socketReconnectDelay: number = 30000; // 30 seconds
+  private reconnectTimeout: NodeJS.Timeout | null = null;
 
   private constructor() {
     this.loadSettings();
@@ -45,6 +50,8 @@ class NotificationService {
       // Delay initial connection attempt to allow ApiService to initialize
       setTimeout(() => this.connect(), 1000);
     }
+
+    this.initializeSocket();
   }
 
   public static getInstance(): NotificationService {
@@ -155,20 +162,19 @@ class NotificationService {
     if (!this.socket) {
       console.log('NotificationService: No socket available from ApiService, will retry');
       
-      // Try to initialize the socket in ApiService
-      ApiService.reconnectSocket();
-      
-      // Retry after a short delay
-      setTimeout(() => {
+      // Instead of triggering reconnection, just wait for the socket to be available
+      const checkSocket = () => {
         this.socket = getSocket();
         if (this.socket) {
           console.log('NotificationService: Socket obtained after retry');
           this.setupSocketConnection();
         } else {
-          console.warn('NotificationService: Still no socket available after retry');
+          console.warn('NotificationService: Still no socket available, will retry in 5 seconds');
+          setTimeout(checkSocket, 5000);
         }
-      }, 1500);
+      };
       
+      checkSocket();
       return;
     }
     
@@ -179,10 +185,8 @@ class NotificationService {
     if (!this.socket) return;
     
     if (!this.socket.connected) {
-      console.log('NotificationService: ApiService socket not connected, requesting reconnection');
-      // Ask ApiService to reconnect the socket
-      ApiService.reconnectSocket();
-      // Wait for connection
+      console.log('NotificationService: ApiService socket not connected, waiting for connection');
+      // Instead of requesting reconnection, just wait for the socket to connect
       this.socket.once('connect', () => {
         console.log('NotificationService: Socket connected successfully');
         this.isConnected = true;
@@ -367,12 +371,9 @@ class NotificationService {
     console.log('NotificationService: Socket connected:', this.socket?.connected);
     console.log('NotificationService: Socket ID:', this.socket?.id);
     
-    // If socket doesn't exist or isn't connected, ask ApiService to reconnect
+    // If socket doesn't exist or isn't connected, wait for it
     if (!this.socket || !this.socket.connected) {
-      console.log('NotificationService: Socket not connected, requesting reconnection...');
-      
-      // Try to reconnect using ApiService
-      ApiService.reconnectSocket();
+      console.log('NotificationService: Socket not connected, waiting for connection...');
       
       // Wait for connection with timeout
       return new Promise((resolve) => {
@@ -449,6 +450,75 @@ class NotificationService {
         message: `WebSocket test failed: ${error instanceof Error ? error.message : String(error)}`,
         data: null
       });
+    }
+  }
+
+  private initializeSocket() {
+    if (this.socket) {
+      this.socket.disconnect();
+    }
+
+    this.socket = io(API_ENDPOINT, {
+      auth: {
+        token: tokenManager.getToken()
+      },
+      reconnection: true,
+      reconnectionDelay: this.socketReconnectDelay,
+      reconnectionDelayMax: this.socketReconnectDelay * 2,
+      reconnectionAttempts: this.maxReconnectAttempts,
+      timeout: 30000
+    });
+
+    this.socket.on('connect', () => {
+      console.log('Notification socket connected');
+      this.isReconnecting = false;
+      this.reconnectAttempts = 0;
+    });
+
+    this.socket.on('disconnect', () => {
+      console.log('Notification socket disconnected');
+      this.isReconnecting = true;
+      this.reconnectAttempts++;
+    });
+
+    this.socket.on('error', (error) => {
+      console.error('Notification socket error:', error);
+      this.isReconnecting = true;
+    });
+
+    this.socket.on('notification', (notification: Notification) => {
+      this.handleNotification(notification);
+    });
+  }
+
+  private handleReconnectFailure() {
+    if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+      console.warn('Max reconnection attempts reached for notification socket');
+      return;
+    }
+
+    // Clear any existing timeout
+    if (this.reconnectTimeout) {
+      clearTimeout(this.reconnectTimeout);
+    }
+
+    // Set new timeout for next attempt
+    const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), this.socketReconnectDelay);
+    this.reconnectTimeout = setTimeout(() => {
+      if (!this.isReconnecting) {
+        this.initializeSocket();
+      }
+    }, delay);
+  }
+
+  public cleanup() {
+    if (this.socket) {
+      this.socket.disconnect();
+      this.socket = null;
+    }
+    if (this.reconnectTimeout) {
+      clearTimeout(this.reconnectTimeout);
+      this.reconnectTimeout = null;
     }
   }
 }

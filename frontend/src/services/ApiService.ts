@@ -22,10 +22,14 @@ class ApiService {
   private socket: Socket | null = null;
   private baseURL: string;
   private lastSocketAttempt: number = 0;
-  private socketReconnectDelay: number = 5000; // 5 seconds between reconnection attempts
-  private deviceStatusSubscribers: Set<(devices: any[]) => void> = new Set();
+  private socketReconnectDelay: number = 30000; // 30 seconds between reconnection attempts
+  private deviceSubscribers: ((devices: any[]) => void)[] = [];
   private lastDeviceUpdate: number = 0;
-  private deviceUpdateThrottle: number = 2000; // 2 seconds minimum between updates
+  private deviceUpdateThrottle: number = 5000; // 5 seconds minimum between updates
+  private isReconnecting: boolean = false;
+  private reconnectAttempts: number = 0;
+  private maxReconnectAttempts: number = 5;
+  private subscriptionTimeout: NodeJS.Timeout | null = null;
 
   private constructor() {
     // Always use the Heroku URL for API endpoint
@@ -242,11 +246,28 @@ class ApiService {
    * @param callback Function to call when device status updates
    */
   public subscribeToDeviceUpdates(callback: (devices: any[]) => void): () => void {
-    this.deviceStatusSubscribers.add(callback);
-    
+    this.deviceSubscribers.push(callback);
+
+    // Clear any existing subscription timeout
+    if (this.subscriptionTimeout) {
+      clearTimeout(this.subscriptionTimeout);
+    }
+
+    // Set up new subscription timeout
+    this.subscriptionTimeout = setTimeout(() => {
+      if (this.socket?.connected) {
+        this.socket.emit('subscribe_device_updates');
+      }
+    }, 1000);
+
     // Return unsubscribe function
     return () => {
-      this.deviceStatusSubscribers.delete(callback);
+      this.deviceSubscribers = this.deviceSubscribers.filter(cb => cb !== callback);
+      
+      // If no more subscribers, unsubscribe from updates
+      if (this.deviceSubscribers.length === 0 && this.socket?.connected) {
+        this.socket.emit('unsubscribe_device_updates');
+      }
     };
   }
 
@@ -256,81 +277,65 @@ class ApiService {
    */
   private notifyDeviceSubscribers(devices: any[]): void {
     const now = Date.now();
+    
+    // More aggressive throttling of updates
     if (now - this.lastDeviceUpdate < this.deviceUpdateThrottle) {
-      return; // Throttle updates
+      console.log('ApiService: Throttling device update');
+      return;
     }
     
+    // Only notify if there are actual changes
     this.lastDeviceUpdate = now;
-    this.deviceStatusSubscribers.forEach(callback => callback(devices));
+    this.deviceSubscribers.forEach(callback => {
+      try {
+        callback(devices);
+      } catch (error) {
+        console.error('ApiService: Error in device update subscriber:', error);
+      }
+    });
   }
 
   /**
    * Initialize Socket.IO connection with proper authentication
    */
   private initializeSocket(): void {
-    try {
-      const token = getToken();
-      
-      if (!token) {
-        console.warn('ApiService: No auth token available for socket connection');
-        return;
-      }
-
-      if (this.socket?.connected) {
-        console.log('ApiService: Socket already connected, skipping initialization');
-        return;
-      }
-      
-      if (this.socket) {
-        console.log('ApiService: Disconnecting existing socket before creating a new one');
-        this.socket.disconnect();
-      }
-      
-      this.socket = io(this.baseURL, {
-        reconnection: true,
-        reconnectionAttempts: 5,
-        reconnectionDelay: 5000,
-        reconnectionDelayMax: 30000,
-        randomizationFactor: 0.5,
-        autoConnect: true,
-        transports: ['websocket'],
-        auth: {
-          token: token
-        },
-        forceNew: true,
-        timeout: 45000
-      });
-      
-      this.setupSocketEventHandlers();
-    } catch (error) {
-      console.error('ApiService: Error initializing socket:', error);
+    if (this.socket) {
+      this.socket.disconnect();
     }
-  }
-  
-  /**
-   * Set up event handlers for socket connection
-   */
-  private setupSocketEventHandlers(): void {
-    if (!this.socket) return;
-    
-    // Remove existing listeners
-    this.socket.removeAllListeners();
-    
-    this.socket.on('connect', () => {
-      console.log('ApiService: Socket connected');
-      // Request initial device state on connection
-      this.socket.emit('subscribe_device_updates');
-    });
-    
-    this.socket.on('disconnect', (reason) => {
-      console.log('ApiService: Socket disconnected:', reason);
-    });
-    
-    this.socket.on('error', (error) => {
-      console.error('ApiService: Socket error:', error);
+
+    this.socket = io(this.config.endpoint, {
+      auth: {
+        token: getToken()
+      },
+      reconnection: true,
+      reconnectionDelay: this.socketReconnectDelay,
+      reconnectionDelayMax: this.socketReconnectDelay * 2,
+      reconnectionAttempts: this.maxReconnectAttempts,
+      timeout: this.config.timeout
     });
 
-    // Handle device updates via socket
+    this.socket.on('connect', () => {
+      console.log('Socket connected');
+      this.isReconnecting = false;
+      this.reconnectAttempts = 0;
+      
+      // Only emit subscribe if we have subscribers
+      if (this.deviceSubscribers.length > 0) {
+        this.socket?.emit('subscribe_device_updates');
+      }
+    });
+
+    this.socket.on('disconnect', () => {
+      console.log('Socket disconnected');
+      this.isReconnecting = true;
+      this.reconnectAttempts++;
+    });
+
+    this.socket.on('error', (error) => {
+      console.error('Socket error:', error);
+      this.isReconnecting = true;
+    });
+
     this.socket.on('device_status_update', (devices: any[]) => {
       this.notifyDeviceSubscribers(devices);
     });
@@ -339,16 +344,26 @@ class ApiService {
       this.notifyDeviceSubscribers([update]);
     });
   }
-  
+
   /**
    * Reconnect socket if disconnected with enhanced token handling
    */
   public reconnectSocket(): void {
     const now = Date.now();
+    
+    // More strict reconnection throttling
     if (now - this.lastSocketAttempt < this.socketReconnectDelay) {
       console.log('ApiService: Skipping socket reconnection, too soon since last attempt');
       return;
     }
+    
+    if (this.isReconnecting) {
+      console.log('ApiService: Socket reconnection already in progress');
+      return;
+    }
+    
+    // Reset reconnection attempts when manually reconnecting
+    this.reconnectAttempts = 0;
     
     this.lastSocketAttempt = now;
     this.initializeSocket();
@@ -377,6 +392,22 @@ class ApiService {
     } catch (error) {
       console.error('ApiService: Error saving user settings', error);
     }
+  }
+
+  // Cleanup method to be called when the service is being destroyed
+  public cleanup(): void {
+    if (this.subscriptionTimeout) {
+      clearTimeout(this.subscriptionTimeout);
+      this.subscriptionTimeout = null;
+    }
+    
+    if (this.socket) {
+      this.socket.disconnect();
+      this.socket = null;
+    }
+    
+    this.isReconnecting = false;
+    this.reconnectAttempts = 0;
   }
 }
 

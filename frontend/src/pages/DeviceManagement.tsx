@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   FiRefreshCw, 
   FiInfo, 
@@ -123,31 +123,52 @@ const DeviceManagement: React.FC = () => {
   useEffect(() => {
     let isMounted = true;
     let unsubscribe: (() => void) | null = null;
+    let isInitialFetch = true;
+    let refreshTimeout: NodeJS.Timeout | null = null;
 
     const initializeDevices = async () => {
       if (!isMounted) return;
       
-      setIsLoading(true);
+      // Only show loading indicator on initial fetch
+      if (isInitialFetch) {
+        setIsLoading(true);
+      }
+
       try {
         // Initial fetch
         const response = await apiServiceInstance.get('/devices/detailed');
         if (response.data?.success && isMounted) {
-          setDevices(response.data.data);
+          setDevices(prev => {
+            // Only update if data has changed
+            const newDevices = response.data.data;
+            if (JSON.stringify(prev) === JSON.stringify(newDevices)) {
+              return prev;
+            }
+            return newDevices;
+          });
         }
 
         // Subscribe to device updates
-        if (isMounted) {
+        if (isMounted && !unsubscribe) {
           unsubscribe = apiServiceInstance.subscribeToDeviceUpdates((updatedDevices) => {
             if (isMounted) {
               setDevices(prev => {
                 // If it's a single device update
                 if (updatedDevices.length === 1) {
                   const update = updatedDevices[0];
-                  return prev.map(device => 
+                  const newDevices = prev.map(device => 
                     device.id === update.id ? { ...device, ...update } : device
                   );
+                  // Only update if the device actually changed
+                  if (JSON.stringify(prev) === JSON.stringify(newDevices)) {
+                    return prev;
+                  }
+                  return newDevices;
                 }
-                // If it's a full device list update
+                // If it's a full device list update, only update if changed
+                if (JSON.stringify(prev) === JSON.stringify(updatedDevices)) {
+                  return prev;
+                }
                 return updatedDevices;
               });
             }
@@ -163,8 +184,9 @@ const DeviceManagement: React.FC = () => {
           }
         }
       } finally {
-        if (isMounted) {
+        if (isMounted && isInitialFetch) {
           setIsLoading(false);
+          isInitialFetch = false;
         }
       }
     };
@@ -177,20 +199,38 @@ const DeviceManagement: React.FC = () => {
       if (unsubscribe) {
         unsubscribe();
       }
+      if (refreshTimeout) {
+        clearTimeout(refreshTimeout);
+      }
     };
   }, []); // No dependencies needed as we're using the subscription pattern
 
-  // Manual refresh function
+  // Manual refresh function with debounce
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const refreshTimeoutRef = useRef<NodeJS.Timeout>();
+
   const handleRefresh = async () => {
-    if (isLoading) return;
+    if (isLoading || isRefreshing) return;
     
-    setIsLoading(true);
+    // Clear any pending refresh
+    if (refreshTimeoutRef.current) {
+      clearTimeout(refreshTimeoutRef.current);
+    }
+
+    setIsRefreshing(true);
     setErrorMessage(null);
     
     try {
       const response = await apiServiceInstance.get('/devices/detailed');
       if (response.data?.success) {
-        setDevices(response.data.data);
+        setDevices(prev => {
+          // Only update if data has changed
+          const newDevices = response.data.data;
+          if (JSON.stringify(prev) === JSON.stringify(newDevices)) {
+            return prev;
+          }
+          return newDevices;
+        });
       }
     } catch (error) {
       console.error('Error refreshing devices:', error);
@@ -200,9 +240,21 @@ const DeviceManagement: React.FC = () => {
         setErrorMessage((error as any)?.response?.data?.message || 'Error refreshing devices');
       }
     } finally {
-      setIsLoading(false);
+      // Set a timeout before allowing another refresh
+      refreshTimeoutRef.current = setTimeout(() => {
+        setIsRefreshing(false);
+      }, 5000); // 5 second cooldown
     }
   };
+
+  // Cleanup refresh timeout
+  useEffect(() => {
+    return () => {
+      if (refreshTimeoutRef.current) {
+        clearTimeout(refreshTimeoutRef.current);
+      }
+    };
+  }, []);
   
   // Handle form input changes
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -278,20 +330,15 @@ const DeviceManagement: React.FC = () => {
   // Register network device with improved error handling
   const registerDevice = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (!validateForm()) {
-      return;
-    }
-    
-    if (isLoading) {
-      setErrorMessage('Registration already in progress');
-      return;
-    }
-    
     setIsLoading(true);
     setErrorMessage(null);
-    
+
     try {
+      // Validate form data
+      if (!validateForm()) {
+        return;
+      }
+
       const response = await apiServiceInstance.post('/devices', {
         name: formData.name,
         ipAddress: formData.ipAddress,
@@ -299,28 +346,25 @@ const DeviceManagement: React.FC = () => {
         connectionType: 'network'
       });
       
-      if (response.data && response.data.success) {
-        setSuccessMessage('O.MG Cable registered successfully!');
+      if (response.data?.success) {
+        setSuccessMessage('Device registered successfully!');
         setFormData({
           name: '',
           ipAddress: '',
           firmwareVersion: ''
         });
-        setIsModalOpen(false);
         
-        // Wait a moment before refreshing the device list
-        setTimeout(() => {
-          handleRefresh();
-        }, 1000);
+        // Instead of refreshing immediately, wait for the socket update
+        // The socket will notify us of the new device
       } else {
-        throw new Error(response.data?.message || 'Failed to register device');
+        setErrorMessage(response.data?.message || 'Failed to register device');
       }
     } catch (error) {
       console.error('Error registering device:', error);
-      setErrorMessage((error as any)?.response?.data?.message || 'Failed to register O.MG Cable. Please try again.');
-      
       if (isAuthError(error)) {
-        handleAuthError(error, 'Authentication error while registering device');
+        handleAuthError(error, 'Authentication error in DeviceManagement');
+      } else {
+        setErrorMessage((error as any)?.response?.data?.message || 'Error registering device');
       }
     } finally {
       setIsLoading(false);
@@ -328,62 +372,43 @@ const DeviceManagement: React.FC = () => {
   };
   
   // Register USB device
-  const registerUsbDevice = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (!validateUsbForm()) {
-      return;
-    }
-    
+  const registerUsbDevice = async () => {
     setIsLoading(true);
     setErrorMessage(null);
-    
+
     try {
       // Request serial port access
       const port = await requestSerialPort();
-      
       if (!port) {
-        setErrorMessage('Failed to access USB device. Please try again.');
-        setIsLoading(false);
+        setErrorMessage('No USB device selected');
         return;
       }
-      
-      // Get device info
-      const portInfo = port.getInfo();
-      
-      // Register device with backend
+
+      // Connect to the device
+      const deviceInfo = await connectToDevice(port, DEFAULT_SERIAL_OPTIONS);
+      if (deviceInfo.connectionStatus !== 'connected') {
+        setErrorMessage('Failed to connect to USB device');
+        return;
+      }
+
+      // Register the device
       const response = await apiServiceInstance.post('/devices', {
-        name: usbFormData.name,
-        firmwareVersion: usbFormData.firmwareVersion || '1.0.0',
+        name: deviceInfo.info.deviceName || 'USB Device',
+        serialPortId: deviceInfo.info.deviceId,
         connectionType: 'usb',
-        serialPortId: `${portInfo.usbVendorId || 0}:${portInfo.usbProductId || 0}`
+        firmwareVersion: deviceInfo.info.firmwareVersion || null
       });
-      
-      if (response.data && response.data.success) {
-        setSuccessMessage('USB O.MG Cable registered successfully!');
-        
-        // Reset form
-        setUsbFormData({
-          name: '',
-          firmwareVersion: ''
-        });
-        
-        // Close modal
-        setIsUsbModalOpen(false);
-        
-        // Refresh device list
-        handleRefresh();
+
+      if (response.data?.success) {
+        setSuccessMessage('USB device registered successfully!');
+        // Instead of refreshing immediately, wait for the socket update
+        // The socket will notify us of the new device
       } else {
-        setErrorMessage('Failed to register USB O.MG Cable. Please try again.');
+        setErrorMessage(response.data?.message || 'Failed to register USB device');
       }
     } catch (error) {
       console.error('Error registering USB device:', error);
-      setErrorMessage((error as any)?.response?.data?.message || 'Failed to register USB O.MG Cable. Please try again.');
-      
-      // If we get an unauthorized error, use tokenManager to handle it properly
-      if (isAuthError(error)) {
-        handleAuthError(error, 'Authentication error while registering USB device');
-      }
+      setErrorMessage((error as any)?.response?.data?.message || 'Error registering USB device');
     } finally {
       setIsLoading(false);
     }
