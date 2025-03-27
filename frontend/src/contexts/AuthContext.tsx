@@ -43,8 +43,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     const checkAuthStatus = async () => {
       console.log('AuthContext: Checking auth status on load/refresh');
-      const token = localStorage.getItem('token');
-      const storedUser = localStorage.getItem('user');
+      // Use the tokenManager utility to get token from either localStorage or sessionStorage
+      const token = getToken();
+      const storedUser = getUserData();
       
       // If we have a stored user, set it immediately to prevent flashing of login screen
       if (storedUser) {
@@ -117,7 +118,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           // Only clear user state if explicitly told by server to logout
           if (response.data.forceLogout) {
             localStorage.removeItem('token');
+            sessionStorage.removeItem('token');
             localStorage.removeItem('user');
+            sessionStorage.removeItem('user');
             setUser(null);
           }
         }

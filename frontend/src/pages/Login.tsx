@@ -15,14 +15,33 @@ const Login = () => {
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
   const navigate = useNavigate();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, logout } = useAuth();
   
-  // Redirect if already logged in
+  // Check for logout action and handle authentication
   useEffect(() => {
-    if (isAuthenticated()) {
+    // Parse URL parameters to check for logout action
+    const params = new URLSearchParams(window.location.search);
+    const action = params.get('action');
+    
+    if (action === 'logout') {
+      // Use the AuthContext's logout method for proper cleanup
+      console.log('Login: Handling logout action from URL parameter');
+      logout();
+      // Clear the URL parameter to prevent repeated logout
+      window.history.replaceState({}, document.title, '/login');
+    } else if (action === 'reauth') {
+      // Handle reauth action - this is for authentication errors
+      // We don't logout here, just show a message and let the user login again
+      console.log('Login: Handling reauth action from URL parameter');
+      setErrorMessage('Your session has expired. Please login again.');
+      // Clear the URL parameter
+      window.history.replaceState({}, document.title, '/login');
+    } else if (isAuthenticated()) {
+      // If already authenticated and not logging out, redirect to home
+      console.log('Login: User already authenticated, redirecting to home');
       navigate('/');
     }
-  }, [isAuthenticated, navigate]);
+  }, [isAuthenticated, navigate, logout]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

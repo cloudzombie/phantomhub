@@ -1,5 +1,6 @@
 import { Routes, Route, Navigate, BrowserRouter } from 'react-router-dom';
 import axios from 'axios';
+import { getToken } from './utils/tokenManager';
 import Layout from './components/Layout';
 import Dashboard from './pages/Dashboard';
 import Login from './pages/Login';
@@ -13,6 +14,14 @@ import AdminUserManagement from './pages/AdminUserManagement';
 import AdminNotFound from './pages/AdminNotFound';
 import AdminLayout from './components/admin/AdminLayout';
 import { useEffect, useState } from 'react';
+
+// Initialize axios with token if available
+// This ensures authentication headers are set before any component renders
+const token = getToken();
+if (token) {
+  console.log('App: Setting global Authorization header on initialization');
+  axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+}
 
 import { useAuth } from './contexts/AuthContext';
 
@@ -52,11 +61,11 @@ const AdminRoute = ({ children }: { children: React.ReactNode }) => {
   useEffect(() => {
     const checkStoredUserRole = (): string | null => {
       try {
-        // Get token and user from localStorage
-        const token = localStorage.getItem('token');
-        const storedUser = localStorage.getItem('user');
+        // Use getToken from tokenManager to get token from either localStorage or sessionStorage
+        const token = getToken();
+        const storedUser = localStorage.getItem('user') || sessionStorage.getItem('user');
         
-        console.log('AdminRoute - Checking localStorage:', {
+        console.log('AdminRoute - Checking storage:', {
           hasToken: !!token,
           hasStoredUser: !!storedUser
         });
@@ -68,13 +77,14 @@ const AdminRoute = ({ children }: { children: React.ReactNode }) => {
           // CRITICAL: Set axios default headers with token
           if (token && !axios.defaults.headers.common['Authorization']) {
             axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-            console.log('AdminRoute - Set Authorization header from localStorage');
+            console.log('AdminRoute - Set Authorization header from storage');
           }
           
           return parsedUser.role;
         }
       } catch (err) {
         console.error('AdminRoute - Error checking stored user:', err);
+        // IMPORTANT: Don't clear tokens or user data on errors
       }
       return null;
     };
