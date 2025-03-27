@@ -162,10 +162,11 @@ const Dashboard = () => {
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
       
-      // If we get a 401, redirect to login
+      // If we get a 401, redirect to login WITHOUT removing token
       if (axios.isAxiosError(error) && error.response?.status === 401) {
-        localStorage.removeItem('token');
-        window.location.href = '/login';
+        console.log('Authentication error in Dashboard, redirecting to login without removing token');
+        // Use the login page with action parameter to handle logout properly
+        window.location.href = '/login?action=logout';
       }
       // Handle 500 errors gracefully - likely due to empty collections
       else if (axios.isAxiosError(error) && error.response?.status === 500) {

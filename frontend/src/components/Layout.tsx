@@ -96,20 +96,25 @@ const Layout = () => {
   }, [location]);
   
   const handleLogout = () => {
-    // Clear user-specific settings before logout
+    console.log('Layout: User clicked logout button');
+    // Instead of directly removing tokens, use the AuthContext's logout method
+    // This ensures proper cleanup and prevents accidental logouts
+    
+    // First, clear user-specific settings
     if (currentUser && currentUser.id) {
-      localStorage.removeItem(`ghostwire_settings_${currentUser.id}`);
+      try {
+        // Don't remove settings, just save them to API if needed
+        console.log('Layout: Saving user settings before logout');
+        // ApiService will handle this properly without removing tokens
+        ApiService.saveUserSettings();
+      } catch (err) {
+        console.error('Layout: Error saving settings before logout', err);
+      }
     }
     
-    // Use the ApiService to clear settings properly
-    ApiService.clearUserSettings();
-    
-    // Remove auth data
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    
-    // Redirect to login page
-    window.location.href = '/login';
+    // Redirect to the login page, which will handle the actual logout
+    // This prevents direct token removal which could cause issues
+    window.location.href = '/login?action=logout';
   };
   
   const NavItem = ({ to, icon, children, isActive }: { to: string; icon: React.ReactElement; children: React.ReactNode; isActive?: boolean }) => (

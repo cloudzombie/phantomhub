@@ -359,6 +359,31 @@ class ApiService {
       console.log('ApiService: Socket already connected');
     }
   }
+  
+  /**
+   * Save user settings without removing tokens
+   * This is used before logout to ensure settings are saved but tokens aren't removed
+   */
+  public saveUserSettings(): void {
+    try {
+      const userId = this.getCurrentUserId();
+      if (!userId) {
+        console.log('ApiService: No user ID available, skipping settings save');
+        return;
+      }
+      
+      console.log('ApiService: Saving user settings before logout');
+      // We're intentionally NOT removing any tokens or user data here
+      // Just trigger any API calls needed to save settings
+      
+      // Dispatch an event that other services can listen to for saving their state
+      document.dispatchEvent(new CustomEvent('save-user-settings', {
+        detail: { userId }
+      }));
+    } catch (error) {
+      console.error('ApiService: Error saving user settings', error);
+    }
+  }
 }
 
 // Export the instance as default

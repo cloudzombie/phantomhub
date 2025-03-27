@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   FiRefreshCw, 
   FiInfo, 
@@ -11,7 +11,6 @@ import {
   FiEye
 } from 'react-icons/fi';
 import apiServiceInstance from '../services/ApiService';
-import { handleAuthError, isAuthError } from '../utils/tokenManager';
 import { 
   isWebSerialSupported, 
   requestSerialPort, 
@@ -54,7 +53,7 @@ interface Device {
   };
 }
 
-const DeviceManagement: React.FC = () => {
+const DeviceManagement = () => {
   const [devices, setDevices] = useState<Device[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -116,9 +115,14 @@ const DeviceManagement: React.FC = () => {
     } catch (error) {
       console.error('Error fetching devices:', error);
       
-      // If we get an unauthorized error, use tokenManager to handle it properly
-      if (isAuthError(error)) {
-        handleAuthError(error, 'Authentication error in DeviceManagement');
+      // If we get an unauthorized error, redirect to login WITHOUT removing token
+      if (error instanceof Error && error.message.includes('401')) {
+        console.log('Authentication error in device status update, redirecting to login without removing token');
+        // Use the login page with action parameter to handle logout properly
+        window.location.href = '/login?action=logout';
+      }edirecting to login without removing token');
+        // Use the login page with action parameter to handle logout properly
+        window.location.href = '/login?action=logout';
       } else {
         // Set devices to empty array instead of showing error
         // This is expected when no devices are available yet
@@ -290,9 +294,14 @@ const DeviceManagement: React.FC = () => {
       console.error('Error registering device:', error);
       setErrorMessage(error.response?.data?.message || 'Failed to register O.MG Cable. Please try again.');
       
-      // If we get an unauthorized error, use tokenManager to handle it properly
-      if (isAuthError(error)) {
-        handleAuthError(error, 'Authentication error while registering device');
+      // If we get an unauthorized error, redirect to login WITHOUT removing token
+      if (error instanceof Error && error.message.includes('401')) {
+        console.log('Authentication error in device status update, redirecting to login without removing token');
+        // Use the login page with action parameter to handle logout properly
+        window.location.href = '/login?action=logout';
+      }edirecting to login without removing token');
+        // Use the login page with action parameter to handle logout properly
+        window.location.href = '/login?action=logout';
       }
     } finally {
       setIsLoading(false);
@@ -319,9 +328,14 @@ const DeviceManagement: React.FC = () => {
       console.error('Error updating device status:', error);
       setErrorMessage('Failed to update O.MG Cable status. Please try again.');
       
-      // If we get an unauthorized error, use tokenManager to handle it properly
-      if (isAuthError(error)) {
-        handleAuthError(error, 'Authentication error while registering device');
+      // If we get an unauthorized error, redirect to login WITHOUT removing token
+      if (error instanceof Error && error.message.includes('401')) {
+        console.log('Authentication error in device status update, redirecting to login without removing token');
+        // Use the login page with action parameter to handle logout properly
+        window.location.href = '/login?action=logout';
+      }edirecting to login without removing token');
+        // Use the login page with action parameter to handle logout properly
+        window.location.href = '/login?action=logout';
       }
     }
   };
