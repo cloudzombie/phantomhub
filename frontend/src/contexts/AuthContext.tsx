@@ -49,9 +49,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       
       // If we have a stored user, set it immediately to prevent flashing of login screen
       if (storedUser) {
-        // getUserData already handles parsing and validation, so we can use it directly
-        setUser(storedUser);
-        console.log('AuthContext: Restored user from storage, role:', storedUser.role);
+        try {
+          // getUserData already handles parsing and validation, so we can use it directly
+          setUser(storedUser);
+          console.log('AuthContext: Restored user from storage, role:', storedUser.role);
           
           // CRITICAL: Set axios default headers immediately
           if (token) {
@@ -60,20 +61,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             
             // Dispatch authentication event to ensure other components know we're authenticated
             setTimeout(() => {
-              // Add safety check to ensure parsedUser is valid
-              if (parsedUser && parsedUser.id) {
+              // Use storedUser instead of parsedUser since we're using tokenManager
+              if (storedUser && storedUser.id) {
                 document.dispatchEvent(new CustomEvent('user-authenticated', { 
-                  detail: { userId: parsedUser.id, role: parsedUser.role || 'user' } 
+                  detail: { userId: storedUser.id, role: storedUser.role || 'user' } 
                 }));
               } else {
-                console.warn('AuthContext: Invalid user data when restoring from localStorage');
+                console.warn('AuthContext: Invalid user data when restoring from storage');
               }
             }, 100);
           }
-          
-          console.log('AuthContext: Restored user from localStorage', parsedUser.role);
         } catch (err) {
-          console.error('AuthContext: Error parsing stored user', err);
+          console.error('AuthContext: Error restoring user from storage', err);
         }
       }
       
