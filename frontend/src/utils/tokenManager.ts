@@ -8,7 +8,7 @@
  */
 
 import axios from 'axios';
-import apiServiceInstance from '../services/ApiService';
+// Remove ApiService import to fix circular dependency
 
 /**
  * Get the authentication token from storage
@@ -39,36 +39,25 @@ export const storeToken = (token: string): void => {
   // Set the Authorization header for axios
   axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
   
-  // Sync token with backend database for true persistence
+  // Optional token sync with backend - use direct axios to avoid circular dependency
   if (token && token.length > 20) {
-    // Add a slight delay to ensure the token is properly set in storage first
+    // Use a small delay to ensure token is set in storage first
     setTimeout(() => {
       console.log('TokenManager: Syncing token with database...');
       
-      // Call our new /auth/sync-token endpoint
-      apiServiceInstance.post('/auth/sync-token', { token })
-        .then(response => {
-          if (response.data?.success) {
-            console.log('TokenManager: Token synced with database successfully');
-          } else {
-            console.warn('TokenManager: Token sync response indicated failure:', response.data);
-          }
-        })
-        .catch(err => {
-          // Critical: Don't remove token on sync errors - just log
-          console.warn('TokenManager: Failed to sync token with database', err);
-          
-          // Retry once after 5 seconds if network or server error
-          if (err.code === 'ECONNABORTED' || err.response?.status >= 500) {
-            console.log('TokenManager: Will retry token sync in 5 seconds...');
-            setTimeout(() => {
-              apiServiceInstance.post('/auth/sync-token', { token })
-                .then(res => console.log('TokenManager: Retry token sync succeeded'))
-                .catch(e => console.warn('TokenManager: Retry token sync failed', e));
-            }, 5000);
-          }
-        });
-    }, 500);  // Increased delay for more reliable sequencing
+      // Use direct axios call instead of ApiService to avoid circular dependency
+      const apiUrl = 'https://ghostwire-backend-e0380bcf4e0e.herokuapp.com/api';
+      axios.post(`${apiUrl}/auth/sync-token`, { token }, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+      .then(() => {
+        console.log('TokenManager: Token synced with database successfully');
+      })
+      .catch(() => {
+        // Non-critical operation, just log error - don't remove token
+        console.warn('TokenManager: Failed to sync token with database');
+      });
+    }, 100);
   }
   
   console.log('TokenManager: Token stored and Authorization header set');

@@ -82,6 +82,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return;
       }
       
+      // Double-check token exists in both localStorage and sessionStorage
+      if (localStorage.getItem('token') !== token) {
+        console.log('AuthContext: Token missing from localStorage, restoring');
+        localStorage.setItem('token', token);
+      }
+      if (sessionStorage.getItem('token') !== token) {
+        console.log('AuthContext: Token missing from sessionStorage, restoring');
+        sessionStorage.setItem('token', token);
+      }
+      
       try {
         console.log('AuthContext: Verifying token with backend');
         // Ensure the token is in the headers for this request
@@ -94,44 +104,36 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           timeout: 8000
         });
         
-        // Handle both success and user data potentially being at different levels in response
-        // Some endpoints return {success: true, data: {...}}, others just return the data directly
-        const userData = response.data && (response.data.data || (response.data.success && response.data) || response.data);
-        const isSuccessful = response.data && (response.data.success === true || (userData && userData.id));
-        
-        if (isSuccessful && userData) {
+        if (response.data && response.data.success) {
           console.log('AuthContext: Token verified successfully');
           // Update user data with latest from server
+          const userData = response.data.data;
           setUser(userData);
           
-          // Use tokenManager to properly store user data with validation
-          storeUserData(userData);
+          // Store user data in localStorage for persistence
+          localStorage.setItem('user', JSON.stringify(userData));
+          sessionStorage.setItem('user', JSON.stringify(userData));
           
-          // Ensure token is properly stored via tokenManager
-          if (token) {
-            storeToken(token);
-            console.log('AuthContext: Token stored and Authorization header set via tokenManager');
-          }
+          // Set axios default headers for all future requests
+          axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+          console.log('AuthContext: Set default Authorization header for future requests');
           
           // Import ApiService and ensure socket connection is initialized
-          try {
-            const { ApiService } = await import('../services/ApiService');
-            setTimeout(() => {
-              console.log('AuthContext: Ensuring socket connection after auth check');
-              ApiService.reconnectSocket();
-              
-              // Always dispatch event with user data, adding fallbacks for missing fields
+          const { ApiService } = await import('../services/ApiService');
+          setTimeout(() => {
+            console.log('AuthContext: Ensuring socket connection after auth check');
+            ApiService.reconnectSocket();
+            
+            // Dispatch user-authenticated event for other services to listen to
+            if (userData && userData.id) {
               document.dispatchEvent(new CustomEvent('user-authenticated', { 
-                detail: { 
-                  userId: userData.id || '0', 
-                  role: userData.role || 'user'
-                } 
+                detail: { userId: userData.id, role: userData.role || 'user' } 
               }));
               console.log('AuthContext: Dispatched user-authenticated event');
-            }, 500); // Small delay to ensure everything is ready
-          } catch (serviceErr) {
-            console.error('AuthContext: Error initializing services', serviceErr);
-          }
+            } else {
+              console.warn('AuthContext: User data missing ID, cannot dispatch event');
+            }
+          }, 500); // Small delay to ensure everything is ready
         } else {
           console.error('AuthContext: Token validation failed', response.data);
           // DON'T clear token on validation failure - just log the error
@@ -194,8 +196,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       
       if (response.data.success) {
         console.log('AuthContext: Login successful');
-        const token = response.data.data.token;
-        const userData = response.data.data.user;
+        // Handle different response formats
+        const token = response.data.data?.token || response.data.token;
+        const userData = response.data.data?.user || response.data.user;
+        
+        if (!token || !userData) {
+          console.error('AuthContext: Login response missing token or user data', response.data);
+          setError('Login successful but missing authentication data');
+          return false;
+        }
         
         // Store authentication data in multiple places for redundancy
         localStorage.setItem('token', token);
@@ -213,27 +222,29 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         console.log('AuthContext: Set Authorization header for all future requests');
         
         // Import ApiService and initialize socket connection after successful login
-        const { ApiService } = await import('../services/ApiService');
-        setTimeout(() => {
-          console.log('AuthContext: Initializing socket connection after login');
-          ApiService.reconnectSocket();
-          
-          // Dispatch user-authenticated event for other services to listen to
-          if (userData && userData.id) {
+        try {
+          const { ApiService } = await import('../services/ApiService');
+          setTimeout(() => {
+            console.log('AuthContext: Initializing socket connection after login');
+            ApiService.reconnectSocket();
+            
+            // Always dispatch user-authenticated event
             document.dispatchEvent(new CustomEvent('user-authenticated', { 
               detail: { userId: userData.id, role: userData.role || 'user' } 
             }));
-          } else {
-            console.warn('AuthContext: Invalid user data, cannot dispatch user-authenticated event');
-          }
-          
-          // Verify the token is still in localStorage
-          const verifyToken = localStorage.getItem('token');
-          if (!verifyToken) {
-            console.error('AuthContext: Token disappeared from localStorage, restoring');
-            localStorage.setItem('token', token);
-          }
-        }, 500); // Small delay to ensure token is stored before socket init
+            console.log('AuthContext: Dispatched user-authenticated event');
+            
+            // Verify the token is still in localStorage
+            const verifyToken = localStorage.getItem('token');
+            if (!verifyToken) {
+              console.error('AuthContext: Token disappeared from localStorage, restoring');
+              localStorage.setItem('token', token);
+            }
+          }, 100); // Reduced delay for faster response
+        } catch (serviceErr) {
+          console.error('AuthContext: Error initializing services after login', serviceErr);
+          // Continue with login success even if service initialization fails
+        }
         
         return true;
       } else {
@@ -260,8 +271,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       
       if (response.data.success) {
         console.log('AuthContext: Registration successful');
-        const token = response.data.data.token;
-        const userData = response.data.data.user;
+        // Handle different response formats
+        const token = response.data.data?.token || response.data.token;
+        const userData = response.data.data?.user || response.data.user;
+        
+        if (!token || !userData) {
+          console.error('AuthContext: Registration response missing token or user data', response.data);
+          setError('Registration successful but missing authentication data');
+          return false;
+        }
         
         // Store authentication data in multiple places for redundancy
         localStorage.setItem('token', token);
@@ -279,20 +297,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         console.log('AuthContext: Set Authorization header for all future requests after registration');
         
         // Import ApiService and initialize socket connection after successful registration
-        const { ApiService } = await import('../services/ApiService');
-        setTimeout(() => {
-          console.log('AuthContext: Initializing socket connection after registration');
-          ApiService.reconnectSocket();
-          
-          // Dispatch user-authenticated event for other services to listen to
-          if (userData && userData.id) {
+        try {
+          const { ApiService } = await import('../services/ApiService');
+          setTimeout(() => {
+            console.log('AuthContext: Initializing socket connection after registration');
+            ApiService.reconnectSocket();
+            
+            // Always dispatch user-authenticated event
             document.dispatchEvent(new CustomEvent('user-authenticated', { 
               detail: { userId: userData.id, role: userData.role || 'user' } 
             }));
-          } else {
-            console.warn('AuthContext: Invalid user data, cannot dispatch user-authenticated event');
-          }
-        }, 500); // Small delay to ensure token is stored before socket init
+            console.log('AuthContext: Dispatched user-authenticated event after registration');
+          }, 100); // Reduced delay for faster response
+        } catch (serviceErr) {
+          console.error('AuthContext: Error initializing services after registration', serviceErr);
+          // Continue with registration success even if service initialization fails
+        }
         
         return true;
       } else {

@@ -1,5 +1,6 @@
 import axios, { AxiosInstance, AxiosRequestConfig } from 'axios';
 import { io, Socket } from 'socket.io-client';
+import { getToken } from '../utils/tokenManager';
 
 interface ApiConfig {
   endpoint: string;
@@ -31,10 +32,10 @@ class ApiService {
       timeout: this.config.timeout * 1000
     });
 
-    // Add request interceptor to include auth token
+    // Add request interceptor to include auth token - use tokenManager for consistency
     this.axiosInstance.interceptors.request.use(
       (config) => {
-        const token = localStorage.getItem('token');
+        const token = getToken(); // Use tokenManager instead of direct localStorage access
         if (token) {
           config.headers.Authorization = `Bearer ${token}`;
         }
