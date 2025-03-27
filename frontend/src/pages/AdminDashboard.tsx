@@ -115,9 +115,13 @@ const AdminDashboard: React.FC = () => {
         if (response.data.success && isMounted) {
           setSystemStats(response.data.data);
           console.log('System stats loaded successfully');
+          // Set loading to false after successful data fetch
+          setLoading(false);
         } else if (isMounted) {
           setError('Failed to fetch system statistics: ' + (response.data.message || 'Unknown error'));
           console.error('API error:', response.data);
+          // Set loading to false on error
+          setLoading(false);
         }
       } catch (err: any) {
         if (isMounted) {
@@ -155,18 +159,20 @@ const AdminDashboard: React.FC = () => {
       } catch (err) {
         if (isMounted) {
           console.error('Error fetching system health:', err);
+          // Ensure loading is set to false even if this request fails
+          setLoading(false);
         }
       }
     };
 
-    // Set a timeout to prevent infinite loading
+    // Set a timeout to prevent infinite loading - shorter timeout for better UX
     const timeoutId = setTimeout(() => {
       if (isMounted && loading) {
         setLoading(false);
         setError('Loading timed out. The server might be unavailable.');
-        console.error('Loading timed out after 15 seconds');
+        console.error('Loading timed out after 8 seconds');
       }
-    }, 15000);
+    }, 8000);
     
     if (user && user.role === 'admin') {
       fetchSystemStats();
@@ -218,9 +224,14 @@ const AdminDashboard: React.FC = () => {
             <p className="text-gray-400 mt-2">Loading system information...</p>
           </div>
         </div>
-        <div className="flex items-center justify-center py-20">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-green-500 mr-3"></div>
-          <p className="text-gray-400">Loading dashboard data...</p>
+        <div className="flex flex-col items-center justify-center py-20">
+          <div className="flex items-center mb-4">
+            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-green-500 mr-3"></div>
+            <p className="text-gray-400">Loading dashboard data...</p>
+          </div>
+          <p className="text-gray-400 text-sm mt-4">
+            If this takes too long, try <button onClick={() => window.location.reload()} className="text-green-500 underline">refreshing the page</button>
+          </p>
         </div>
       </div>
     );

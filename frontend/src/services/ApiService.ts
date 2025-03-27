@@ -91,14 +91,26 @@ class ApiService {
   private getCurrentUserId(): string | null {
     try {
       const userData = localStorage.getItem('user');
-      if (userData) {
-        const user = JSON.parse(userData);
-        return user.id || null;
+      if (!userData || userData === 'undefined' || userData === 'null') {
+        return null;
       }
+      
+      const user = JSON.parse(userData);
+      
+      // Log the user object to help with debugging
+      console.log('User data from localStorage:', { 
+        hasId: !!user?.id, 
+        keys: Object.keys(user || {}) 
+      });
+      
+      // Check for both id and _id fields to handle different formats
+      return user?.id || user?._id || null;
     } catch (error) {
       console.error('Error getting current user ID:', error);
+      // If there's an error, clear the invalid user data
+      localStorage.removeItem('user');
+      return null;
     }
-    return null;
   }
 
   private getSettingsKey(): string {
@@ -119,11 +131,17 @@ class ApiService {
   }
 
   public clearUserSettings(): void {
-    const userId = this.getCurrentUserId();
-    if (userId) {
-      localStorage.removeItem(`phantomhub_settings_${userId}`);
+    try {
+      const userId = this.getCurrentUserId();
+      if (userId) {
+        localStorage.removeItem(`phantomhub_settings_${userId}`);
+      }
+      localStorage.removeItem('phantomhub_settings'); // Remove legacy settings as well
+    } catch (error) {
+      console.error('Error clearing user settings:', error);
+      // Still try to remove the legacy settings even if there was an error
+      localStorage.removeItem('phantomhub_settings');
     }
-    localStorage.removeItem('phantomhub_settings'); // Remove legacy settings as well
   }
 
   // Clear all API settings from localStorage to ensure we use the hardcoded URL
