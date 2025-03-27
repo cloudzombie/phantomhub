@@ -29,13 +29,7 @@ const Login = () => {
       logout();
       // Clear the URL parameter to prevent repeated logout
       window.history.replaceState({}, document.title, '/login');
-    } else if (action === 'reauth') {
-      // Handle reauth action - this is for authentication errors
-      // We don't logout here, just show a message and let the user login again
-      console.log('Login: Handling reauth action from URL parameter');
-      setErrorMessage('Your session has expired. Please login again.');
-      // Clear the URL parameter
-      window.history.replaceState({}, document.title, '/login');
+
     } else if (isAuthenticated()) {
       // If already authenticated and not logging out, redirect to home
       console.log('Login: User already authenticated, redirecting to home');

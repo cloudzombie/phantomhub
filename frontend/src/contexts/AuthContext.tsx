@@ -43,9 +43,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     const checkAuthStatus = async () => {
       console.log('AuthContext: Checking auth status on load/refresh');
-      // Use the tokenManager utility to get token from either localStorage or sessionStorage
-      const token = getToken();
-      const storedUser = getUserData();
+      // Get token directly from localStorage for simplicity
+      const token = localStorage.getItem('token');
+      const storedUser = localStorage.getItem('user');
       
       // If we have a stored user, set it immediately to prevent flashing of login screen
       if (storedUser) {

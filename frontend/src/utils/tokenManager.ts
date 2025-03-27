@@ -5,16 +5,6 @@
  */
 
 import axios from 'axios';
-import { API_URL } from '../config';
-
-// Initialize axios with stored token if available
-(function initializeAxiosAuth() {
-  const token = localStorage.getItem('token') || sessionStorage.getItem('token');
-  if (token) {
-    console.log('TokenManager: Setting Authorization header on initialization');
-    axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-  }
-})();
 
 /**
  * Get the authentication token from storage
@@ -44,11 +34,6 @@ export const storeToken = (token: string): void => {
   // Set the Authorization header for axios
   axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
   console.log('TokenManager: Token stored and Authorization header set');
-  
-  // Validate token immediately to ensure it's working
-  validateToken(token).catch(err => {
-    console.warn('TokenManager: Token validation failed, but keeping token', err);
-  });
 };
 
 /**
@@ -89,17 +74,9 @@ export const getUserData = (): any => {
 export const handleAuthError = (error: any, message = 'Authentication error'): void => {
   console.log(`TokenManager: ${message}`, error);
   
-  // IMPORTANT: Do not remove tokens here, just log the error
-  // This is critical for maintaining authentication persistence
-  console.warn('TokenManager: Authentication error occurred but keeping tokens to prevent logout');
-  
-  // Only redirect if this is a true 401 unauthorized error
-  // For network errors or other issues, we'll keep the user logged in
-  if (axios.isAxiosError(error) && error.response?.status === 401) {
-    // Instead of removing tokens directly, redirect to login with action parameter
-    // The login page will handle the logout action properly
-    window.location.href = '/login?action=reauth';
-  }
+  // Instead of removing tokens directly, redirect to login with action parameter
+  // The login page will handle the logout action properly
+  window.location.href = '/login?action=logout';
 };
 
 /**
@@ -117,23 +94,7 @@ export const isAuthError = (error: any): boolean => {
   return false;
 };
 
-/**
- * Validate token with the server
- * This is used to check if a token is still valid without removing it
- */
-export const validateToken = async (token: string): Promise<boolean> => {
-  try {
-    const response = await axios.get(`${API_URL}/auth/validate`, {
-      headers: {
-        Authorization: `Bearer ${token}`
-      }
-    });
-    return response.data.success === true;
-  } catch (error) {
-    console.warn('TokenManager: Token validation failed', error);
-    return false;
-  }
-};
+
 
 /**
  * Safe logout that redirects to login page with proper action parameter

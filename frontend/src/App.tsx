@@ -1,6 +1,5 @@
 import { Routes, Route, Navigate, BrowserRouter } from 'react-router-dom';
 import axios from 'axios';
-import { getToken } from './utils/tokenManager';
 import Layout from './components/Layout';
 import Dashboard from './pages/Dashboard';
 import Login from './pages/Login';
@@ -14,14 +13,6 @@ import AdminUserManagement from './pages/AdminUserManagement';
 import AdminNotFound from './pages/AdminNotFound';
 import AdminLayout from './components/admin/AdminLayout';
 import { useEffect, useState } from 'react';
-
-// Initialize axios with token if available
-// This ensures authentication headers are set before any component renders
-const token = getToken();
-if (token) {
-  console.log('App: Setting global Authorization header on initialization');
-  axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-}
 
 import { useAuth } from './contexts/AuthContext';
 
@@ -61,9 +52,9 @@ const AdminRoute = ({ children }: { children: React.ReactNode }) => {
   useEffect(() => {
     const checkStoredUserRole = (): string | null => {
       try {
-        // Use getToken from tokenManager to get token from either localStorage or sessionStorage
-        const token = getToken();
-        const storedUser = localStorage.getItem('user') || sessionStorage.getItem('user');
+        // Get token and user from localStorage
+        const token = localStorage.getItem('token');
+        const storedUser = localStorage.getItem('user');
         
         console.log('AdminRoute - Checking storage:', {
           hasToken: !!token,
