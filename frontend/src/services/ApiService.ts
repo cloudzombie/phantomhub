@@ -21,14 +21,16 @@ class ApiService {
   private deviceUpdateThrottle: number = 5000; // 5 seconds
   private isReconnecting: boolean = false;
   private reconnectAttempts: number = 0;
-  private maxReconnectAttempts: number = API_CONFIG.maxReconnectAttempts;
-  private socketReconnectDelay: number = API_CONFIG.reconnectDelay;
+  private maxReconnectAttempts: number = 3;
+  private socketReconnectDelay: number = 30000; // 30 seconds
   private subscriptionTimeout: NodeJS.Timeout | null = null;
   private isInitialized: boolean = false;
   private isUpdating: boolean = false;
   private updateQueue: any[] = [];
   private lastSocketAttempt: number = 0;
   private isSubscribed: boolean = false;
+  private pendingUpdates: Set<number> = new Set();
+  private updateTimeoutId: NodeJS.Timeout | null = null;
 
   private constructor() {
     this.config = {
@@ -250,57 +252,51 @@ class ApiService {
 
   // Update device state with strict controls
   private updateDeviceState(devices: any[]): void {
-    // If already updating, queue the update
-    if (this.isUpdating) {
-      this.updateQueue.push(...devices);
-      return;
+    // Skip if no devices to update
+    if (!devices.length) return;
+
+    // Add device IDs to pending updates
+    devices.forEach(device => {
+      if (device?.id) this.pendingUpdates.add(device.id);
+    });
+
+    // Clear any existing timeout
+    if (this.updateTimeoutId) {
+      clearTimeout(this.updateTimeoutId);
     }
 
-    const now = Date.now();
-    if (now - this.lastDeviceUpdate < this.deviceUpdateThrottle) {
-      // Queue update for later if within throttle window
-      this.updateQueue.push(...devices);
-      return;
-    }
+    // Set a new timeout to process updates
+    this.updateTimeoutId = setTimeout(() => {
+      if (this.pendingUpdates.size === 0) return;
 
-    this.isUpdating = true;
-    this.lastDeviceUpdate = now;
+      const now = Date.now();
+      if (now - this.lastDeviceUpdate < this.deviceUpdateThrottle) {
+        return;
+      }
 
-    try {
-      // Process current devices and any queued updates
-      const allUpdates = [...devices, ...this.updateQueue];
-      this.updateQueue = []; // Clear queue
+      this.lastDeviceUpdate = now;
+      let hasChanges = false;
 
-      // Update device state map with unique latest values
-      const uniqueDevices = new Map();
-      allUpdates.forEach(device => {
-        if (!device.id) return; // Skip invalid devices
-        uniqueDevices.set(device.id, device);
+      // Process all pending updates
+      this.pendingUpdates.forEach(deviceId => {
+        const device = devices.find(d => d.id === deviceId);
+        if (device) {
+          const currentDevice = this.deviceState.get(deviceId);
+          if (!currentDevice || JSON.stringify(currentDevice) !== JSON.stringify(device)) {
+            this.deviceState.set(deviceId, device);
+            hasChanges = true;
+          }
+        }
       });
 
-      // Update state with unique devices
-      uniqueDevices.forEach((device, id) => {
-        this.deviceState.set(id, device);
-      });
+      // Clear pending updates
+      this.pendingUpdates.clear();
 
       // Only notify if we have actual changes
-      if (uniqueDevices.size > 0) {
+      if (hasChanges) {
         this.notifyDeviceSubscribers();
       }
-    } finally {
-      this.isUpdating = false;
-      
-      // If we have queued updates, process them after a delay
-      if (this.updateQueue.length > 0) {
-        setTimeout(() => {
-          if (this.updateQueue.length > 0) {
-            const queuedDevices = [...this.updateQueue];
-            this.updateQueue = [];
-            this.updateDeviceState(queuedDevices);
-          }
-        }, this.deviceUpdateThrottle);
-      }
-    }
+    }, 100); // Batch updates within 100ms
   }
 
   // Update notifyDeviceSubscribers to use current state
@@ -317,7 +313,7 @@ class ApiService {
 
   // Update subscribeToDeviceUpdates to use Set and handle state
   public subscribeToDeviceUpdates(callback: (devices: any[]) => void): () => void {
-    if (!this.socket?.connected) {
+    if (!this.socket?.connected && !this.isReconnecting) {
       this.initializeSocket();
     }
 
@@ -337,16 +333,26 @@ class ApiService {
     }, 1000);
 
     // Immediately notify with current state
-    callback(this.getDeviceState());
+    const currentDevices = this.getDeviceState();
+    if (currentDevices.length > 0) {
+      callback(currentDevices);
+    }
 
     // Return unsubscribe function
     return () => {
       this.deviceSubscribers.delete(callback);
       
-      // If no more subscribers, unsubscribe from updates
-      if (this.deviceSubscribers.size === 0 && this.socket?.connected) {
-        this.socket.emit('unsubscribe_device_updates');
-        this.isSubscribed = false;
+      if (this.deviceSubscribers.size === 0) {
+        if (this.socket?.connected) {
+          this.socket.emit('unsubscribe_device_updates');
+          this.isSubscribed = false;
+        }
+        this.deviceState.clear();
+        this.pendingUpdates.clear();
+        if (this.updateTimeoutId) {
+          clearTimeout(this.updateTimeoutId);
+          this.updateTimeoutId = null;
+        }
       }
     };
   }
@@ -357,7 +363,8 @@ class ApiService {
   private initializeSocket(): void {
     const now = Date.now();
     if (this.socket?.connected || 
-        (now - this.lastSocketAttempt < this.socketReconnectDelay)) {
+        (now - this.lastSocketAttempt < this.socketReconnectDelay) ||
+        this.reconnectAttempts >= this.maxReconnectAttempts) {
       return;
     }
 
@@ -365,66 +372,70 @@ class ApiService {
 
     if (this.socket) {
       this.socket.disconnect();
+      this.socket = null;
+    }
+
+    const token = getToken();
+    if (!token) {
+      console.warn('ApiService: Cannot initialize socket without auth token');
+      return;
     }
 
     this.socket = io(this.baseURL, {
-      auth: {
-        token: getToken()
-      },
+      auth: { token },
       reconnection: true,
       reconnectionDelay: this.socketReconnectDelay,
-      reconnectionDelayMax: this.socketReconnectDelay * 2,
+      reconnectionDelayMax: 60000, // 1 minute max
       reconnectionAttempts: this.maxReconnectAttempts,
-      timeout: this.config.timeout,
-      // Add additional options to prevent rapid reconnects
-      reconnectionAttempts: 3,
-      reconnectionDelayMax: 10000,
-      randomizationFactor: 0.5
+      timeout: 20000, // 20 second timeout
+      transports: ['websocket'],
+      forceNew: true
     });
 
     this.socket.on('connect', () => {
       console.log('Socket connected');
       this.isReconnecting = false;
       this.reconnectAttempts = 0;
+      this.lastSocketAttempt = 0;
       
-      // Only emit subscribe if we have subscribers and aren't already subscribed
       if (this.deviceSubscribers.size > 0 && !this.isSubscribed) {
         this.socket?.emit('subscribe_device_updates');
         this.isSubscribed = true;
       }
     });
 
-    this.socket.on('disconnect', () => {
-      console.log('Socket disconnected');
+    this.socket.on('disconnect', (reason) => {
+      console.log('Socket disconnected:', reason);
+      this.isReconnecting = true;
+      this.reconnectAttempts++;
+      this.isSubscribed = false;
+
+      // Clear device state on disconnect
+      this.deviceState.clear();
+      this.pendingUpdates.clear();
+      if (this.updateTimeoutId) {
+        clearTimeout(this.updateTimeoutId);
+        this.updateTimeoutId = null;
+      }
+    });
+
+    this.socket.on('connect_error', (error) => {
+      console.error('Socket connection error:', error);
       this.isReconnecting = true;
       this.reconnectAttempts++;
       this.isSubscribed = false;
     });
 
-    this.socket.on('error', (error) => {
-      console.error('Socket error:', error);
-      this.isReconnecting = true;
-      this.isSubscribed = false;
-    });
-
-    // Consolidate device updates to prevent rapid state changes
-    let updateTimeout: NodeJS.Timeout | null = null;
-    const processUpdates = (updates: any[]) => {
-      if (updateTimeout) {
-        clearTimeout(updateTimeout);
-      }
-      updateTimeout = setTimeout(() => {
-        this.updateDeviceState(updates);
-        updateTimeout = null;
-      }, 100); // Batch updates within 100ms
-    };
-
     this.socket.on('device_status_update', (devices: any[]) => {
-      processUpdates(devices);
+      if (Array.isArray(devices)) {
+        this.updateDeviceState(devices);
+      }
     });
 
     this.socket.on('device_status_changed', (update: any) => {
-      processUpdates([update]);
+      if (update && update.id) {
+        this.updateDeviceState([update]);
+      }
     });
   }
 
@@ -484,16 +495,23 @@ class ApiService {
       this.subscriptionTimeout = null;
     }
     
+    if (this.updateTimeoutId) {
+      clearTimeout(this.updateTimeoutId);
+      this.updateTimeoutId = null;
+    }
+    
     if (this.socket) {
       this.socket.disconnect();
       this.socket = null;
     }
     
     this.deviceState.clear();
+    this.pendingUpdates.clear();
     this.deviceSubscribers.clear();
     this.isReconnecting = false;
     this.reconnectAttempts = 0;
     this.isInitialized = false;
+    this.isSubscribed = false;
   }
 
   // Add method to check if service is initialized

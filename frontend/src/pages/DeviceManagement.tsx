@@ -127,47 +127,8 @@ const DeviceManagement: React.FC = () => {
   const lastRefreshTimeRef = useRef<number>(0);
   const isInitialLoadRef = useRef(true);
   const REFRESH_COOLDOWN = 5000; // 5 second cooldown between refreshes
-
-  // Manual refresh function with strict controls
-  const handleRefresh = async () => {
-    const now = Date.now();
-    if (isLoading || isRefreshing || (now - lastRefreshTimeRef.current < REFRESH_COOLDOWN)) {
-      console.log('Skipping refresh - too soon or already in progress');
-      return;
-    }
-    
-    // Clear any pending refresh
-    if (refreshTimeoutRef.current) {
-      clearTimeout(refreshTimeoutRef.current);
-      refreshTimeoutRef.current = null;
-    }
-
-    setIsRefreshing(true);
-    setErrorMessage(null);
-    
-    try {
-      const response = await apiServiceInstance.get('/devices/detailed');
-      if (!isMountedRef.current) return; // Check if still mounted
-
-      if (response.data?.success) {
-        setDevices(response.data.data);
-        lastRefreshTimeRef.current = now;
-      }
-    } catch (error) {
-      if (!isMountedRef.current) return; // Check if still mounted
-      
-      console.error('Error refreshing devices:', error);
-      if (isAuthError(error)) {
-        handleAuthError(error, 'Authentication error in DeviceManagement');
-      } else {
-        setErrorMessage((error as any)?.response?.data?.message || 'Error refreshing devices');
-      }
-    } finally {
-      if (isMountedRef.current) {
-        setIsRefreshing(false);
-      }
-    }
-  };
+  const MAX_REFRESH_ATTEMPTS = 3;
+  const refreshAttemptsRef = useRef(0);
 
   // Initialize devices and set up socket subscription with strict controls
   useEffect(() => {
@@ -189,6 +150,7 @@ const DeviceManagement: React.FC = () => {
         if (response.data?.success) {
           setDevices(response.data.data);
           lastRefreshTimeRef.current = Date.now();
+          refreshAttemptsRef.current = 0;
         }
 
         // Subscribe to device updates only if mounted
@@ -196,6 +158,7 @@ const DeviceManagement: React.FC = () => {
           unsubscribeRef.current = apiServiceInstance.subscribeToDeviceUpdates((updatedDevices) => {
             if (isMounted) {
               setDevices(updatedDevices);
+              refreshAttemptsRef.current = 0;
             }
           });
         }
@@ -207,6 +170,14 @@ const DeviceManagement: React.FC = () => {
           handleAuthError(error, 'Authentication error in DeviceManagement');
         } else {
           setErrorMessage((error as any)?.response?.data?.message || 'Error fetching devices');
+          
+          // Increment refresh attempts on error
+          refreshAttemptsRef.current++;
+          
+          // If we haven't exceeded max attempts, try again after a delay
+          if (refreshAttemptsRef.current < MAX_REFRESH_ATTEMPTS) {
+            initTimeout = setTimeout(initializeDevices, REFRESH_COOLDOWN);
+          }
         }
       } finally {
         if (isMounted) {
@@ -237,8 +208,60 @@ const DeviceManagement: React.FC = () => {
         clearTimeout(refreshTimeoutRef.current);
         refreshTimeoutRef.current = null;
       }
+      
+      refreshAttemptsRef.current = 0;
     };
-  }, []); // No dependencies needed as we're using refs and the subscription pattern
+  }, []); // No dependencies needed as we're using refs
+
+  // Manual refresh function with strict controls
+  const handleRefresh = async () => {
+    const now = Date.now();
+    if (isLoading || isRefreshing || (now - lastRefreshTimeRef.current < REFRESH_COOLDOWN)) {
+      console.log('Skipping refresh - too soon or already in progress');
+      return;
+    }
+    
+    // Clear any pending refresh
+    if (refreshTimeoutRef.current) {
+      clearTimeout(refreshTimeoutRef.current);
+      refreshTimeoutRef.current = null;
+    }
+
+    setIsRefreshing(true);
+    setErrorMessage(null);
+    
+    try {
+      const response = await apiServiceInstance.get('/devices/detailed');
+      if (!isMountedRef.current) return;
+
+      if (response.data?.success) {
+        setDevices(response.data.data);
+        lastRefreshTimeRef.current = now;
+        refreshAttemptsRef.current = 0;
+      }
+    } catch (error) {
+      if (!isMountedRef.current) return;
+      
+      console.error('Error refreshing devices:', error);
+      if (isAuthError(error)) {
+        handleAuthError(error, 'Authentication error in DeviceManagement');
+      } else {
+        setErrorMessage((error as any)?.response?.data?.message || 'Error refreshing devices');
+        
+        // Increment refresh attempts on error
+        refreshAttemptsRef.current++;
+        
+        // If we haven't exceeded max attempts, try again after a delay
+        if (refreshAttemptsRef.current < MAX_REFRESH_ATTEMPTS) {
+          refreshTimeoutRef.current = setTimeout(handleRefresh, REFRESH_COOLDOWN);
+        }
+      }
+    } finally {
+      if (isMountedRef.current) {
+        setIsRefreshing(false);
+      }
+    }
+  };
 
   // Handle form input changes
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -353,8 +376,10 @@ const DeviceManagement: React.FC = () => {
     }
   };
   
-  // Register USB device
+  // Register USB device with better error handling
   const registerUsbDevice = async () => {
+    if (!isMountedRef.current) return;
+    
     setIsLoading(true);
     setErrorMessage(null);
 
@@ -366,14 +391,23 @@ const DeviceManagement: React.FC = () => {
         return;
       }
 
-      // Connect to the device
-      const deviceInfo = await connectToDevice(port, {
+      // Connect to the device with timeout
+      const connectPromise = connectToDevice(port, {
         baudRate: 115200,
         dataBits: 8,
         stopBits: 1,
         parity: 'none',
         flowControl: 'none'
       });
+      
+      // Add timeout to prevent hanging
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Connection timeout')), 10000);
+      });
+      
+      const deviceInfo = await Promise.race([connectPromise, timeoutPromise]);
+
+      if (!isMountedRef.current) return;
 
       if (deviceInfo.connectionStatus !== 'connected') {
         setErrorMessage('Failed to connect to USB device');
@@ -388,17 +422,29 @@ const DeviceManagement: React.FC = () => {
         firmwareVersion: deviceInfo.info.firmwareVersion || null
       });
 
+      if (!isMountedRef.current) return;
+
       if (response.data?.success) {
         setSuccessMessage('USB device registered successfully!');
         setIsUsbModalOpen(false);
+        refreshAttemptsRef.current = 0;
+        
+        // Update devices list without full refresh
+        if (response.data.device) {
+          setDevices(prev => [...prev, response.data.device]);
+        }
       } else {
         setErrorMessage(response.data?.message || 'Failed to register USB device');
       }
     } catch (error) {
+      if (!isMountedRef.current) return;
+      
       console.error('Error registering USB device:', error);
-      setErrorMessage((error as any)?.response?.data?.message || 'Error registering USB device');
+      setErrorMessage(error instanceof Error ? error.message : 'Error registering USB device');
     } finally {
-      setIsLoading(false);
+      if (isMountedRef.current) {
+        setIsLoading(false);
+      }
     }
   };
   
@@ -416,6 +462,7 @@ const DeviceManagement: React.FC = () => {
       if (response.data?.success) {
         setSuccessMessage(`Device status updated to ${status}`);
         setDevices(prev => prev.map(device => device.id === deviceId ? { ...device, status } : device));
+        refreshAttemptsRef.current = 0;
       } else {
         setErrorMessage('Failed to update device status');
       }
