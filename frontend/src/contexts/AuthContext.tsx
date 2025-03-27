@@ -41,23 +41,45 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Check if user is logged in on initial load
   useEffect(() => {
     const checkAuthStatus = async () => {
+      console.log('AuthContext: Checking auth status on load/refresh');
       const token = localStorage.getItem('token');
+      const storedUser = localStorage.getItem('user');
+      
+      // If we have a stored user, set it immediately to prevent flashing of login screen
+      if (storedUser) {
+        try {
+          const parsedUser = JSON.parse(storedUser);
+          setUser(parsedUser);
+          console.log('AuthContext: Restored user from localStorage', parsedUser.role);
+        } catch (err) {
+          console.error('AuthContext: Error parsing stored user', err);
+        }
+      }
       
       if (!token) {
+        console.log('AuthContext: No token found');
         setLoading(false);
         return;
       }
       
       try {
+        console.log('AuthContext: Verifying token with backend');
         const response = await axios.get(`${API_URL}/auth/me`, {
           headers: {
             Authorization: `Bearer ${token}`
-          }
+          },
+          // Add timeout to prevent hanging requests
+          timeout: 8000
         });
         
         if (response.data.success) {
+          console.log('AuthContext: Token verified successfully');
+          // Update user data with latest from server
           setUser(response.data.data);
           localStorage.setItem('user', JSON.stringify(response.data.data));
+          
+          // Set axios default headers for all future requests
+          axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
           
           // Import ApiService and ensure socket connection is initialized
           const { ApiService } = await import('../services/ApiService');
@@ -69,15 +91,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             document.dispatchEvent(new CustomEvent('user-authenticated'));
           }, 500); // Small delay to ensure everything is ready
         } else {
+          console.error('AuthContext: Token validation failed', response.data);
           // Clear invalid token
           localStorage.removeItem('token');
           localStorage.removeItem('user');
+          setUser(null);
         }
       } catch (err) {
-        console.error('Error checking auth status:', err);
-        // Clear invalid token
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
+        console.error('AuthContext: Error checking auth status:', err);
+        
+        // Don't clear token on network errors - this prevents logout on temporary connectivity issues
+        if (axios.isAxiosError(err) && (err.code === 'ECONNABORTED' || !err.response)) {
+          console.log('AuthContext: Network error, keeping existing auth state');
+          // Keep the existing user state from localStorage to prevent logout on network issues
+        } else {
+          // Only clear token for actual auth errors (401, 403)
+          console.log('AuthContext: Auth error, clearing credentials');
+          localStorage.removeItem('token');
+          localStorage.removeItem('user');
+          setUser(null);
+        }
       } finally {
         setLoading(false);
       }
@@ -160,7 +193,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Check if user is authenticated
   const isAuthenticated = (): boolean => {
-    return localStorage.getItem('token') !== null;
+    // Check for token in localStorage
+    const hasToken = localStorage.getItem('token') !== null;
+    console.log('isAuthenticated check - hasToken:', hasToken);
+    return hasToken;
   };
 
   return (

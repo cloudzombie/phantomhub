@@ -27,33 +27,66 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
 
 // Admin route component
 const AdminRoute = ({ children }: { children: React.ReactNode }) => {
-  const { user, isAuthenticated } = useAuth();
+  const { user, isAuthenticated, loading } = useAuth();
   
   // Debug logging
   console.log('AdminRoute - Checking authentication');
   console.log('AdminRoute - isAuthenticated:', isAuthenticated());
   console.log('AdminRoute - user:', user);
   console.log('AdminRoute - user role:', user?.role);
+  console.log('AdminRoute - auth loading:', loading);
   
+  // Check for stored user data in localStorage as a fallback
+  const checkStoredUserRole = (): string | null => {
+    try {
+      const storedUser = localStorage.getItem('user');
+      if (storedUser) {
+        const parsedUser = JSON.parse(storedUser);
+        console.log('AdminRoute - Found stored user with role:', parsedUser.role);
+        return parsedUser.role;
+      }
+    } catch (err) {
+      console.error('AdminRoute - Error checking stored user:', err);
+    }
+    return null;
+  };
+  
+  // If not authenticated, redirect to login
   if (!isAuthenticated()) {
     console.log('AdminRoute - Not authenticated, redirecting to login');
     return <Navigate to="/login" replace />;
   }
   
-  if (!user) {
-    console.log('AdminRoute - User is null despite token, possibly still loading');
+  // If auth is still loading, show loading spinner
+  if (loading) {
+    console.log('AdminRoute - Auth is still loading');
     return <div className="flex justify-center items-center h-screen">
       <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-green-500"></div>
+      <p className="ml-3 text-gray-600">Verifying admin access...</p>
     </div>;
   }
   
+  // If user is null but we're authenticated, check localStorage
+  if (!user) {
+    console.log('AdminRoute - User is null despite token, checking localStorage');
+    const storedRole = checkStoredUserRole();
+    
+    if (storedRole === 'admin') {
+      console.log('AdminRoute - Found admin role in localStorage, granting access');
+      return <>{children}</>;
+    }
+    
+    console.log('AdminRoute - No valid user found, redirecting to home');
+    return <Navigate to="/" replace />;
+  }
+  
+  // Check if user has admin role
   if (user.role !== 'admin') {
     console.log('AdminRoute - User is not admin, redirecting to home');
     return <Navigate to="/" replace />;
   }
   
   console.log('AdminRoute - Access granted to admin route');
-  
   return <>{children}</>;
 };
 
