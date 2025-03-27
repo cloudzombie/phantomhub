@@ -125,18 +125,21 @@ const DeviceManagement: React.FC = () => {
   const unsubscribeRef = useRef<(() => void) | null>(null);
   const refreshTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const lastRefreshTimeRef = useRef<number>(0);
+  const isInitialLoadRef = useRef(true);
   const REFRESH_COOLDOWN = 5000; // 5 second cooldown between refreshes
 
-  // Manual refresh function with debounce
+  // Manual refresh function with strict controls
   const handleRefresh = async () => {
     const now = Date.now();
     if (isLoading || isRefreshing || (now - lastRefreshTimeRef.current < REFRESH_COOLDOWN)) {
+      console.log('Skipping refresh - too soon or already in progress');
       return;
     }
     
     // Clear any pending refresh
     if (refreshTimeoutRef.current) {
       clearTimeout(refreshTimeoutRef.current);
+      refreshTimeoutRef.current = null;
     }
 
     setIsRefreshing(true);
@@ -144,11 +147,15 @@ const DeviceManagement: React.FC = () => {
     
     try {
       const response = await apiServiceInstance.get('/devices/detailed');
-      if (response.data?.success && isMountedRef.current) {
+      if (!isMountedRef.current) return; // Check if still mounted
+
+      if (response.data?.success) {
         setDevices(response.data.data);
         lastRefreshTimeRef.current = now;
       }
     } catch (error) {
+      if (!isMountedRef.current) return; // Check if still mounted
+      
       console.error('Error refreshing devices:', error);
       if (isAuthError(error)) {
         handleAuthError(error, 'Authentication error in DeviceManagement');
@@ -157,21 +164,19 @@ const DeviceManagement: React.FC = () => {
       }
     } finally {
       if (isMountedRef.current) {
-        // Set a timeout before allowing another refresh
-        refreshTimeoutRef.current = setTimeout(() => {
-          setIsRefreshing(false);
-        }, REFRESH_COOLDOWN);
+        setIsRefreshing(false);
       }
     }
   };
 
-  // Initialize devices and set up socket subscription
+  // Initialize devices and set up socket subscription with strict controls
   useEffect(() => {
     let isMounted = true;
     isMountedRef.current = true;
+    let initTimeout: NodeJS.Timeout | null = null;
 
     const initializeDevices = async () => {
-      if (!isMounted) return;
+      if (!isMounted || !isInitialLoadRef.current) return;
       
       setIsLoading(true);
       setErrorMessage(null);
@@ -179,12 +184,15 @@ const DeviceManagement: React.FC = () => {
       try {
         // Initial fetch
         const response = await apiServiceInstance.get('/devices/detailed');
-        if (response.data?.success && isMounted) {
+        if (!isMounted) return;
+
+        if (response.data?.success) {
           setDevices(response.data.data);
+          lastRefreshTimeRef.current = Date.now();
         }
 
-        // Subscribe to device updates
-        if (isMounted) {
+        // Subscribe to device updates only if mounted
+        if (isMounted && !unsubscribeRef.current) {
           unsubscribeRef.current = apiServiceInstance.subscribeToDeviceUpdates((updatedDevices) => {
             if (isMounted) {
               setDevices(updatedDevices);
@@ -192,35 +200,45 @@ const DeviceManagement: React.FC = () => {
           });
         }
       } catch (error) {
+        if (!isMounted) return;
+        
         console.error('Error fetching devices:', error);
-        if (isMounted) {
-          if (isAuthError(error)) {
-            handleAuthError(error, 'Authentication error in DeviceManagement');
-          } else {
-            setErrorMessage((error as any)?.response?.data?.message || 'Error fetching devices');
-          }
+        if (isAuthError(error)) {
+          handleAuthError(error, 'Authentication error in DeviceManagement');
+        } else {
+          setErrorMessage((error as any)?.response?.data?.message || 'Error fetching devices');
         }
       } finally {
         if (isMounted) {
           setIsLoading(false);
+          isInitialLoadRef.current = false;
         }
       }
     };
 
-    initializeDevices();
+    // Start initialization with a small delay to prevent rapid mounting/unmounting issues
+    initTimeout = setTimeout(initializeDevices, 100);
 
-    // Cleanup
+    // Cleanup function
     return () => {
       isMounted = false;
       isMountedRef.current = false;
+      
+      if (initTimeout) {
+        clearTimeout(initTimeout);
+      }
+      
       if (unsubscribeRef.current) {
         unsubscribeRef.current();
+        unsubscribeRef.current = null;
       }
+      
       if (refreshTimeoutRef.current) {
         clearTimeout(refreshTimeoutRef.current);
+        refreshTimeoutRef.current = null;
       }
     };
-  }, []); // No dependencies needed as we're using the subscription pattern
+  }, []); // No dependencies needed as we're using refs and the subscription pattern
 
   // Handle form input changes
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -391,25 +409,21 @@ const DeviceManagement: React.FC = () => {
     setErrorMessage(null);
     
     try {
-      const response = await apiServiceInstance.patch(`/devices/${deviceId}`, {
-        status
-      });
+      const response = await apiServiceInstance.patch(`/devices/${deviceId}`, { status });
       
-      if (response.data && response.data.success) {
+      if (!isMountedRef.current) return;
+
+      if (response.data?.success) {
         setSuccessMessage(`Device status updated to ${status}`);
-        
-        // Update devices list without triggering a refresh
-        setDevices(prev => 
-          prev.map(device => 
-            device.id === deviceId ? { ...device, status } : device
-          )
-        );
+        setDevices(prev => prev.map(device => device.id === deviceId ? { ...device, status } : device));
       } else {
-        setErrorMessage('Failed to update device status. Please try again.');
+        setErrorMessage('Failed to update device status');
       }
     } catch (error) {
+      if (!isMountedRef.current) return;
+      
       console.error('Error updating device status:', error);
-      setErrorMessage('Failed to update device status. Please try again.');
+      setErrorMessage('Failed to update device status');
       
       if (isAuthError(error)) {
         handleAuthError(error, 'Authentication error while updating device status');
