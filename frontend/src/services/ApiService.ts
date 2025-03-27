@@ -14,12 +14,14 @@ class ApiService {
   private config: ApiConfig;
   private socket: Socket | null = null;
   private baseURL: string;
+  private lastSocketAttempt: number = 0;
+  private socketReconnectDelay: number = 5000; // 5 seconds between reconnection attempts
 
   private constructor() {
     // Always use the Heroku URL for API endpoint
     this.config = {
       endpoint: 'https://ghostwire-backend-e0380bcf4e0e.herokuapp.com/api',
-      pollingInterval: 60,
+      pollingInterval: 300, // Increased to 5 minutes
       timeout: 30
     };
 
@@ -250,47 +252,36 @@ class ApiService {
    */
   private initializeSocket(): void {
     try {
-      // Use baseURL for socket connection to ensure consistency with API endpoint
-      console.log('ApiService: Initializing socket connection to', this.baseURL);
-      
-      // Use tokenManager for consistency instead of direct localStorage/sessionStorage access
       const token = getToken();
-      
-      // No need to manually sync between localStorage and sessionStorage
-      // as the tokenManager handles this for us
       
       if (!token) {
         console.warn('ApiService: No auth token available for socket connection');
         return;
       }
-      
-      // Ensure axios has the auth header set
-      if (!axios.defaults.headers.common['Authorization']) {
-        console.log('ApiService: Setting missing Authorization header from token');
-        axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+
+      if (this.socket?.connected) {
+        console.log('ApiService: Socket already connected, skipping initialization');
+        return;
       }
       
-      // If socket already exists, disconnect it first
       if (this.socket) {
         console.log('ApiService: Disconnecting existing socket before creating a new one');
         this.socket.disconnect();
       }
       
-      // Configure Socket.IO with robust connection options
       this.socket = io(this.baseURL, {
         reconnection: true,
-        reconnectionAttempts: 10, // Increased from 5 to 10 for better reliability
-        reconnectionDelay: 1000,
-        reconnectionDelayMax: 5000,
+        reconnectionAttempts: 5,
+        reconnectionDelay: 5000,
+        reconnectionDelayMax: 30000,
         randomizationFactor: 0.5,
         autoConnect: true,
-        transports: ['websocket', 'polling'], // Support both transport methods
+        transports: ['websocket'],
         auth: {
           token: token
         },
         forceNew: true,
-        timeout: 45000,
-        path: '/socket.io/' // Ensure the path matches the server configuration
+        timeout: 45000
       });
       
       this.setupSocketEventHandlers();
@@ -306,25 +297,15 @@ class ApiService {
     if (!this.socket) return;
     
     this.socket.on('connect', () => {
-      console.log('ApiService: Socket connected successfully');
-    });
-    
-    this.socket.on('connect_error', (error) => {
-      console.error('ApiService: Socket connection error:', error);
+      console.log('ApiService: Socket connected');
     });
     
     this.socket.on('disconnect', (reason) => {
       console.log('ApiService: Socket disconnected:', reason);
-      
-      if (reason === 'io server disconnect') {
-        // If the server disconnected us, try to reconnect
-        this.socket?.connect();
-      }
     });
     
-    // Debug listener for all events
-    this.socket.onAny((event, ...args) => {
-      console.debug(`ApiService: Socket event "${event}" received:`, args);
+    this.socket.on('error', (error) => {
+      console.error('ApiService: Socket error:', error);
     });
   }
   
@@ -332,34 +313,14 @@ class ApiService {
    * Reconnect socket if disconnected with enhanced token handling
    */
   public reconnectSocket(): void {
-    // Use tokenManager for consistency instead of direct localStorage/sessionStorage access
-    const token = getToken();
-    
-    // No need to manually sync between localStorage and sessionStorage
-    // as the tokenManager handles this for us
-    
-    if (!token) {
-      console.warn('ApiService: Cannot reconnect socket without authentication token');
+    const now = Date.now();
+    if (now - this.lastSocketAttempt < this.socketReconnectDelay) {
+      console.log('ApiService: Skipping socket reconnection, too soon since last attempt');
       return;
     }
     
-    // Ensure axios has the auth header set
-    if (!axios.defaults.headers.common['Authorization']) {
-      console.log('ApiService: Setting missing Authorization header from token');
-      axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-    }
-    
-    if (this.socket && !this.socket.connected) {
-      console.log('ApiService: Attempting to reconnect socket');
-      // Update the auth token in case it changed
-      this.socket.auth = { token };
-      this.socket.connect();
-    } else if (!this.socket) {
-      console.log('ApiService: Initializing new socket connection');
-      this.initializeSocket();
-    } else {
-      console.log('ApiService: Socket already connected');
-    }
+    this.lastSocketAttempt = now;
+    this.initializeSocket();
   }
   
   /**

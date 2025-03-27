@@ -1,10 +1,11 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 // Import directly from the absolute path to avoid module resolution issues
 import { API_URL } from '../config.ts';
 import { useAuth } from '../contexts/AuthContext.tsx';
 import { getToken } from '../utils/tokenManager';
+import debounce from 'lodash/debounce';
 
 // Component imports
 import { Card } from '../components/ui/Card';
@@ -45,6 +46,8 @@ const AdminUserManagement: React.FC = () => {
   const [totalPages, setTotalPages] = useState<number>(1);
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [filterRole, setFilterRole] = useState<string>('all');
+  const [lastFetchTime, setLastFetchTime] = useState<number>(0);
+  const FETCH_COOLDOWN = 2000; // 2 seconds cooldown between fetches
 
   // Redirect if not admin
   useEffect(() => {
@@ -53,97 +56,71 @@ const AdminUserManagement: React.FC = () => {
     }
   }, [user, navigate]);
 
-  // Fetch users with retry logic for rate limiting
-  useEffect(() => {
-    let isMounted = true;
-    const controller = new AbortController();
-    
-    // Add exponential backoff retry logic for rate limiting
-    const fetchWithRetry = async (url: string, options: any, retries = 3, delay = 2000) => {
-      try {
-        return await axios.get(url, options);
-      } catch (error: any) {
-        if (error.response && error.response.status === 429 && retries > 0) {
-          console.log(`Rate limited, retrying in ${delay}ms... (${retries} retries left)`);
-          await new Promise(resolve => setTimeout(resolve, delay));
-          return fetchWithRetry(url, options, retries - 1, delay * 2);
-        }
-        throw error;
-      }
-    };
-    
-    const fetchUsers = async () => {
-      try {
-        if (isMounted) setLoading(true);
-        setError(null); // Clear any previous errors
-        
-        const token = getToken();
-        console.log('Fetching users with token:', token ? 'Token exists' : 'No token');
-        
-        // Use fetchWithRetry to handle rate limiting
-        const response = await fetchWithRetry(`${API_URL}/admin/users`, {
-          params: {
-            page,
-            limit: 10,
-            search: searchTerm || undefined,
-            role: filterRole !== 'all' ? filterRole : undefined
-          },
-          headers: {
-            Authorization: `Bearer ${token}`
-          },
-          signal: controller.signal,
-          timeout: 15000 // Increased timeout to 15 seconds
-        }, 3, 2000);
-        
-        if (response.data.success && isMounted) {
-          setUsers(response.data.data.users || []);
-          setTotalPages(response.data.data.totalPages || 1);
-          console.log('Users loaded successfully:', response.data.data.users?.length || 0, 'users');
-        } else if (isMounted) {
-          setError('Failed to fetch users: ' + (response.data.message || 'Unknown error'));
-          console.error('API error:', response.data);
-        }
-      } catch (err: any) {
-        if (isMounted) {
-          if (err.response && err.response.status === 429) {
-            console.error('Rate limit exceeded. Please try again later.');
-            setError('Rate limit exceeded. Please try again in a few minutes.');
-          } else if (err.response && err.response.status === 404) {
-            console.error('Users endpoint not found');
-            setError('User management endpoint not available. The server may need to be updated.');
-          } else {
-            console.error('Error fetching users:', err);
-            setError(err.message || 'Error connecting to the server');
-          }
-        }
-      } finally {
-        if (isMounted) setLoading(false);
-      }
-    };
-
-    // Set a timeout to prevent infinite loading
-    const timeoutId = setTimeout(() => {
-      if (isMounted && loading) {
-        setLoading(false);
-        setError('Loading timed out. The server might be unavailable.');
-        console.error('Loading timed out after 15 seconds');
-      }
-    }, 15000);
-    
-    if (user && user.role === 'admin') {
-      fetchUsers();
-    } else if (isMounted) {
-      setLoading(false);
+  // Memoize the fetch function to prevent recreating it on every render
+  const fetchUsers = useCallback(async () => {
+    const now = Date.now();
+    if (now - lastFetchTime < FETCH_COOLDOWN) {
+      console.log('Skipping fetch, too soon since last fetch');
+      return;
     }
     
-    // Cleanup function
+    setLastFetchTime(now);
+    
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const token = getToken();
+      const response = await axios.get(`${API_URL}/admin/users`, {
+        params: {
+          page,
+          limit: 10,
+          search: searchTerm || undefined,
+          role: filterRole !== 'all' ? filterRole : undefined
+        },
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+      
+      if (response.data.success) {
+        setUsers(response.data.data.users || []);
+        setTotalPages(response.data.data.totalPages || 1);
+      } else {
+        setError('Failed to fetch users: ' + (response.data.message || 'Unknown error'));
+      }
+    } catch (err: any) {
+      if (err.response?.status === 429) {
+        setError('Rate limit exceeded. Please try again in a few minutes.');
+      } else if (err.response?.status === 404) {
+        setError('User management endpoint not available.');
+      } else {
+        setError(err.message || 'Error connecting to the server');
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, [page, searchTerm, filterRole, lastFetchTime]);
+
+  // Debounced search handler
+  const debouncedSearch = useMemo(
+    () => debounce((term: string) => {
+      setSearchTerm(term);
+      setPage(1);
+    }, 500),
+    []
+  );
+
+  // Fetch users when dependencies change
+  useEffect(() => {
+    if (user?.role === 'admin') {
+      fetchUsers();
+    }
+    
     return () => {
-      isMounted = false;
-      controller.abort();
-      clearTimeout(timeoutId);
-      console.log('AdminUserManagement data fetching cleanup');
+      debouncedSearch.cancel();
     };
-  }, [user, page, searchTerm, filterRole, loading]);
+  }, [user, fetchUsers]);
 
   // Handle form input changes
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
@@ -276,12 +253,6 @@ const AdminUserManagement: React.FC = () => {
     }
   };
 
-  // Handle search
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault();
-    setPage(1); // Reset to first page when searching
-  };
-
   if (loading && users.length === 0) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -380,13 +351,12 @@ const AdminUserManagement: React.FC = () => {
 
       {/* Search and Filter */}
       <Card className="mb-8 p-6">
-        <form onSubmit={handleSearch} className="flex flex-col md:flex-row gap-4">
+        <div className="flex flex-col md:flex-row gap-4">
           <div className="flex-grow">
             <input
               type="text"
               placeholder="Search by name or email"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              onChange={(e) => debouncedSearch(e.target.value)}
               className="w-full p-2 border rounded-md"
             />
           </div>
@@ -402,10 +372,7 @@ const AdminUserManagement: React.FC = () => {
               <option value="admin">Admin</option>
             </select>
           </div>
-          <div>
-            <Button type="submit">Search</Button>
-          </div>
-        </form>
+        </div>
       </Card>
 
       {/* Users Table */}
