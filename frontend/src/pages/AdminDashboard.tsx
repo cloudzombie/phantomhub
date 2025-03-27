@@ -98,10 +98,20 @@ const AdminDashboard: React.FC = () => {
     const controller = new AbortController();
     console.log('AdminDashboard effect running, user:', user, 'loading:', loading);
     
+    // Track loading states separately
+    const loadingStates = {
+      stats: false,
+      health: false
+    };
+
     // Add exponential backoff retry logic for rate limiting
     const fetchWithRetry = async (url: string, options: any, retries = 3, delay = 2000) => {
       try {
-        return await axios.get(url, options);
+        const requestOptions = {
+          ...options,
+          timeout: 10000 // 10 second timeout per request
+        };
+        return await axios.get(url, requestOptions);
       } catch (error: any) {
         if (error.response && error.response.status === 429 && retries > 0) {
           console.log(`Rate limited, retrying in ${delay}ms... (${retries} retries left)`);
@@ -114,109 +124,109 @@ const AdminDashboard: React.FC = () => {
     
     const fetchSystemStats = async () => {
       try {
+        if (!isMounted) return;
+        loadingStates.stats = true;
         if (isMounted) setLoading(true);
-        const token = getToken();
         
+        const token = getToken();
         console.log('Fetching system stats with token:', token ? 'Token exists' : 'No token');
         
-        // Use the correct admin endpoint path
         const response = await fetchWithRetry(`${API_URL}/admin/system/stats`, {
           headers: {
             Authorization: `Bearer ${token}`
           },
-          signal: controller.signal,
-          timeout: 15000 // Increased timeout to 15 seconds
-        }, 3, 2000);
-        
-        console.log('System stats response received');
+          signal: controller.signal
+        });
         
         if (response.data.success && isMounted) {
           setSystemStats(response.data.data);
           console.log('System stats loaded successfully');
-          // Set loading to false after successful data fetch
-          setLoading(false);
         } else if (isMounted) {
           setError('Failed to fetch system statistics: ' + (response.data.message || 'Unknown error'));
           console.error('API error:', response.data);
-          // Set loading to false on error
-          setLoading(false);
         }
       } catch (err: any) {
         if (isMounted) {
-          if (err.response && err.response.status === 429) {
-            console.error('Rate limit exceeded. Please try again later.');
-            setError('Rate limit exceeded. Please try again in a few minutes.');
-          } else if (err.response && err.response.status === 404) {
-            console.error('System stats endpoint not found');
-            setError('System statistics endpoint not available. The server may need to be updated.');
-          } else {
-            console.error('Error fetching system stats:', err);
-            setError(err.message || 'Error connecting to the server');
-          }
+          handleFetchError(err, 'stats');
         }
       } finally {
-        if (isMounted) setLoading(false);
+        loadingStates.stats = false;
+        // Only set loading to false if both requests are done
+        if (isMounted && !loadingStates.health) {
+          setLoading(false);
+        }
       }
     };
 
     const fetchSystemHealth = async () => {
       try {
         if (!isMounted) return;
+        loadingStates.health = true;
         
         const token = getToken();
         console.log('Fetching system health');
         
-        // Use the correct admin endpoint path
         const response = await fetchWithRetry(`${API_URL}/admin/system/health`, {
           headers: {
             Authorization: `Bearer ${token}`
           },
-          signal: controller.signal,
-          timeout: 15000 // Increased timeout to 15 seconds
-        }, 3, 2000);
-        
-        console.log('System health response received');
+          signal: controller.signal
+        });
         
         if (response.data.success && isMounted) {
           setSystemHealth(response.data.data);
           console.log('System health loaded successfully');
-        } else if (isMounted) {
-          console.error('API error:', response.data);
         }
       } catch (err: any) {
         if (isMounted) {
-          if (err.response && err.response.status === 429) {
-            console.error('Rate limit exceeded. Please try again later.');
-            setError('Rate limit exceeded. Please try again in a few minutes.');
-          } else if (err.response && err.response.status === 404) {
-            console.error('System health endpoint not found');
-            // Don't set error here to avoid showing error message if only health fails but stats succeed
-            console.warn('Health endpoint not available. Continuing with limited dashboard functionality.');
-          } else {
-            console.error('Error fetching system health:', err);
-            // Only set error if it's a critical failure
-            if (!systemStats) {
-              setError(err.message || 'Error connecting to the server');
-            }
-          }
-          // Ensure loading is set to false even if this request fails
+          handleFetchError(err, 'health');
+        }
+      } finally {
+        loadingStates.health = false;
+        // Only set loading to false if both requests are done
+        if (isMounted && !loadingStates.stats) {
           setLoading(false);
         }
       }
     };
 
-    // Set a timeout to prevent infinite loading - increased timeout for better reliability
+    const handleFetchError = (err: any, type: 'stats' | 'health') => {
+      if (err.response && err.response.status === 429) {
+        console.error('Rate limit exceeded. Please try again later.');
+        setError('Rate limit exceeded. Please try again in a few minutes.');
+      } else if (err.response && err.response.status === 404) {
+        console.error(`${type} endpoint not found`);
+        if (type === 'stats') {
+          setError('System statistics endpoint not available. The server may need to be updated.');
+        }
+      } else if (err.code === 'ECONNABORTED') {
+        console.error(`${type} request timed out`);
+        setError(`Request timed out. The server might be experiencing high load.`);
+      } else {
+        console.error(`Error fetching ${type}:`, err);
+        setError(err.message || 'Error connecting to the server');
+      }
+    };
+
+    // Set a timeout for the entire loading process
     const timeoutId = setTimeout(() => {
       if (isMounted && loading) {
         setLoading(false);
-        setError('Loading timed out. The server might be unavailable.');
-        console.error('Loading timed out after 15 seconds');
+        if (!systemStats && !systemHealth) {
+          setError('Loading timed out. The server might be experiencing high load. Please try refreshing.');
+        }
+        console.warn('Loading timed out after 15 seconds');
       }
     }, 15000);
     
     if (user && user.role === 'admin') {
-      fetchSystemStats();
-      fetchSystemHealth();
+      // Start both fetches in parallel
+      Promise.all([
+        fetchSystemStats(),
+        fetchSystemHealth()
+      ]).catch(err => {
+        console.error('Error in parallel fetches:', err);
+      });
     }
     
     // Cleanup function
@@ -331,7 +341,7 @@ const AdminDashboard: React.FC = () => {
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="flex justify-between items-center mb-8">
-        <h1 className="text-3xl font-bold">Admin Dashboard</h1>
+        <h1 className="text-3xl font-bold text-gray-100">Admin Dashboard</h1>
         <div className="space-x-4">
           <Button 
             onClick={handleToggleMaintenance}
@@ -348,42 +358,42 @@ const AdminDashboard: React.FC = () => {
       {/* System Health Overview */}
       {systemHealth && (
         <Card className="mb-8 p-6">
-          <h2 className="text-2xl font-semibold mb-4">System Health</h2>
+          <h2 className="text-2xl font-semibold mb-4 text-gray-100">System Health</h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow">
-              <h3 className="text-lg font-medium mb-2">Status</h3>
+            <div className="bg-gray-800 p-4 rounded-lg shadow border border-gray-700">
+              <h3 className="text-lg font-medium mb-2 text-gray-200">Status</h3>
               <div className="flex items-center">
                 <div className={`h-3 w-3 rounded-full mr-2 ${
                   systemHealth.status === 'online' ? 'bg-green-500' : 'bg-red-500'
                 }`}></div>
-                <span className="capitalize">{systemHealth.status}</span>
+                <span className="capitalize text-gray-100">{systemHealth.status}</span>
               </div>
-              <div className="mt-2">
+              <div className="mt-2 text-gray-300">
                 <p>Uptime: {Math.floor(systemHealth.uptime / 3600)} hours</p>
                 <p>Version: {systemHealth.version}</p>
               </div>
             </div>
             
-            <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow">
-              <h3 className="text-lg font-medium mb-2">Memory Usage</h3>
-              <div className="w-full bg-gray-200 rounded-full h-2.5 dark:bg-gray-700 mb-2">
+            <div className="bg-gray-800 p-4 rounded-lg shadow border border-gray-700">
+              <h3 className="text-lg font-medium mb-2 text-gray-200">Memory Usage</h3>
+              <div className="w-full bg-gray-700 rounded-full h-2.5 mb-2">
                 <div 
-                  className="bg-blue-600 h-2.5 rounded-full" 
+                  className="bg-blue-500 h-2.5 rounded-full" 
                   style={{ width: `${systemHealth.memory.percentage}%` }}
                 ></div>
               </div>
-              <p>{systemHealth.memory.used} MB / {systemHealth.memory.total} MB ({systemHealth.memory.percentage}%)</p>
+              <p className="text-gray-300">{systemHealth.memory.used} MB / {systemHealth.memory.total} MB ({systemHealth.memory.percentage}%)</p>
             </div>
             
-            <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow">
-              <h3 className="text-lg font-medium mb-2">Disk Usage</h3>
-              <div className="w-full bg-gray-200 rounded-full h-2.5 dark:bg-gray-700 mb-2">
+            <div className="bg-gray-800 p-4 rounded-lg shadow border border-gray-700">
+              <h3 className="text-lg font-medium mb-2 text-gray-200">Disk Usage</h3>
+              <div className="w-full bg-gray-700 rounded-full h-2.5 mb-2">
                 <div 
-                  className="bg-blue-600 h-2.5 rounded-full" 
+                  className="bg-blue-500 h-2.5 rounded-full" 
                   style={{ width: `${systemHealth.disk.percentage}%` }}
                 ></div>
               </div>
-              <p>{systemHealth.disk.used} GB / {systemHealth.disk.total} GB ({systemHealth.disk.percentage}%)</p>
+              <p className="text-gray-300">{systemHealth.disk.used} GB / {systemHealth.disk.total} GB ({systemHealth.disk.percentage}%)</p>
             </div>
           </div>
         </Card>
@@ -392,12 +402,12 @@ const AdminDashboard: React.FC = () => {
       {/* System Stats Overview */}
       {systemStats && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <Card className="p-6">
-            <h2 className="text-xl font-semibold mb-4">Users</h2>
-            <div className="text-3xl font-bold">{systemStats.users.total}</div>
+          <Card className="p-6 bg-gray-800 border border-gray-700">
+            <h2 className="text-xl font-semibold mb-4 text-gray-100">Users</h2>
+            <div className="text-3xl font-bold text-gray-100">{systemStats.users.total}</div>
             <div className="mt-4">
               {systemStats.users.roleDistribution.map((role) => (
-                <div key={role.role} className="flex justify-between mt-2">
+                <div key={role.role} className="flex justify-between mt-2 text-gray-300">
                   <span className="capitalize">{role.role}</span>
                   <span>{role.count}</span>
                 </div>
@@ -405,44 +415,44 @@ const AdminDashboard: React.FC = () => {
             </div>
           </Card>
           
-          <Card className="p-6">
-            <h2 className="text-xl font-semibold mb-4">Devices</h2>
-            <div className="text-3xl font-bold">{systemStats.devices.total}</div>
+          <Card className="p-6 bg-gray-800 border border-gray-700">
+            <h2 className="text-xl font-semibold mb-4 text-gray-100">Devices</h2>
+            <div className="text-3xl font-bold text-gray-100">{systemStats.devices.total}</div>
             <div className="mt-4">
-              <div className="flex justify-between mt-2">
+              <div className="flex justify-between mt-2 text-gray-300">
                 <span>Active</span>
                 <span>{systemStats.devices.active}</span>
               </div>
-              <div className="flex justify-between mt-2">
+              <div className="flex justify-between mt-2 text-gray-300">
                 <span>Inactive</span>
                 <span>{systemStats.devices.inactive}</span>
               </div>
             </div>
           </Card>
           
-          <Card className="p-6">
-            <h2 className="text-xl font-semibold mb-4">Deployments</h2>
-            <div className="text-3xl font-bold">{systemStats.deployments.total}</div>
+          <Card className="p-6 bg-gray-800 border border-gray-700">
+            <h2 className="text-xl font-semibold mb-4 text-gray-100">Deployments</h2>
+            <div className="text-3xl font-bold text-gray-100">{systemStats.deployments.total}</div>
             <div className="mt-4">
-              <div className="flex justify-between mt-2">
+              <div className="flex justify-between mt-2 text-gray-300">
                 <span>Success Rate</span>
                 <span>{systemStats.deployments.successRate}</span>
               </div>
-              <div className="flex justify-between mt-2">
+              <div className="flex justify-between mt-2 text-gray-300">
                 <span>Recent (7d)</span>
                 <span>{systemStats.deployments.recent}</span>
               </div>
             </div>
           </Card>
           
-          <Card className="p-6">
-            <h2 className="text-xl font-semibold mb-4">Resources</h2>
+          <Card className="p-6 bg-gray-800 border border-gray-700">
+            <h2 className="text-xl font-semibold mb-4 text-gray-100">Resources</h2>
             <div className="mt-4">
-              <div className="flex justify-between mt-2">
+              <div className="flex justify-between mt-2 text-gray-300">
                 <span>Payloads</span>
                 <span>{systemStats.payloads.total}</span>
               </div>
-              <div className="flex justify-between mt-2">
+              <div className="flex justify-between mt-2 text-gray-300">
                 <span>Scripts</span>
                 <span>{systemStats.scripts.total}</span>
               </div>

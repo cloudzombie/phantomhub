@@ -1,11 +1,10 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
-// Import directly from the absolute path to avoid module resolution issues
 import { API_URL } from '../config.ts';
 import { useAuth } from '../contexts/AuthContext.tsx';
 import { getToken } from '../utils/tokenManager';
 import debounce from 'lodash/debounce';
+import ApiService from '../services/ApiService';
 
 // Component imports
 import { Card } from '../components/ui/Card';
@@ -70,24 +69,26 @@ const AdminUserManagement: React.FC = () => {
       setLoading(true);
       setError(null);
       
-      const token = getToken();
-      const response = await axios.get(`${API_URL}/admin/users`, {
+      // Use ApiService instead of direct axios calls
+      const response = await ApiService.get('/admin/users', {
         params: {
           page,
           limit: 10,
           search: searchTerm || undefined,
           role: filterRole !== 'all' ? filterRole : undefined
-        },
-        headers: {
-          Authorization: `Bearer ${token}`
         }
       });
       
-      if (response.data.success) {
-        setUsers(response.data.data.users || []);
-        setTotalPages(response.data.data.totalPages || 1);
+      if (response.success) {
+        const userData = response.data.users || [];
+        // Ensure the current admin user is always included
+        if (user && !userData.find(u => u.id === user.id)) {
+          userData.unshift(user);
+        }
+        setUsers(userData);
+        setTotalPages(response.data.totalPages || 1);
       } else {
-        setError('Failed to fetch users: ' + (response.data.message || 'Unknown error'));
+        setError('Failed to fetch users: ' + (response.message || 'Unknown error'));
       }
     } catch (err: any) {
       if (err.response?.status === 429) {
@@ -100,7 +101,7 @@ const AdminUserManagement: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [page, searchTerm, filterRole, lastFetchTime]);
+  }, [page, searchTerm, filterRole, lastFetchTime, user]);
 
   // Debounced search handler
   const debouncedSearch = useMemo(
@@ -132,18 +133,9 @@ const AdminUserManagement: React.FC = () => {
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const token = localStorage.getItem('token');
-      const response = await axios.post(
-        `${API_URL}/admin/users`,
-        formData,
-        { 
-          headers: {
-            Authorization: `Bearer ${token}`
-          }
-        }
-      );
+      const response = await ApiService.post('/admin/users', formData);
       
-      if (response.data.success) {
+      if (response.success) {
         // Reset form and refresh user list
         setFormData({
           name: '',
@@ -155,18 +147,7 @@ const AdminUserManagement: React.FC = () => {
         
         // Refresh user list
         setPage(1);
-        const token = getToken();
-        const refreshResponse = await axios.get(`${API_URL}/admin/users`, {
-          params: { page: 1, limit: 10 },
-          headers: {
-            Authorization: `Bearer ${token}`
-          }
-        });
-        
-        if (refreshResponse.data.success) {
-          setUsers(refreshResponse.data.data.users);
-          setTotalPages(refreshResponse.data.data.totalPages);
-        }
+        fetchUsers();
       }
     } catch (err: any) {
       setError(err.response?.data?.message || 'Failed to create user');
@@ -176,22 +157,20 @@ const AdminUserManagement: React.FC = () => {
 
   // Delete user
   const handleDeleteUser = async (userId: string) => {
+    // Prevent deleting the current admin user
+    if (userId === user?.id) {
+      setError("You cannot delete your own admin account");
+      return;
+    }
+
     if (!confirm('Are you sure you want to delete this user?')) {
       return;
     }
     
     try {
-      const token = localStorage.getItem('token');
-      const response = await axios.delete(
-        `${API_URL}/admin/users/${userId}`,
-        { 
-          headers: {
-            Authorization: `Bearer ${token}`
-          }
-        }
-      );
+      const response = await ApiService.delete(`/admin/users/${userId}`);
       
-      if (response.data.success) {
+      if (response.success) {
         // Remove user from list
         setUsers(users.filter(u => u.id !== userId));
       }
@@ -203,19 +182,16 @@ const AdminUserManagement: React.FC = () => {
 
   // Change user role
   const handleChangeRole = async (userId: string, newRole: string) => {
+    // Prevent changing own role
+    if (userId === user?.id) {
+      setError("You cannot change your own admin role");
+      return;
+    }
+
     try {
-      const token = localStorage.getItem('token');
-      const response = await axios.put(
-        `${API_URL}/admin/users/${userId}/role`,
-        { role: newRole },
-        { 
-          headers: {
-            Authorization: `Bearer ${token}`
-          }
-        }
-      );
+      const response = await ApiService.put(`/admin/users/${userId}/role`, { role: newRole });
       
-      if (response.data.success) {
+      if (response.success) {
         // Update user in list
         setUsers(users.map(u => 
           u.id === userId ? { ...u, role: newRole } : u
@@ -233,18 +209,11 @@ const AdminUserManagement: React.FC = () => {
     if (!newPassword) return;
     
     try {
-      const token = localStorage.getItem('token');
-      const response = await axios.put(
-        `${API_URL}/admin/users/${userId}/reset-password`,
-        { password: newPassword },
-        { 
-          headers: {
-            Authorization: `Bearer ${token}`
-          }
-        }
-      );
+      const response = await ApiService.put(`/admin/users/${userId}/reset-password`, { 
+        password: newPassword 
+      });
       
-      if (response.data.success) {
+      if (response.success) {
         alert('Password reset successfully');
       }
     } catch (err: any) {
