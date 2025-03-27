@@ -15,6 +15,7 @@ const getAllPayloads = async (req, res) => {
         let payloads;
         // If no user is authenticated, return unauthorized
         if (!userId) {
+            console.log('Payload request missing user ID');
             return res.status(401).json({
                 success: false,
                 message: 'User authentication required',
@@ -36,16 +37,23 @@ const getAllPayloads = async (req, res) => {
                 ]
             });
         }
+        // Always return a valid response even if no payloads found
         return res.status(200).json({
             success: true,
-            data: payloads,
+            data: payloads || [],
+            message: payloads && payloads.length > 0 ? undefined : 'No payloads found'
         });
     }
     catch (error) {
         console.error('Error fetching payloads:', error);
+        // Provide a clean error message for production without exposing implementation details
+        const errorMessage = process.env.NODE_ENV === 'production'
+            ? 'An error occurred while fetching payloads'
+            : (error instanceof Error ? error.message : 'Unknown error');
         return res.status(500).json({
             success: false,
             message: 'Failed to fetch payloads',
+            error: errorMessage
         });
     }
 };

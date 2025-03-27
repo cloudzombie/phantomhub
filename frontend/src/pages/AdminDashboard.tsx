@@ -228,30 +228,51 @@ const AdminDashboard: React.FC = () => {
     };
   }, [user]);
 
-  // Toggle maintenance mode
+  // Toggle maintenance mode with retry logic for rate limiting
   const handleToggleMaintenance = async () => {
     try {
       const token = getToken(); // Use tokenManager for consistency
-      const response = await axios.post(
-        `${API_URL}/admin/system/maintenance`,
-        { enabled: !maintenanceMode },
-        { 
-          headers: {
-            Authorization: `Bearer ${token}`
+      
+      // Add retry logic for rate limiting
+      const makeRequest = async (retries = 3, delay = 1000) => {
+        try {
+          return await axios.post(
+            `${API_URL}/admin/system/maintenance`,
+            { enabled: !maintenanceMode },
+            { 
+              headers: {
+                Authorization: `Bearer ${token}`
+              },
+              timeout: 10000 // 10 second timeout
+            }
+          );
+        } catch (error: any) {
+          if (error.response && error.response.status === 429 && retries > 0) {
+            console.log(`Rate limited, retrying in ${delay}ms... (${retries} retries left)`);
+            await new Promise(resolve => setTimeout(resolve, delay));
+            return makeRequest(retries - 1, delay * 2);
           }
+          throw error;
         }
-      );
+      };
+      
+      const response = await makeRequest();
       
       if (response.data.success) {
         setMaintenanceMode(!maintenanceMode);
+        // Show success message
+        setError(null); // Clear any existing errors
+        // You could add a success toast/notification here
       }
     } catch (err: any) {
       console.error('Error toggling maintenance mode:', err);
       // Show a more user-friendly error message
       if (err.response && err.response.status === 404) {
-        alert('Maintenance mode toggle is not available. The server may need to be updated.');
+        setError('Maintenance mode toggle is not available. The server may need to be updated.');
+      } else if (err.response && err.response.status === 429) {
+        setError('Rate limit exceeded. Please try again in a few minutes.');
       } else {
-        alert(`Failed to toggle maintenance mode: ${err.message || 'Unknown error'}`);
+        setError(`Failed to toggle maintenance mode: ${err.message || 'Unknown error'}`);
       }
     }
   };

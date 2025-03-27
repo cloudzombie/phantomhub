@@ -102,18 +102,29 @@ const authenticate = async (req, res, next) => {
             return;
         }
         console.log('Running authenticate middleware');
-        console.log('Headers:', JSON.stringify(req.headers));
-        const authHeader = req.headers.authorization;
-        if (!authHeader) {
-            console.log('No authorization header found');
-            res.status(401).json({ error: 'No authorization header' });
-            return;
+        // Get token from cookie first, then fallback to Authorization header
+        let token;
+        // Check for token in cookies first (preferred method)
+        if (req.cookies && req.cookies.auth_token) {
+            token = req.cookies.auth_token;
+            console.log('Found token in HTTP-only cookie');
         }
-        const token = authHeader.split(' ')[1];
-        if (!token) {
-            console.log('No token provided in Authorization header');
-            res.status(401).json({ error: 'No token provided' });
-            return;
+        // Fallback to Authorization header for backward compatibility
+        else {
+            const authHeader = req.headers.authorization;
+            if (!authHeader) {
+                console.log('No authorization header or cookie found');
+                res.status(401).json({ error: 'Authentication required' });
+                return;
+            }
+            const tokenPart = authHeader.split(' ')[1];
+            if (!tokenPart) {
+                console.log('No token provided in Authorization header');
+                res.status(401).json({ error: 'No token provided' });
+                return;
+            }
+            token = tokenPart;
+            console.log('Found token in Authorization header');
         }
         console.log('Token received, checking blacklist');
         // Check if token is blacklisted
@@ -123,8 +134,25 @@ const authenticate = async (req, res, next) => {
             return;
         }
         console.log('Verifying token with JWT_SECRET');
-        // Verify token
-        const decoded = jsonwebtoken_1.default.verify(token, process.env.JWT_SECRET || 'your-secret-key');
+        // Verify token with better error handling
+        let decoded;
+        try {
+            const verifiedToken = jsonwebtoken_1.default.verify(token, process.env.JWT_SECRET || 'your-secret-key');
+            decoded = verifiedToken;
+        }
+        catch (jwtError) {
+            logger_1.default.error('JWT verification error:', jwtError);
+            if (jwtError instanceof jsonwebtoken_1.default.TokenExpiredError) {
+                res.status(401).json({ error: 'Token has expired' });
+            }
+            else if (jwtError instanceof jsonwebtoken_1.default.JsonWebTokenError) {
+                res.status(401).json({ error: 'Invalid token' });
+            }
+            else {
+                res.status(401).json({ error: 'Token verification failed' });
+            }
+            return;
+        }
         console.log('Token decoded successfully:', JSON.stringify(decoded));
         // Find user and include their permissions
         const user = await User_1.default.findByPk(decoded.id);

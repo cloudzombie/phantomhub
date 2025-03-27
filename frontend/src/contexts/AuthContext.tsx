@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import axios from 'axios';
 import { API_URL } from '../config';
-import { getToken, storeToken, storeUserData, getUserData } from '../utils/tokenManager';
+import { getToken, storeToken, storeUserData, getUserData, isAuthenticated as checkAuthStatus, clearAuthData } from '../utils/tokenManager';
 
 // Define user interface
 interface User {
@@ -18,8 +18,8 @@ interface AuthContextType {
   error: string | null;
   login: (email: string, password: string) => Promise<boolean>;
   register: (name: string, email: string, password: string) => Promise<boolean>;
-  logout: () => void;
-  isAuthenticated: () => boolean;
+  logout: () => Promise<void>;
+  isAuthenticated: () => Promise<boolean>;
 }
 
 // Create context with default values
@@ -29,8 +29,8 @@ const AuthContext = createContext<AuthContextType>({
   error: null,
   login: async () => false,
   register: async () => false,
-  logout: () => {},
-  isAuthenticated: () => false,
+  logout: async () => {},
+  isAuthenticated: async () => false,
 });
 
 // Auth provider component
@@ -41,11 +41,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Check if user is logged in on initial load
   useEffect(() => {
-    const checkAuthStatus = async () => {
+    const checkUserAuth = async () => {
       console.log('AuthContext: Checking auth status on load/refresh');
-      // Use tokenManager instead of direct localStorage access for consistency
-      const token = getToken();
+      
+      // First try to get user from localStorage for immediate UI display
       const storedUser = getUserData();
+      const token = getToken();
       
       // If we have a stored user, set it immediately to prevent flashing of login screen
       if (storedUser) {
@@ -58,51 +59,54 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           if (token) {
             console.log('AuthContext: Setting Authorization header from stored token');
             axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-            
-            // Dispatch authentication event to ensure other components know we're authenticated
-            setTimeout(() => {
-              if (storedUser && storedUser.id) {
-                document.dispatchEvent(new CustomEvent('user-authenticated', { 
-                  detail: { userId: storedUser.id, role: storedUser.role || 'user' } 
-                }));
-              }
-            }, 100);
           }
+          
+          // Always ensure cookies are sent with requests
+          axios.defaults.withCredentials = true;
         } catch (err) {
           console.error('AuthContext: Error restoring user from storage', err);
         }
       }
       
-      if (!token) {
-        console.log('AuthContext: No token found');
-        setLoading(false);
-        return;
-      }
-      
+      // Now verify authentication with the server (works with HTTP-only cookies)
       try {
-        console.log('AuthContext: Verifying token with backend');
-        // Set the token in axios defaults before making the request
-        axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+        // Make a request to the auth check endpoint
+        const isAuth = await checkAuthStatus();
         
-        // Make the request to verify the token
+        if (!isAuth && !storedUser) {
+          console.log('AuthContext: Not authenticated according to server');
+          setLoading(false);
+          return;
+        }
+        
+        try {
+        console.log('AuthContext: Fetching current user data');
+        // Ensure credentials are sent with the request (for cookies)
+        axios.defaults.withCredentials = true;
+        
+        // Make the request to get current user data
         const response = await axios.get(`${API_URL}/auth/me`, {
-          // Add timeout to prevent hanging requests
+          withCredentials: true,
           timeout: 8000
         });
         
         if (response.data && response.data.success) {
-          console.log('AuthContext: Token verified successfully');
+          console.log('AuthContext: Authentication verified successfully');
           // Update user data with latest from server
-          const userData = response.data.data;
+          const userData = response.data.user;
           setUser(userData);
           
           // Store user data in localStorage for persistence
-          localStorage.setItem('user', JSON.stringify(userData));
-          sessionStorage.setItem('user', JSON.stringify(userData));
+          storeUserData(userData);
           
-          // Set axios default headers for all future requests
-          axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-          console.log('AuthContext: Set default Authorization header for future requests');
+          // Set axios default to always include credentials
+          axios.defaults.withCredentials = true;
+          
+          // If we have a token in localStorage, set the Authorization header as fallback
+          const token = getToken();
+          if (token) {
+            axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+          }
           
           // Import ApiService and ensure socket connection is initialized
           const { ApiService } = await import('../services/ApiService');
@@ -121,15 +125,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             }
           }, 500); // Small delay to ensure everything is ready
         } else {
-          console.error('AuthContext: Token validation failed', response.data);
-          // DON'T clear token on validation failure - just log the error
-          console.warn('AuthContext: Token validation failed but keeping token to prevent logout');
+          console.error('AuthContext: User validation failed', response.data);
           // Only clear user state if explicitly told by server to logout
           if (response.data.forceLogout) {
-            localStorage.removeItem('token');
-            sessionStorage.removeItem('token');
-            localStorage.removeItem('user');
-            sessionStorage.removeItem('user');
+            await clearAuthData();
             setUser(null);
           }
         }
@@ -167,7 +166,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     };
     
-    checkAuthStatus();
+    checkUserAuth();
   }, []);
 
   // Login function
@@ -318,7 +317,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   // Logout function - only call this when the user explicitly wants to logout
-  const logout = () => {
+  const logout = async () => {
     console.log('AuthContext: User explicitly logging out');
     
     // Save any user settings before logout
@@ -340,14 +339,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // Clear user state
     setUser(null);
     
-    // Clear all auth data
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    sessionStorage.removeItem('token');
-    sessionStorage.removeItem('user');
-    
-    // Remove auth header
-    delete axios.defaults.headers.common['Authorization'];
+    // Clear all auth data including HTTP-only cookies
+    await clearAuthData();
     
     // Dispatch logout event
     document.dispatchEvent(new CustomEvent('user-logged-out'));
@@ -356,12 +349,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     window.location.href = '/login';
   };
 
-  // Check if user is authenticated - more robust implementation
-  const isAuthenticated = (): boolean => {
+  // Check if user is authenticated - more robust implementation that works with HTTP-only cookies
+  const isAuthenticated = async (): Promise<boolean> => {
     // First check if we have a user in state
     if (user) {
       console.log('AuthContext: User already in state, authenticated');
-      // CRITICAL: Always ensure the token is in axios headers for Heroku deployment
+      // Ensure credentials are sent with requests
+      axios.defaults.withCredentials = true;
+      
+      // Also set Authorization header if token exists (for backward compatibility)
       const token = getToken();
       if (token) {
         axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
@@ -369,46 +365,52 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return true;
     }
     
-    // If no user in state, use tokenManager utilities for consistency
-    const token = getToken();
-    
-    // CRITICAL: For authentication persistence, we only check if token exists
-    // Don't rely on userData being valid as it might cause JSON parsing errors
-    if (token) {
-      console.log('AuthContext: Found valid token and user data in storage');
+    // If no user in state, check with the server using tokenManager's isAuthenticated
+    try {
+      // This will check both HTTP-only cookies and localStorage token
+      const isAuth = await checkAuthStatus();
       
-      // CRITICAL: ALWAYS set axios headers for Heroku production deployment
-      console.log('AuthContext: Ensuring Authorization header is set for Heroku');
-      axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-      
-      // Force token into storage again for maximum persistence
-      try {
-        localStorage.setItem('token', token);
-        sessionStorage.setItem('token', token);
-      } catch (err) {
-        console.warn('AuthContext: Error ensuring token in storage:', err);
-      }
-      
-      // Try to get user data if available
-      const userData = getUserData();
-      
-      // If we have valid user data but no user state, set the user state
-      if (userData && userData.id && !user) {
-        console.log('AuthContext: Setting user state from storage in isAuthenticated');
-        setUser(userData);
+      if (isAuth) {
+        console.log('AuthContext: Server confirmed authentication');
         
-        // Dispatch authentication event
-        setTimeout(() => {
-          document.dispatchEvent(new CustomEvent('user-authenticated', { 
-            detail: { userId: userData.id, role: userData.role || 'user' } 
-          }));
-          console.log('AuthContext: Dispatched user-authenticated event from isAuthenticated');
-        }, 100);
+        // Try to get user data if available
+        const userData = getUserData();
+        
+        // If we have valid user data but no user state, set the user state
+        if (userData && userData.id && !user) {
+          console.log('AuthContext: Setting user state from storage in isAuthenticated');
+          setUser(userData);
+          
+          // Dispatch authentication event
+          setTimeout(() => {
+            document.dispatchEvent(new CustomEvent('user-authenticated', { 
+              detail: { userId: userData.id, role: userData.role || 'user' } 
+            }));
+            console.log('AuthContext: Dispatched user-authenticated event from isAuthenticated');
+          }, 100);
+        } else {
+          // If we don't have user data but we're authenticated, fetch it
+          try {
+            const response = await axios.get(`${API_URL}/auth/me`, {
+              withCredentials: true
+            });
+            
+            if (response.data && response.data.success) {
+              const newUserData = response.data.user;
+              setUser(newUserData);
+              storeUserData(newUserData);
+            }
+          } catch (err) {
+            console.error('AuthContext: Error fetching user data in isAuthenticated', err);
+          }
+        }
+        return true;
       }
-      return true;
+    } catch (err) {
+      console.error('AuthContext: Error checking authentication status', err);
     }
     
-    console.log('AuthContext: Not authenticated - no valid token found');
+    console.log('AuthContext: Not authenticated according to server');
     return false;
   };
 

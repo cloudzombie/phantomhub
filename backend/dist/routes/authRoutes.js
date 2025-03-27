@@ -15,4 +15,10 @@ router.post('/register', authRateLimiter, authController_1.register);
 router.post('/login', authRateLimiter, authController_1.login);
 // Get current user (protected route)
 router.get('/me', auth_1.authenticate, authController_1.getCurrentUser);
+// Sync token endpoint - this is critical for persistence across sessions
+router.post('/sync-token', authController_1.syncToken);
+// Check authentication status
+router.get('/check', auth_1.authenticate, authController_1.checkAuth);
+// Logout endpoint
+router.post('/logout', authController_1.logout);
 exports.default = router;

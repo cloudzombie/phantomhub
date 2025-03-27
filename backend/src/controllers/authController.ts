@@ -43,10 +43,20 @@ export const register = async (req: Request, res: Response): Promise<Response> =
       { expiresIn: '7d' }
     );
 
+    // Set HTTP-only cookie with the token
+    res.cookie('auth_token', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production', // Secure in production
+      sameSite: 'lax',
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days in milliseconds
+      path: '/',
+      domain: process.env.NODE_ENV === 'production' ? '.herokuapp.com' : undefined
+    });
+
     return res.status(201).json({
       success: true,
       message: 'User registered successfully',
-      token,
+      token, // Still include token in response for backward compatibility
       user: {
         id: user.id,
         name: user.name,
@@ -101,11 +111,21 @@ export const login = async (req: Request, res: Response): Promise<Response> => {
       { expiresIn: '7d' }
     );
 
+    // Set HTTP-only cookie with the token
+    res.cookie('auth_token', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production', // Secure in production
+      sameSite: 'lax',
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days in milliseconds
+      path: '/',
+      domain: process.env.NODE_ENV === 'production' ? '.herokuapp.com' : undefined
+    });
+
     logger.debug(`Login successful for user: ${email}`);
     return res.status(200).json({
       success: true,
       message: 'Login successful',
-      token,
+      token, // Still include token in response for backward compatibility
       user: {
         id: user.id,
         name: user.name,
@@ -126,7 +146,13 @@ export const login = async (req: Request, res: Response): Promise<Response> => {
 // Sync token endpoint to persist authentication tokens on the server
 export const syncToken = async (req: Request, res: Response): Promise<Response> => {
   try {
-    const { token } = req.body;
+    // Get token from either request body or cookie
+    let token = req.body.token;
+    
+    // If no token in body, try to get from cookie
+    if (!token && req.cookies && req.cookies.auth_token) {
+      token = req.cookies.auth_token;
+    }
     
     if (!token) {
       return res.status(400).json({
@@ -145,6 +171,18 @@ export const syncToken = async (req: Request, res: Response): Promise<Response> 
         return res.status(400).json({
           success: false,
           message: 'Invalid token format'
+        });
+      }
+      
+      // Set HTTP-only cookie with the token if it came from body
+      if (req.body.token) {
+        res.cookie('auth_token', token, {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === 'production',
+          sameSite: 'lax',
+          maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+          path: '/',
+          domain: process.env.NODE_ENV === 'production' ? '.herokuapp.com' : undefined
         });
       }
       
@@ -185,6 +223,37 @@ export const syncToken = async (req: Request, res: Response): Promise<Response> 
   }
 };
 
+// Check authentication status
+export const checkAuth = async (req: AuthenticatedRequest, res: Response): Promise<Response> => {
+  try {
+    // If the request made it past the authentication middleware,
+    // the user is authenticated
+    if (req.user) {
+      return res.status(200).json({
+        success: true,
+        message: 'Authenticated',
+        user: {
+          id: req.user.id,
+          name: req.user.name,
+          email: req.user.email,
+          role: req.user.role
+        }
+      });
+    } else {
+      return res.status(401).json({
+        success: false,
+        message: 'Not authenticated'
+      });
+    }
+  } catch (error) {
+    logger.error('Error checking authentication:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Server error checking authentication'
+    });
+  }
+};
+
 // Get current user
 export const getCurrentUser = async (req: AuthenticatedRequest, res: Response): Promise<Response> => {
   try {
@@ -213,4 +282,35 @@ export const getCurrentUser = async (req: AuthenticatedRequest, res: Response): 
       message: 'Error fetching user data',
     });
   }
-}; 
+};
+
+// Logout user
+export const logout = async (req: AuthenticatedRequest, res: Response): Promise<Response> => {
+  try {
+    // Clear the auth cookie
+    res.clearCookie('auth_token', {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      path: '/',
+      domain: process.env.NODE_ENV === 'production' ? '.herokuapp.com' : undefined
+    });
+    
+    // Also clear any theme or preference cookies
+    res.clearCookie('theme_preference', {
+      path: '/',
+      domain: process.env.NODE_ENV === 'production' ? '.herokuapp.com' : undefined
+    });
+    
+    return res.status(200).json({
+      success: true,
+      message: 'Logged out successfully'
+    });
+  } catch (error) {
+    logger.error('Logout error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Error during logout'
+    });
+  }
+};

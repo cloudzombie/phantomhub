@@ -18,6 +18,7 @@ const deviceConnectionPool_1 = __importDefault(require("./services/deviceConnect
 const logger_1 = __importDefault(require("./utils/logger"));
 const rateLimiter_1 = require("./middleware/rateLimiter");
 const socketService_1 = require("./services/socketService");
+const cookie_parser_1 = __importDefault(require("cookie-parser"));
 // Track when the server started
 const serverStartTime = new Date();
 // Import routes
@@ -28,6 +29,7 @@ const deploymentRoutes_1 = __importDefault(require("./routes/deploymentRoutes"))
 const systemRoutes_1 = __importDefault(require("./routes/systemRoutes"));
 const userRoutes_1 = __importDefault(require("./routes/userRoutes"));
 const scriptRoutes_1 = __importDefault(require("./routes/scriptRoutes"));
+const adminRoutes_1 = __importDefault(require("./routes/adminRoutes"));
 // Load environment variables
 dotenv_1.default.config();
 // Initialize Express app
@@ -84,6 +86,7 @@ app.set('socketService', socketService);
 // Middleware
 app.use(express_1.default.json());
 app.use(express_1.default.urlencoded({ extended: true }));
+app.use((0, cookie_parser_1.default)()); // Add cookie-parser middleware
 app.use((0, cors_1.default)({
     origin: function (origin, callback) {
         // Production-ready CORS configuration with specific allowed origins
@@ -108,7 +111,7 @@ app.use((0, cors_1.default)({
     },
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
-    credentials: true,
+    credentials: true, // Important for cookies to work cross-domain
     maxAge: 86400 // 24 hours
 }));
 app.use((0, helmet_1.default)());
@@ -232,6 +235,7 @@ app.use('/api/deployments', deploymentRoutes_1.default);
 app.use('/api/system', systemRoutes_1.default);
 app.use('/api/users', userRoutes_1.default);
 app.use('/api/scripts', scriptRoutes_1.default);
+app.use('/api/admin', adminRoutes_1.default);
 // Error handling middleware
 app.use(errorHandler_1.errorHandler);
 // Initialize database and start server

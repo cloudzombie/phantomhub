@@ -10,6 +10,16 @@ const Payload_1 = __importDefault(require("../models/Payload"));
 const User_1 = __importDefault(require("../models/User"));
 // Get all deployments
 const getAllDeployments = async (req, res) => {
+    var _a;
+    // Check for authentication
+    if (!((_a = req.user) === null || _a === void 0 ? void 0 : _a.id)) {
+        console.log('Deployment request missing user ID');
+        res.status(401).json({
+            success: false,
+            message: 'User authentication required',
+        });
+        return;
+    }
     try {
         const deployments = await Deployment_1.default.findAll({
             include: [
@@ -19,16 +29,23 @@ const getAllDeployments = async (req, res) => {
             ],
             order: [['createdAt', 'DESC']]
         });
+        // Always return a valid response even if no deployments found
         res.status(200).json({
             success: true,
-            data: deployments
+            data: deployments || [],
+            message: deployments && deployments.length > 0 ? undefined : 'No deployments found'
         });
     }
     catch (error) {
         console.error('Error fetching all deployments:', error);
+        // Provide a clean error message for production without exposing implementation details
+        const errorMessage = process.env.NODE_ENV === 'production'
+            ? 'An error occurred while fetching deployments'
+            : (error instanceof Error ? error.message : 'Unknown error');
         res.status(500).json({
             success: false,
-            message: 'Failed to fetch deployments'
+            message: 'Failed to fetch deployments',
+            error: errorMessage
         });
     }
 };

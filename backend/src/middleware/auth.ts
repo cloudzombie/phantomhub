@@ -132,20 +132,32 @@ export const authenticate = async (
     }
 
     console.log('Running authenticate middleware');
-    console.log('Headers:', JSON.stringify(req.headers));
     
-    const authHeader = req.headers.authorization;
-    if (!authHeader) {
-      console.log('No authorization header found');
-      res.status(401).json({ error: 'No authorization header' });
-      return;
-    }
+    // Get token from cookie first, then fallback to Authorization header
+    let token: string;
+    
+    // Check for token in cookies first (preferred method)
+    if (req.cookies && req.cookies.auth_token) {
+      token = req.cookies.auth_token;
+      console.log('Found token in HTTP-only cookie');
+    } 
+    // Fallback to Authorization header for backward compatibility
+    else {
+      const authHeader = req.headers.authorization;
+      if (!authHeader) {
+        console.log('No authorization header or cookie found');
+        res.status(401).json({ error: 'Authentication required' });
+        return;
+      }
 
-    const token = authHeader.split(' ')[1];
-    if (!token) {
-      console.log('No token provided in Authorization header');
-      res.status(401).json({ error: 'No token provided' });
-      return;
+      const tokenPart = authHeader.split(' ')[1];
+      if (!tokenPart) {
+        console.log('No token provided in Authorization header');
+        res.status(401).json({ error: 'No token provided' });
+        return;
+      }
+      token = tokenPart;
+      console.log('Found token in Authorization header');
     }
     
     console.log('Token received, checking blacklist');
@@ -160,12 +172,13 @@ export const authenticate = async (
     console.log('Verifying token with JWT_SECRET');
     
     // Verify token with better error handling
-    let decoded;
+    let decoded: JwtPayload;
     try {
-      decoded = jwt.verify(
+      const verifiedToken = jwt.verify(
         token,
         process.env.JWT_SECRET || 'your-secret-key'
-      ) as JwtPayload;
+      );
+      decoded = verifiedToken as JwtPayload;
     } catch (jwtError) {
       logger.error('JWT verification error:', jwtError);
       if (jwtError instanceof jwt.TokenExpiredError) {

@@ -14,6 +14,7 @@ import logger from './utils/logger';
 import { globalRateLimiter } from './middleware/rateLimiter';
 import { SocketService } from './services/socketService';
 import jwt from 'jsonwebtoken';
+import cookieParser from 'cookie-parser';
 
 // Track when the server started
 const serverStartTime = new Date();
@@ -99,6 +100,7 @@ app.set('socketService', socketService);
 // Middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use(cookieParser()); // Add cookie-parser middleware
 app.use(cors({
   origin: function(origin, callback) {
     // Production-ready CORS configuration with specific allowed origins
@@ -132,7 +134,7 @@ app.use(cors({
   },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
-  credentials: true,
+  credentials: true, // Important for cookies to work cross-domain
   maxAge: 86400 // 24 hours
 }));
 app.use(helmet());

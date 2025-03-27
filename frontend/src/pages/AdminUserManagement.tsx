@@ -53,13 +53,35 @@ const AdminUserManagement: React.FC = () => {
     }
   }, [user, navigate]);
 
-  // Fetch users
+  // Fetch users with retry logic for rate limiting
   useEffect(() => {
+    let isMounted = true;
+    const controller = new AbortController();
+    
+    // Add exponential backoff retry logic for rate limiting
+    const fetchWithRetry = async (url: string, options: any, retries = 3, delay = 2000) => {
+      try {
+        return await axios.get(url, options);
+      } catch (error: any) {
+        if (error.response && error.response.status === 429 && retries > 0) {
+          console.log(`Rate limited, retrying in ${delay}ms... (${retries} retries left)`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+          return fetchWithRetry(url, options, retries - 1, delay * 2);
+        }
+        throw error;
+      }
+    };
+    
     const fetchUsers = async () => {
       try {
-        setLoading(true);
+        if (isMounted) setLoading(true);
+        setError(null); // Clear any previous errors
+        
         const token = getToken();
-        const response = await axios.get(`${API_URL}/admin/users`, {
+        console.log('Fetching users with token:', token ? 'Token exists' : 'No token');
+        
+        // Use fetchWithRetry to handle rate limiting
+        const response = await fetchWithRetry(`${API_URL}/admin/users`, {
           params: {
             page,
             limit: 10,
@@ -68,27 +90,60 @@ const AdminUserManagement: React.FC = () => {
           },
           headers: {
             Authorization: `Bearer ${token}`
-          }
-        });
+          },
+          signal: controller.signal,
+          timeout: 15000 // Increased timeout to 15 seconds
+        }, 3, 2000);
         
-        if (response.data.success) {
-          setUsers(response.data.data.users);
-          setTotalPages(response.data.data.totalPages);
-        } else {
-          setError('Failed to fetch users');
+        if (response.data.success && isMounted) {
+          setUsers(response.data.data.users || []);
+          setTotalPages(response.data.data.totalPages || 1);
+          console.log('Users loaded successfully:', response.data.data.users?.length || 0, 'users');
+        } else if (isMounted) {
+          setError('Failed to fetch users: ' + (response.data.message || 'Unknown error'));
+          console.error('API error:', response.data);
         }
-      } catch (err) {
-        setError('Error connecting to the server');
-        console.error('Error fetching users:', err);
+      } catch (err: any) {
+        if (isMounted) {
+          if (err.response && err.response.status === 429) {
+            console.error('Rate limit exceeded. Please try again later.');
+            setError('Rate limit exceeded. Please try again in a few minutes.');
+          } else if (err.response && err.response.status === 404) {
+            console.error('Users endpoint not found');
+            setError('User management endpoint not available. The server may need to be updated.');
+          } else {
+            console.error('Error fetching users:', err);
+            setError(err.message || 'Error connecting to the server');
+          }
+        }
       } finally {
-        setLoading(false);
+        if (isMounted) setLoading(false);
       }
     };
 
+    // Set a timeout to prevent infinite loading
+    const timeoutId = setTimeout(() => {
+      if (isMounted && loading) {
+        setLoading(false);
+        setError('Loading timed out. The server might be unavailable.');
+        console.error('Loading timed out after 15 seconds');
+      }
+    }, 15000);
+    
     if (user && user.role === 'admin') {
       fetchUsers();
+    } else if (isMounted) {
+      setLoading(false);
     }
-  }, [user, page, searchTerm, filterRole]);
+    
+    // Cleanup function
+    return () => {
+      isMounted = false;
+      controller.abort();
+      clearTimeout(timeoutId);
+      console.log('AdminUserManagement data fetching cleanup');
+    };
+  }, [user, page, searchTerm, filterRole, loading]);
 
   // Handle form input changes
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
@@ -250,13 +305,15 @@ const AdminUserManagement: React.FC = () => {
       </div>
 
       {error && (
-        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
-          {error}
+        <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-4 relative" role="alert">
+          <p className="font-bold">Error</p>
+          <p>{error}</p>
           <button 
-            className="float-right font-bold"
-            onClick={() => setError(null)}
+            onClick={() => setError(null)} 
+            className="absolute top-2 right-2 text-red-500"
+            aria-label="Close"
           >
-            &times;
+            <span className="text-xl">&times;</span>
           </button>
         </div>
       )}
@@ -375,7 +432,7 @@ const AdminUserManagement: React.FC = () => {
               </tr>
             </thead>
             <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-              {users.map(user => (
+              {users && users.length > 0 ? users.map(user => (
                 <tr key={user.id}>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-sm font-medium">{user.name}</div>
@@ -414,7 +471,13 @@ const AdminUserManagement: React.FC = () => {
                     </button>
                   </td>
                 </tr>
-              ))}
+              )) : (
+                <tr>
+                  <td colSpan={4} className="px-6 py-4 text-center text-sm text-gray-500 dark:text-gray-400">
+                    {loading ? 'Loading users...' : error ? 'Error loading users' : 'No users found'}
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
