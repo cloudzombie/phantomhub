@@ -77,9 +77,18 @@ const AdminDashboard: React.FC = () => {
   // Redirect if not admin
   useEffect(() => {
     if (user && user.role !== 'admin') {
-      navigate('/dashboard');
+      navigate('/');
     }
   }, [user, navigate]);
+  
+  // Debug output
+  useEffect(() => {
+    console.log('AdminDashboard mounted');
+    console.log('Current user:', user);
+    return () => {
+      console.log('AdminDashboard unmounted');
+    };
+  }, [user]);
 
   // Fetch system stats
   useEffect(() => {

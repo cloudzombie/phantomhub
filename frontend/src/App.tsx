@@ -9,6 +9,8 @@ import ResultsViewer from './pages/ResultsViewer';
 import Settings from './pages/Settings';
 import AdminDashboard from './pages/AdminDashboard';
 import AdminUserManagement from './pages/AdminUserManagement';
+import AdminNotFound from './pages/AdminNotFound';
+import AdminLayout from './components/admin/AdminLayout';
 import { useEffect, useState } from 'react';
 
 import { useAuth } from './contexts/AuthContext';
@@ -70,17 +72,16 @@ function App() {
           <Route path="results" element={<ResultsViewer />} />
           <Route path="settings" element={<Settings />} />
           
-          {/* Admin routes */}
+          {/* Admin routes - structured approach */}
           <Route path="admin" element={
             <AdminRoute>
-              <AdminDashboard />
+              <AdminLayout />
             </AdminRoute>
-          } />
-          <Route path="admin/users" element={
-            <AdminRoute>
-              <AdminUserManagement />
-            </AdminRoute>
-          } />
+          }>
+            <Route index element={<AdminDashboard />} />
+            <Route path="users" element={<AdminUserManagement />} />
+            <Route path="*" element={<AdminNotFound />} />
+          </Route>
         </Route>
       </Routes>
     </BrowserRouter>
