@@ -122,7 +122,7 @@ function App() {
           <Route path="results" element={<ResultsViewer />} />
           <Route path="settings" element={<Settings />} />
           
-          {/* Admin routes - structured approach */}
+          {/* Admin routes - structured approach with direct components */}
           <Route path="admin" element={
             <AdminRoute>
               <AdminLayout />
