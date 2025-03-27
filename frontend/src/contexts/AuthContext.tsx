@@ -54,38 +54,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setUser(storedUser);
           console.log('AuthContext: Restored user from storage, role:', storedUser.role);
           
-          // CRITICAL: Set axios default headers immediately
+          // Set axios default headers immediately if we have a token
           if (token) {
             console.log('AuthContext: Setting Authorization header from stored token');
             axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
             
-            // Store token in both localStorage and sessionStorage for redundancy
-            if (!localStorage.getItem('token')) {
-              console.log('AuthContext: Token missing from localStorage, restoring');
-              localStorage.setItem('token', token);
-            }
-            if (!sessionStorage.getItem('token')) {
-              console.log('AuthContext: Token missing from sessionStorage, restoring');
-              sessionStorage.setItem('token', token);
-            }
-            
-            // Store user data in both storages for redundancy
-            if (!localStorage.getItem('user') && storedUser) {
-              localStorage.setItem('user', JSON.stringify(storedUser));
-            }
-            if (!sessionStorage.getItem('user') && storedUser) {
-              sessionStorage.setItem('user', JSON.stringify(storedUser));
-            }
-            
             // Dispatch authentication event to ensure other components know we're authenticated
             setTimeout(() => {
-              // Use storedUser instead of parsedUser since we're using tokenManager
               if (storedUser && storedUser.id) {
                 document.dispatchEvent(new CustomEvent('user-authenticated', { 
                   detail: { userId: storedUser.id, role: storedUser.role || 'user' } 
                 }));
-              } else {
-                console.warn('AuthContext: Invalid user data when restoring from storage');
               }
             }, 100);
           }
@@ -100,31 +79,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return;
       }
       
-      // Double-check token exists in both localStorage and sessionStorage
-      if (localStorage.getItem('token') !== token) {
-        console.log('AuthContext: Token missing from localStorage, restoring');
-        localStorage.setItem('token', token);
-      }
-      if (sessionStorage.getItem('token') !== token) {
-        console.log('AuthContext: Token missing from sessionStorage, restoring');
-        sessionStorage.setItem('token', token);
-      }
-      
       try {
         console.log('AuthContext: Verifying token with backend');
-        // CRITICAL: Force set the token in axios defaults before making the request
+        // Set the token in axios defaults before making the request
         axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
         
-        // Also set it in the request headers for this specific request
-        const headers = { Authorization: `Bearer ${token}` };
-        console.log('AuthContext: Using token for verification:', token ? token.substring(0, 10) + '...' : 'none');
-        
-        // Force token into localStorage and sessionStorage again for maximum persistence
-        localStorage.setItem('token', token);
-        sessionStorage.setItem('token', token);
-        
+        // Make the request to verify the token
         const response = await axios.get(`${API_URL}/auth/me`, {
-          headers,
           // Add timeout to prevent hanging requests
           timeout: 8000
         });

@@ -2,93 +2,33 @@
  * Token Manager Utility
  * Centralizes token management to prevent accidental token removal
  * This is crucial for maintaining authentication persistence across page refreshes
- * 
- * This implementation ensures token is properly stored both in localStorage/sessionStorage
- * and synchronized with the server database for full persistence
  */
 
 import axios from 'axios';
-// Remove ApiService import to fix circular dependency
 
 /**
- * Get the authentication token from storage with enhanced reliability
- * Checks both localStorage and sessionStorage for redundancy
- * Implements multiple fallback mechanisms to ensure token persistence
+ * Get the authentication token from storage
+ * Checks localStorage only to prevent sync loops
  */
 export const getToken = (): string | null => {
-  let token: string | null = null;
-  
   try {
-    // Try localStorage first
-    const localToken = localStorage.getItem('token');
-    const sessionToken = sessionStorage.getItem('token');
+    // Only use localStorage to prevent sync loops
+    const token = localStorage.getItem('token');
     
-    // If token exists in either storage, use it
-    token = localToken || sessionToken || null;
-    
-    // If token only exists in sessionStorage, restore it to localStorage
-    if (!localToken && sessionToken) {
-      console.log('TokenManager: Restoring token from sessionStorage to localStorage');
-      try {
-        localStorage.setItem('token', sessionToken);
-      } catch (err) {
-        console.warn('TokenManager: Failed to restore token to localStorage:', err);
-        // Continue execution - we still have the token from sessionStorage
-      }
-    }
-    
-    // If token only exists in localStorage, restore it to sessionStorage
-    if (localToken && !sessionToken) {
-      console.log('TokenManager: Restoring token from localStorage to sessionStorage');
-      try {
-        sessionStorage.setItem('token', localToken);
-      } catch (err) {
-        console.warn('TokenManager: Failed to restore token to sessionStorage:', err);
-        // Continue execution - we still have the token from localStorage
-      }
-    }
-    
-    // If we found a token, ALWAYS ensure axios headers are set
     if (token) {
-      // CRITICAL: Always set the Authorization header, even if it might already exist
-      // This ensures the header is always present for API requests
-      console.log('TokenManager: Setting Authorization header in getToken');
+      // Set the Authorization header for all future requests
       axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-      
-      // Force token into localStorage and sessionStorage
-      try {
-        localStorage.setItem('token', token);
-        sessionStorage.setItem('token', token);
-      } catch (err) {
-        console.warn('TokenManager: Error ensuring token in storage:', err);
-      }
-      
-      // Verify the token was properly set in storage
-      const verifyLocalToken = localStorage.getItem('token');
-      const verifySessionToken = sessionStorage.getItem('token');
-      
-      if (!verifyLocalToken || !verifySessionToken) {
-        console.warn('TokenManager: Token verification failed, forcing token into storage again');
-        try {
-          // Try with different approach
-          window.localStorage.setItem('token', token);
-          window.sessionStorage.setItem('token', token);
-        } catch (verifyErr) {
-          console.error('TokenManager: Second attempt to store token failed:', verifyErr);
-        }
-      }
     }
+    
+    return token;
   } catch (err) {
-    console.error('TokenManager: Error retrieving token from storage:', err);
-    // Don't throw error - return null instead
+    console.error('TokenManager: Error retrieving token:', err);
+    return null;
   }
-  
-  return token;
 };
 
 /**
- * Safely store the authentication token in both storages and sync with database
- * Enhanced for maximum persistence across page refreshes and Heroku deployments
+ * Store the authentication token
  */
 export const storeToken = (token: string): void => {
   if (!token) {
@@ -96,110 +36,32 @@ export const storeToken = (token: string): void => {
     return;
   }
 
-  console.log('TokenManager: Storing token with enhanced persistence...');
-  
-  // Store in both storage mechanisms for redundancy
   try {
+    // Store only in localStorage to prevent sync loops
     localStorage.setItem('token', token);
-    sessionStorage.setItem('token', token);
     
-    // Verify token was stored correctly
-    const localToken = localStorage.getItem('token');
-    const sessionToken = sessionStorage.getItem('token');
-    
-    if (!localToken) {
-      console.warn('TokenManager: Failed to store token in localStorage, retrying...');
-      // Try again with a different approach
-      window.localStorage.setItem('token', token);
-    }
-    
-    if (!sessionToken) {
-      console.warn('TokenManager: Failed to store token in sessionStorage, retrying...');
-      window.sessionStorage.setItem('token', token);
-    }
-  } catch (err) {
-    console.error('TokenManager: Error storing token in browser storage:', err);
-    // Continue execution - don't let storage errors prevent setting the header
-  }
-  
-  // CRITICAL: Set the Authorization header for axios - this is essential for Heroku deployment
-  axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-  
-  // Force a synchronous token verification to ensure it's properly set
-  try {
-    const verifyToken = localStorage.getItem('token');
-    if (verifyToken !== token) {
-      console.warn('TokenManager: Token verification failed, forcing token into storage');
-      localStorage.setItem('token', token);
-      sessionStorage.setItem('token', token);
-    }
-  } catch (err) {
-    console.error('TokenManager: Error during token verification:', err);
-  }
-  
-  // Token sync with backend - use direct axios to avoid circular dependency
-  // This is essential for maintaining session state on Heroku
-  if (token && token.length > 20) {
-    console.log('TokenManager: Syncing token with database...');
-    
-    // Use direct axios call instead of ApiService to avoid circular dependency
-    // Always use the Heroku URL as specified in the application configuration
-    const apiUrl = 'https://ghostwire-backend-e0380bcf4e0e.herokuapp.com/api';
-    
-    // Set the Authorization header globally before making the request
+    // Set the Authorization header for axios
     axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-    
-    // Make the request with explicit headers as well for redundancy
-    axios.post(`${apiUrl}/auth/sync-token`, { token }, {
-      headers: { 
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      }
-    })
-    .then(() => {
-      console.log('TokenManager: Token synced with database successfully');
-      
-      // Double-check token still exists in storage after sync
-      const verifyToken = localStorage.getItem('token');
-      if (!verifyToken) {
-        console.warn('TokenManager: Token disappeared from localStorage after sync, restoring');
-        localStorage.setItem('token', token);
-        sessionStorage.setItem('token', token);
-      }
-    })
-    .catch(() => {
-      // Non-critical operation, just log error - don't remove token
-      console.warn('TokenManager: Failed to sync token with database');
-    });
+  } catch (err) {
+    console.error('TokenManager: Error storing token:', err);
   }
-  
-  console.log('TokenManager: Token stored and Authorization header set');
 };
 
 /**
- * Safely store user data in both storages
+ * Store user data
  */
 export const storeUserData = (userData: any): void => {
-  // Validate the userData before storing
   if (!userData || typeof userData !== 'object') {
     console.warn('TokenManager: Invalid user data provided, not storing');
     return;
   }
   
   try {
-    // Ensure we have at least the minimum required fields
-    const validUserData = {
-      id: userData.id || 0,
-      role: userData.role || 'user',
-      ...(userData)
-    };
-    
-    const userString = JSON.stringify(validUserData);
+    // Store only in localStorage to prevent sync loops
+    const userString = JSON.stringify(userData);
     localStorage.setItem('user', userString);
-    sessionStorage.setItem('user', userString);
-    console.log('TokenManager: User data stored successfully');
-  } catch (e) {
-    console.error('TokenManager: Failed to store user data', e);
+  } catch (err) {
+    console.error('TokenManager: Failed to store user data:', err);
   }
 };
 
@@ -208,66 +70,27 @@ export const storeUserData = (userData: any): void => {
  */
 export const getUserData = (): any => {
   try {
-    // Get stored data with safeguards
-    const localUserData = localStorage.getItem('user');
-    const sessionUserData = sessionStorage.getItem('user');
+    // Only use localStorage to prevent sync loops
+    const userDataString = localStorage.getItem('user');
     
-    // Select which source to use
-    let userDataString = localUserData;
-    
-    // If user data only exists in sessionStorage, restore it to localStorage
-    if (!localUserData && sessionUserData) {
-      console.log('TokenManager: Restoring user data from sessionStorage to localStorage');
-      localStorage.setItem('user', sessionUserData);
-      userDataString = sessionUserData;
-    }
-    
-    // If user data only exists in localStorage, restore it to sessionStorage
-    if (localUserData && !sessionUserData) {
-      console.log('TokenManager: Restoring user data from localStorage to sessionStorage');
-      sessionStorage.setItem('user', localUserData);
-    }
-    
-    // Safety check - if no data available, return null
-    if (!userDataString || userDataString === 'undefined' || userDataString === 'null') {
-      console.log('TokenManager: No valid user data found in storage');
+    if (!userDataString) {
       return null;
     }
     
     try {
-      // Parse the data with validation
       const userData = JSON.parse(userDataString);
-    
-      // Validate user data has minimum required fields
+      
       if (!userData || typeof userData !== 'object') {
-        console.warn('TokenManager: Invalid user data format in storage');
         return null;
       }
       
-      // Create a validated user object with defaults for missing properties
-      const validatedUser = {
-        id: userData.id || 0,
-        role: userData.role || 'user',
-        ...userData
-      };
-      
-      // Ensure user data is properly stored in both storages
-      try {
-        const validatedUserString = JSON.stringify(validatedUser);
-        localStorage.setItem('user', validatedUserString);
-        sessionStorage.setItem('user', validatedUserString);
-      } catch (storageError) {
-        console.warn('TokenManager: Error ensuring user data in storage:', storageError);
-      }
-      
-      return validatedUser;
+      return userData;
     } catch (parseError) {
-      console.error('TokenManager: Error parsing user data JSON', parseError);
+      console.error('TokenManager: Error parsing user data', parseError);
       return null;
     }
   } catch (error) {
-    console.error('TokenManager: Error parsing user data', error);
-    // Don't remove anything on error, just return null
+    console.error('TokenManager: Error retrieving user data', error);
     return null;
   }
 };
@@ -306,6 +129,24 @@ export const isAuthError = (error: any): boolean => {
  * This should be used instead of directly manipulating localStorage
  */
 export const safeLogout = (): void => {
+  // Clear auth data first
+  clearAuthData();
   // Redirect to login with a special parameter that will handle logout properly
   window.location.href = '/login?action=logout';
+};
+
+/**
+ * Clear all authentication data
+ */
+export const clearAuthData = (): void => {
+  try {
+    // Remove token and user data from localStorage only
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    
+    // Clear Authorization header
+    delete axios.defaults.headers.common['Authorization'];
+  } catch (err) {
+    console.error('TokenManager: Error clearing auth data:', err);
+  }
 };
