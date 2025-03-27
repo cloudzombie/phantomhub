@@ -26,6 +26,9 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   return <>{children}</>;
 };
 
+// Import tokenManager utilities
+import { getToken, getUserData } from './utils/tokenManager';
+
 // Admin route component
 const AdminRoute = ({ children }: { children: React.ReactNode }) => {
   const { user, isAuthenticated, loading } = useAuth();
@@ -48,29 +51,27 @@ const AdminRoute = ({ children }: { children: React.ReactNode }) => {
     }
   }, [user, loading, isAuthenticated, hasCheckedStorage]);
   
-  // Check for stored user data in localStorage as a fallback
+  // Check for stored user data using tokenManager as a fallback
   useEffect(() => {
     const checkStoredUserRole = (): string | null => {
       try {
-        // Get token and user from localStorage
-        const token = localStorage.getItem('token');
-        const storedUser = localStorage.getItem('user');
+        // Use tokenManager utilities for consistent token handling
+        const token = getToken();
+        const userData = getUserData();
         
-        console.log('AdminRoute - Checking storage:', {
+        console.log('AdminRoute - Checking storage using tokenManager:', {
           hasToken: !!token,
-          hasStoredUser: !!storedUser
+          hasUserData: !!userData
         });
         
-        if (token && storedUser) {
-          try {
-            const parsedUser = JSON.parse(storedUser);
-            console.log('AdminRoute - Found stored user with role:', parsedUser?.role);
-            
-            // Safety check for valid user object
-            if (!parsedUser || !parsedUser.role) {
-              console.warn('AdminRoute - Invalid user data in storage, but keeping token');
-              return null;
-            }
+        if (token && userData) {
+          console.log('AdminRoute - Found stored user with role:', userData?.role);
+          
+          // Safety check for valid user object
+          if (!userData || !userData.role) {
+            console.warn('AdminRoute - Invalid user data in storage, but keeping token');
+            return null;
+          }
           
           // CRITICAL: Set axios default headers with token
           if (token && !axios.defaults.headers.common['Authorization']) {
@@ -78,12 +79,7 @@ const AdminRoute = ({ children }: { children: React.ReactNode }) => {
             console.log('AdminRoute - Set Authorization header from storage');
           }
           
-          return parsedUser.role;
-          } catch (parseErr) {
-            console.error('AdminRoute - Error parsing stored user JSON:', parseErr);
-            // Don't remove token on parse error
-            return null;
-          }
+          return userData.role;
         }
       } catch (err) {
         console.error('AdminRoute - Error checking stored user:', err);
@@ -123,14 +119,14 @@ const AdminRoute = ({ children }: { children: React.ReactNode }) => {
     return <Navigate to="/login" replace />;
   }
   
-  // If user is null but we're authenticated, check localStorage
+  // If user is null but we're authenticated, check storage using tokenManager
   if (!user) {
-    console.log('AdminRoute - User is null despite token, checking localStorage');
-    const storedRole = localStorage.getItem('user') ? 
-      JSON.parse(localStorage.getItem('user') || '{}').role : null;
+    console.log('AdminRoute - User is null despite token, checking storage via tokenManager');
+    const userData = getUserData();
+    const storedRole = userData ? userData.role : null;
     
     if (storedRole === 'admin') {
-      console.log('AdminRoute - Found admin role in localStorage, granting access');
+      console.log('AdminRoute - Found admin role in storage, granting access');
       return <>{children}</>;
     }
     

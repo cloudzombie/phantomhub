@@ -11,30 +11,93 @@ import axios from 'axios';
 // Remove ApiService import to fix circular dependency
 
 /**
- * Get the authentication token from storage
+ * Get the authentication token from storage with enhanced reliability
  * Checks both localStorage and sessionStorage for redundancy
+ * Implements multiple fallback mechanisms to ensure token persistence
  */
 export const getToken = (): string | null => {
-  const localToken = localStorage.getItem('token');
-  const sessionToken = sessionStorage.getItem('token');
+  let token: string | null = null;
   
-  // If token only exists in sessionStorage, restore it to localStorage
-  if (!localToken && sessionToken) {
-    console.log('TokenManager: Restoring token from sessionStorage to localStorage');
-    localStorage.setItem('token', sessionToken);
-    return sessionToken;
+  try {
+    // Try localStorage first
+    const localToken = localStorage.getItem('token');
+    const sessionToken = sessionStorage.getItem('token');
+    
+    // If token exists in either storage, use it
+    token = localToken || sessionToken || null;
+    
+    // If token only exists in sessionStorage, restore it to localStorage
+    if (!localToken && sessionToken) {
+      console.log('TokenManager: Restoring token from sessionStorage to localStorage');
+      try {
+        localStorage.setItem('token', sessionToken);
+      } catch (err) {
+        console.warn('TokenManager: Failed to restore token to localStorage:', err);
+        // Continue execution - we still have the token from sessionStorage
+      }
+    }
+    
+    // If token only exists in localStorage, restore it to sessionStorage
+    if (localToken && !sessionToken) {
+      console.log('TokenManager: Restoring token from localStorage to sessionStorage');
+      try {
+        sessionStorage.setItem('token', localToken);
+      } catch (err) {
+        console.warn('TokenManager: Failed to restore token to sessionStorage:', err);
+        // Continue execution - we still have the token from localStorage
+      }
+    }
+    
+    // If we found a token, ensure axios headers are set
+    if (token) {
+      if (!axios.defaults.headers.common['Authorization']) {
+        console.log('TokenManager: Setting missing Authorization header in getToken');
+        axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+      }
+    }
+  } catch (err) {
+    console.error('TokenManager: Error retrieving token from storage:', err);
+    // Don't throw error - return null instead
   }
   
-  return localToken || sessionToken || null;
+  return token;
 };
 
 /**
  * Safely store the authentication token in both storages and sync with database
+ * Enhanced for maximum persistence across page refreshes and Heroku deployments
  */
 export const storeToken = (token: string): void => {
+  if (!token) {
+    console.warn('TokenManager: Attempted to store empty token, ignoring');
+    return;
+  }
+
+  console.log('TokenManager: Storing token with enhanced persistence...');
+  
   // Store in both storage mechanisms for redundancy
-  localStorage.setItem('token', token);
-  sessionStorage.setItem('token', token);
+  try {
+    localStorage.setItem('token', token);
+    sessionStorage.setItem('token', token);
+    
+    // Verify token was stored correctly
+    const localToken = localStorage.getItem('token');
+    const sessionToken = sessionStorage.getItem('token');
+    
+    if (!localToken) {
+      console.warn('TokenManager: Failed to store token in localStorage, retrying...');
+      // Try again with a different approach
+      window.localStorage.setItem('token', token);
+    }
+    
+    if (!sessionToken) {
+      console.warn('TokenManager: Failed to store token in sessionStorage, retrying...');
+      window.sessionStorage.setItem('token', token);
+    }
+  } catch (err) {
+    console.error('TokenManager: Error storing token in browser storage:', err);
+    // Continue execution - don't let storage errors prevent setting the header
+  }
   
   // Set the Authorization header for axios
   axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
@@ -52,6 +115,14 @@ export const storeToken = (token: string): void => {
       })
       .then(() => {
         console.log('TokenManager: Token synced with database successfully');
+        
+        // Double-check token still exists in storage after sync
+        const verifyToken = localStorage.getItem('token');
+        if (!verifyToken) {
+          console.warn('TokenManager: Token disappeared from localStorage after sync, restoring');
+          localStorage.setItem('token', token);
+          sessionStorage.setItem('token', token);
+        }
       })
       .catch(() => {
         // Non-critical operation, just log error - don't remove token

@@ -68,7 +68,9 @@ class ApiService {
     const instance = ApiService.getInstance();
     
     // If socket doesn't exist yet but we have a token, initialize it
-    if (!instance.socket && localStorage.getItem('token')) {
+    // Use tokenManager for consistency instead of direct localStorage access
+    const token = getToken();
+    if (!instance.socket && token) {
       instance.initializeSocket();
     }
     
@@ -82,7 +84,9 @@ class ApiService {
     const instance = ApiService.getInstance();
     
     // Only try to reconnect if we have a token
-    if (localStorage.getItem('token')) {
+    // Use tokenManager for consistency instead of direct localStorage access
+    const token = getToken();
+    if (token) {
       instance.reconnectSocket();
     } else {
       console.warn('ApiService: Cannot reconnect socket without authentication token');
@@ -244,14 +248,11 @@ class ApiService {
       // Use baseURL for socket connection to ensure consistency with API endpoint
       console.log('ApiService: Initializing socket connection to', this.baseURL);
       
-      // Get token from localStorage or sessionStorage for redundancy
-      const token = localStorage.getItem('token') || sessionStorage.getItem('token');
+      // Use tokenManager for consistency instead of direct localStorage/sessionStorage access
+      const token = getToken();
       
-      // If token only exists in sessionStorage, restore it to localStorage
-      if (!localStorage.getItem('token') && sessionStorage.getItem('token')) {
-        console.log('ApiService: Restoring token from sessionStorage to localStorage');
-        localStorage.setItem('token', sessionStorage.getItem('token')!);
-      }
+      // No need to manually sync between localStorage and sessionStorage
+      // as the tokenManager handles this for us
       
       if (!token) {
         console.warn('ApiService: No auth token available for socket connection');
@@ -326,16 +327,11 @@ class ApiService {
    * Reconnect socket if disconnected with enhanced token handling
    */
   public reconnectSocket(): void {
-    // Get token from localStorage or sessionStorage for redundancy
-    const localToken = localStorage.getItem('token');
-    const sessionToken = sessionStorage.getItem('token');
-    const token = localToken || sessionToken;
+    // Use tokenManager for consistency instead of direct localStorage/sessionStorage access
+    const token = getToken();
     
-    // If token only exists in sessionStorage, restore it to localStorage
-    if (!localToken && sessionToken) {
-      console.log('ApiService: Restoring token from sessionStorage to localStorage');
-      localStorage.setItem('token', sessionToken);
-    }
+    // No need to manually sync between localStorage and sessionStorage
+    // as the tokenManager handles this for us
     
     if (!token) {
       console.warn('ApiService: Cannot reconnect socket without authentication token');

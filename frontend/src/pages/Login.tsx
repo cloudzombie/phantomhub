@@ -7,6 +7,7 @@ import ThemeService from '../services/ThemeService';
 import NotificationService from '../services/NotificationService';
 import { useAuth } from '../contexts/AuthContext';
 import { API_URL } from '../config';
+import { storeToken, storeUserData } from '../utils/tokenManager';
 
 const Login = () => {
   const [email, setEmail] = useState('');
@@ -53,9 +54,16 @@ const Login = () => {
       });
 
       if (response.data && response.data.token) {
-        // Store token and user data in localStorage
-        localStorage.setItem('token', response.data.token);
-        localStorage.setItem('user', JSON.stringify(response.data.user));
+        // Use tokenManager utilities for consistent token storage
+        const token = response.data.token;
+        const userData = response.data.user;
+        
+        // Store token and user data using tokenManager
+        storeToken(token);
+        storeUserData(userData);
+        
+        // CRITICAL: Set axios default headers for all future requests
+        axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
         
         console.log('Login successful, reloading all service settings...');
         

@@ -59,6 +59,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             console.log('AuthContext: Setting Authorization header from stored token');
             axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
             
+            // Store token in both localStorage and sessionStorage for redundancy
+            if (!localStorage.getItem('token')) {
+              console.log('AuthContext: Token missing from localStorage, restoring');
+              localStorage.setItem('token', token);
+            }
+            if (!sessionStorage.getItem('token')) {
+              console.log('AuthContext: Token missing from sessionStorage, restoring');
+              sessionStorage.setItem('token', token);
+            }
+            
+            // Store user data in both storages for redundancy
+            if (!localStorage.getItem('user') && storedUser) {
+              localStorage.setItem('user', JSON.stringify(storedUser));
+            }
+            if (!sessionStorage.getItem('user') && storedUser) {
+              sessionStorage.setItem('user', JSON.stringify(storedUser));
+            }
+            
             // Dispatch authentication event to ensure other components know we're authenticated
             setTimeout(() => {
               // Use storedUser instead of parsedUser since we're using tokenManager
@@ -368,28 +386,46 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Check if user is authenticated - more robust implementation
   const isAuthenticated = (): boolean => {
-    // Check for token in localStorage and sessionStorage for redundancy
-    const localToken = localStorage.getItem('token');
-    const sessionToken = sessionStorage.getItem('token');
-    
-    // If token exists in either storage, consider authenticated
-    const hasToken = localToken !== null || sessionToken !== null;
-    
-    // If token only exists in sessionStorage, restore it to localStorage
-    if (!localToken && sessionToken) {
-      console.log('AuthContext: Restoring token from sessionStorage to localStorage');
-      localStorage.setItem('token', sessionToken);
-      
-      // Also restore user data if available
-      const sessionUser = sessionStorage.getItem('user');
-      if (sessionUser) {
-        localStorage.setItem('user', sessionUser);
-      }
+    // First check if we have a user in state
+    if (user) {
+      console.log('AuthContext: User already in state, authenticated');
+      return true;
     }
     
-    console.log('isAuthenticated check - hasToken:', hasToken, 
-      'localToken:', !!localToken, 'sessionToken:', !!sessionToken);
-    return hasToken;
+    // If no user in state, use tokenManager utilities for consistency
+    const token = getToken();
+    const userData = getUserData();
+    
+    // If token and userData exist, we're authenticated
+    if (token && userData) {
+      console.log('AuthContext: Found valid token and user data in storage');
+      
+      // If we have valid token and user data but no user state, set the user state
+      if (userData.id && !user) {
+        console.log('AuthContext: Setting user state from storage in isAuthenticated');
+        setUser(userData);
+        
+        // Also ensure axios headers are set
+        if (!axios.defaults.headers.common['Authorization']) {
+          console.log('AuthContext: Setting missing Authorization header in isAuthenticated');
+          axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+        }
+        
+        // Dispatch authentication event
+        setTimeout(() => {
+          if (userData && userData.id) {
+            document.dispatchEvent(new CustomEvent('user-authenticated', { 
+              detail: { userId: userData.id, role: userData.role || 'user' } 
+            }));
+            console.log('AuthContext: Dispatched user-authenticated event from isAuthenticated');
+          }
+        }, 100);
+      }
+      return true;
+    }
+    
+    console.log('AuthContext: Not authenticated - no valid token or user data');
+    return false;
   };
 
   return (
