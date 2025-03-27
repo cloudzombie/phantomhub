@@ -62,6 +62,21 @@ export const getToken = (): string | null => {
       } catch (err) {
         console.warn('TokenManager: Error ensuring token in storage:', err);
       }
+      
+      // Verify the token was properly set in storage
+      const verifyLocalToken = localStorage.getItem('token');
+      const verifySessionToken = sessionStorage.getItem('token');
+      
+      if (!verifyLocalToken || !verifySessionToken) {
+        console.warn('TokenManager: Token verification failed, forcing token into storage again');
+        try {
+          // Try with different approach
+          window.localStorage.setItem('token', token);
+          window.sessionStorage.setItem('token', token);
+        } catch (verifyErr) {
+          console.error('TokenManager: Second attempt to store token failed:', verifyErr);
+        }
+      }
     }
   } catch (err) {
     console.error('TokenManager: Error retrieving token from storage:', err);
@@ -207,6 +222,12 @@ export const getUserData = (): any => {
       userDataString = sessionUserData;
     }
     
+    // If user data only exists in localStorage, restore it to sessionStorage
+    if (localUserData && !sessionUserData) {
+      console.log('TokenManager: Restoring user data from localStorage to sessionStorage');
+      sessionStorage.setItem('user', localUserData);
+    }
+    
     // Safety check - if no data available, return null
     if (!userDataString || userDataString === 'undefined' || userDataString === 'null') {
       console.log('TokenManager: No valid user data found in storage');
@@ -217,18 +238,27 @@ export const getUserData = (): any => {
       // Parse the data with validation
       const userData = JSON.parse(userDataString);
     
-    // Validate user data has minimum required fields
-    if (!userData || typeof userData !== 'object') {
-      console.warn('TokenManager: Invalid user data format in storage');
-      return null;
-    }
-    
+      // Validate user data has minimum required fields
+      if (!userData || typeof userData !== 'object') {
+        console.warn('TokenManager: Invalid user data format in storage');
+        return null;
+      }
+      
       // Create a validated user object with defaults for missing properties
       const validatedUser = {
         id: userData.id || 0,
         role: userData.role || 'user',
         ...userData
       };
+      
+      // Ensure user data is properly stored in both storages
+      try {
+        const validatedUserString = JSON.stringify(validatedUser);
+        localStorage.setItem('user', validatedUserString);
+        sessionStorage.setItem('user', validatedUserString);
+      } catch (storageError) {
+        console.warn('TokenManager: Error ensuring user data in storage:', storageError);
+      }
       
       return validatedUser;
     } catch (parseError) {

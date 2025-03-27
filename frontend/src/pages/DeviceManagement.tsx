@@ -362,26 +362,26 @@ const DeviceManagement: React.FC = () => {
     switch (status) {
       case 'online':
         return (
-          <span className="badge bg-success">
-            <FiCheck className="me-1" /> Online
+          <span className="flex items-center px-2 py-1 text-xs font-medium rounded-md bg-green-500/10 text-green-500 border border-green-500/30">
+            <FiCheck className="mr-1" /> Online
           </span>
         );
       case 'offline':
         return (
-          <span className="badge bg-secondary">
-            <FiX className="me-1" /> Offline
+          <span className="flex items-center px-2 py-1 text-xs font-medium rounded-md bg-slate-500/10 text-slate-400 border border-slate-500/30">
+            <FiX className="mr-1" /> Offline
           </span>
         );
       case 'busy':
         return (
-          <span className="badge bg-warning">
-            <FiRefreshCw className="me-1" /> Busy
+          <span className="flex items-center px-2 py-1 text-xs font-medium rounded-md bg-yellow-500/10 text-yellow-500 border border-yellow-500/30">
+            <FiRefreshCw className="mr-1" /> Busy
           </span>
         );
       default:
         return (
-          <span className="badge bg-secondary">
-            <FiInfo className="me-1" /> Unknown
+          <span className="flex items-center px-2 py-1 text-xs font-medium rounded-md bg-slate-500/10 text-slate-400 border border-slate-500/30">
+            <FiInfo className="mr-1" /> Unknown
           </span>
         );
     }
@@ -390,9 +390,13 @@ const DeviceManagement: React.FC = () => {
   // Get connection type badge
   const getConnectionTypeBadge = (connectionType?: string) => {
     return connectionType === 'usb' ? (
-      <span className="badge bg-info"><FiHardDrive className="me-1" /> USB</span>
+      <span className="flex items-center px-2 py-1 text-xs font-medium rounded-md bg-blue-500/10 text-blue-400 border border-blue-500/30">
+        <FiHardDrive className="mr-1" /> USB
+      </span>
     ) : (
-      <span className="badge bg-primary"><FiWifi className="me-1" /> Network</span>
+      <span className="flex items-center px-2 py-1 text-xs font-medium rounded-md bg-purple-500/10 text-purple-400 border border-purple-500/30">
+        <FiWifi className="mr-1" /> Network
+      </span>
     );
   };
   
@@ -430,100 +434,104 @@ const DeviceManagement: React.FC = () => {
   };
   
   return (
-    <div className="container-fluid mt-4">
-      <div className="d-flex justify-content-between align-items-center mb-4">
-        <h2>
-          <FiServer className="me-2" />
-          O.MG Cable Management
-        </h2>
-        <div>
-          <button 
-            className="btn btn-primary me-2" 
-            onClick={() => setIsModalOpen(true)}
-          >
-            <FiWifi className="me-1" /> Register Network Device
-          </button>
-          
-          {isWebSerialSupported() && (
+    <div className="flex flex-col h-full p-6">
+      <div className="border-b border-slate-700 pb-6 mb-6">
+        <div className="flex justify-between items-center">
+          <div className="flex flex-col">
+            <h1 className="text-2xl font-bold text-white mb-1">O.MG Cable Management</h1>
+            <p className="text-sm text-slate-400">Register and manage your O.MG Cables</p>
+          </div>
+          <div className="flex space-x-2">
             <button 
-              className="btn btn-info" 
-              onClick={() => setIsUsbModalOpen(true)}
+              className="flex items-center px-3 py-2 bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/30 rounded-md text-purple-500 text-sm font-medium transition-colors" 
+              onClick={() => setIsModalOpen(true)}
             >
-              <FiHardDrive className="me-1" /> Register USB Device
+              <FiWifi className="mr-2" size={16} /> Register Network Device
             </button>
-          )}
+            
+            {isWebSerialSupported() && (
+              <button 
+                className="flex items-center px-3 py-2 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/30 rounded-md text-blue-500 text-sm font-medium transition-colors" 
+                onClick={() => setIsUsbModalOpen(true)}
+              >
+                <FiHardDrive className="mr-2" size={16} /> Register USB Device
+              </button>
+            )}
+          </div>
         </div>
       </div>
       
       {errorMessage && (
-        <div className="alert alert-danger">
-          <FiAlertCircle className="me-2" />
-          {errorMessage}
+        <div className="mb-6 p-3 bg-red-900/20 border border-red-500/30 rounded text-red-400 text-sm">
+          <div className="flex items-center">
+            <FiAlertCircle className="mr-2 flex-shrink-0" size={16} />
+            <p>{errorMessage}</p>
+          </div>
         </div>
       )}
       
       {successMessage && (
-        <div className="alert alert-success">
-          <FiCheck className="me-2" />
-          {successMessage}
+        <div className="mb-6 p-3 bg-green-900/20 border border-green-500/30 rounded text-green-400 text-sm">
+          <div className="flex items-center">
+            <FiCheck className="mr-2 flex-shrink-0" size={16} />
+            <p>{successMessage}</p>
+          </div>
         </div>
       )}
       
-      <div className="card">
-        <div className="card-header bg-light">
-          <div className="d-flex justify-content-between align-items-center">
-            <h5 className="mb-0">Registered Devices</h5>
+      <div className="bg-slate-800 border border-slate-700 rounded-md shadow-sm mb-6 overflow-hidden">
+        <div className="border-b border-slate-700 px-4 py-3">
+          <div className="flex justify-between items-center">
+            <h2 className="text-lg font-medium text-white">Registered Devices</h2>
             <button 
-              className="btn btn-sm btn-outline-primary" 
+              className="flex items-center px-2 py-1 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/30 rounded-md text-blue-500 text-xs font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed" 
               onClick={fetchDevices}
               disabled={isLoading}
             >
-              <FiRefreshCw className={`me-1 ${isLoading ? 'spin' : ''}`} />
+              <FiRefreshCw className={`mr-1 ${isLoading ? 'animate-spin' : ''}`} size={14} />
               Refresh
             </button>
           </div>
         </div>
-        <div className="card-body">
+        <div className="p-4">
           {isLoading && devices.length === 0 ? (
-            <div className="text-center py-5">
-              <div className="spinner-border text-primary" role="status">
-                <span className="visually-hidden">Loading...</span>
-              </div>
-              <p className="mt-3">Loading devices...</p>
+            <div className="flex flex-col items-center justify-center py-12">
+              <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-purple-500 mb-4"></div>
+              <p className="text-slate-400">Loading devices...</p>
             </div>
           ) : devices.length === 0 ? (
-            <div className="text-center py-5">
-              <FiInfo size={48} className="text-muted mb-3" />
-              <h5>No O.MG Cables registered yet</h5>
-              <p className="text-muted">Register a new device to get started</p>
+            <div className="flex flex-col items-center justify-center py-12">
+              <FiInfo size={48} className="text-slate-500 mb-4" />
+              <h3 className="text-lg font-medium text-white mb-2">No O.MG Cables registered yet</h3>
+              <p className="text-slate-400">Register a new device to get started</p>
             </div>
           ) : (
-            <div className="table-responsive">
-              <table className="table table-hover">
-                <thead>
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-slate-700/50">
                   <tr>
-                    <th>Name</th>
-                    <th>Connection</th>
-                    <th>Status</th>
-                    <th>Last Check-in</th>
-                    <th>Firmware</th>
-                    <th>Actions</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">Name</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">Connection</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">Status</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">Last Check-in</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">Firmware</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">Actions</th>
                   </tr>
                 </thead>
-                <tbody>
+                <tbody className="divide-y divide-slate-700">
                   {devices.map(device => (
-                    <tr key={device.id}>
-                      <td>{device.name}</td>
-                      <td>{getConnectionTypeBadge(device.connectionType)}</td>
-                      <td>{getStatusBadge(device.status, device)}</td>
-                      <td>{formatDateTime(device.lastCheckIn)}</td>
-                      <td>{device.firmwareVersion || 'Unknown'}</td>
-                      <td>
+                    <tr key={device.id} className="hover:bg-slate-700/30">
+                      <td className="px-4 py-3 text-sm text-white">{device.name}</td>
+                      <td className="px-4 py-3 text-sm">{getConnectionTypeBadge(device.connectionType)}</td>
+                      <td className="px-4 py-3 text-sm">{getStatusBadge(device.status, device)}</td>
+                      <td className="px-4 py-3 text-sm text-slate-300">{formatDateTime(device.lastCheckIn)}</td>
+                      <td className="px-4 py-3 text-sm text-slate-300">{device.firmwareVersion || 'Unknown'}</td>
+                      <td className="px-4 py-3 text-sm">
                         <button 
-                          className="btn btn-sm btn-outline-info me-2"
+                          className="flex items-center px-2 py-1 bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/30 rounded-md text-indigo-400 text-xs font-medium transition-colors"
                           onClick={() => handleViewDeviceDetails(device)}
                         >
-                          <FiEye className="me-1" /> Details
+                          <FiEye className="mr-1" size={12} /> Details
                         </button>
                       </td>
                     </tr>
@@ -537,27 +545,33 @@ const DeviceManagement: React.FC = () => {
       
       {/* Network Device Registration Modal */}
       {isModalOpen && (
-        <div className="modal show d-block" tabIndex={-1}>
-          <div className="modal-dialog">
-            <div className="modal-content">
-              <div className="modal-header">
-                <h5 className="modal-title">Register Network O.MG Cable</h5>
+        <div className="fixed inset-0 z-50 overflow-y-auto" tabIndex={-1}>
+          <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center">
+            <div className="fixed inset-0 bg-black/50 transition-opacity" onClick={() => {
+              setIsModalOpen(false);
+              resetForm();
+            }}></div>
+            <div className="relative bg-slate-800 rounded-lg max-w-md w-full p-6 border border-slate-700 shadow-xl transform transition-all">
+              <div className="flex justify-between items-center mb-4 pb-3 border-b border-slate-700">
+                <h3 className="text-lg font-medium text-white">Register Network O.MG Cable</h3>
                 <button 
                   type="button" 
-                  className="btn-close" 
+                  className="text-slate-400 hover:text-white" 
                   onClick={() => {
                     setIsModalOpen(false);
                     resetForm();
                   }}
-                ></button>
+                >
+                  <FiX size={20} />
+                </button>
               </div>
               <form onSubmit={registerDevice}>
-                <div className="modal-body">
-                  <div className="mb-3">
-                    <label htmlFor="name" className="form-label">Device Name</label>
+                <div className="space-y-4">
+                  <div>
+                    <label htmlFor="name" className="block text-sm font-medium text-slate-300 mb-1">Device Name</label>
                     <input
                       type="text"
-                      className="form-control"
+                      className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-md text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                       id="name"
                       name="name"
                       value={formData.name}
@@ -565,11 +579,11 @@ const DeviceManagement: React.FC = () => {
                       required
                     />
                   </div>
-                  <div className="mb-3">
-                    <label htmlFor="ipAddress" className="form-label">IP Address</label>
+                  <div>
+                    <label htmlFor="ipAddress" className="block text-sm font-medium text-slate-300 mb-1">IP Address</label>
                     <input
                       type="text"
-                      className="form-control"
+                      className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-md text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                       id="ipAddress"
                       name="ipAddress"
                       placeholder="192.168.1.100"
@@ -578,11 +592,11 @@ const DeviceManagement: React.FC = () => {
                       required
                     />
                   </div>
-                  <div className="mb-3">
-                    <label htmlFor="firmwareVersion" className="form-label">Firmware Version (Optional)</label>
+                  <div>
+                    <label htmlFor="firmwareVersion" className="block text-sm font-medium text-slate-300 mb-1">Firmware Version (Optional)</label>
                     <input
                       type="text"
-                      className="form-control"
+                      className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-md text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                       id="firmwareVersion"
                       name="firmwareVersion"
                       placeholder="1.0.0"
@@ -591,10 +605,10 @@ const DeviceManagement: React.FC = () => {
                     />
                   </div>
                 </div>
-                <div className="modal-footer">
+                <div className="flex justify-end space-x-2 mt-6">
                   <button 
                     type="button" 
-                    className="btn btn-secondary" 
+                    className="px-3 py-2 bg-slate-700 hover:bg-slate-600 border border-slate-600 rounded-md text-white text-sm font-medium transition-colors" 
                     onClick={() => {
                       setIsModalOpen(false);
                       resetForm();
@@ -625,31 +639,39 @@ const DeviceManagement: React.FC = () => {
       
       {/* USB Device Registration Modal */}
       {isUsbModalOpen && (
-        <div className="modal show d-block" tabIndex={-1}>
-          <div className="modal-dialog">
-            <div className="modal-content">
-              <div className="modal-header">
-                <h5 className="modal-title">Register USB O.MG Cable</h5>
+        <div className="fixed inset-0 z-50 overflow-y-auto" tabIndex={-1}>
+          <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center">
+            <div className="fixed inset-0 bg-black/50 transition-opacity" onClick={() => {
+              setIsUsbModalOpen(false);
+              resetUsbForm();
+            }}></div>
+            <div className="relative bg-slate-800 rounded-lg max-w-md w-full p-6 border border-slate-700 shadow-xl transform transition-all">
+              <div className="flex justify-between items-center mb-4 pb-3 border-b border-slate-700">
+                <h3 className="text-lg font-medium text-white">Register USB O.MG Cable</h3>
                 <button 
                   type="button" 
-                  className="btn-close" 
+                  className="text-slate-400 hover:text-white" 
                   onClick={() => {
                     setIsUsbModalOpen(false);
                     resetUsbForm();
                   }}
-                ></button>
+                >
+                  <FiX size={20} />
+                </button>
               </div>
               <form onSubmit={registerUsbDevice}>
-                <div className="modal-body">
-                  <div className="alert alert-info">
-                    <FiInfo className="me-2" />
-                    You will be prompted to select your O.MG Cable from the USB devices list after clicking "Register Device".
+                <div className="space-y-4">
+                  <div className="p-3 bg-blue-900/20 border border-blue-500/30 rounded text-blue-400 text-sm">
+                    <div className="flex items-center">
+                      <FiInfo className="mr-2 flex-shrink-0" size={16} />
+                      <p>You will be prompted to select your O.MG Cable from the USB devices list after clicking "Register Device".</p>
+                    </div>
                   </div>
-                  <div className="mb-3">
-                    <label htmlFor="usbName" className="form-label">Device Name</label>
+                  <div>
+                    <label htmlFor="usbName" className="block text-sm font-medium text-slate-300 mb-1">Device Name</label>
                     <input
                       type="text"
-                      className="form-control"
+                      className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-md text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       id="usbName"
                       name="name"
                       value={usbFormData.name}
@@ -657,11 +679,11 @@ const DeviceManagement: React.FC = () => {
                       required
                     />
                   </div>
-                  <div className="mb-3">
-                    <label htmlFor="usbFirmwareVersion" className="form-label">Firmware Version (Optional)</label>
+                  <div>
+                    <label htmlFor="usbFirmwareVersion" className="block text-sm font-medium text-slate-300 mb-1">Firmware Version (Optional)</label>
                     <input
                       type="text"
-                      className="form-control"
+                      className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-md text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       id="usbFirmwareVersion"
                       name="firmwareVersion"
                       placeholder="1.0.0"
@@ -670,10 +692,10 @@ const DeviceManagement: React.FC = () => {
                     />
                   </div>
                 </div>
-                <div className="modal-footer">
+                <div className="flex justify-end space-x-2 mt-6">
                   <button 
                     type="button" 
-                    className="btn btn-secondary" 
+                    className="px-3 py-2 bg-slate-700 hover:bg-slate-600 border border-slate-600 rounded-md text-white text-sm font-medium transition-colors" 
                     onClick={() => {
                       setIsUsbModalOpen(false);
                       resetUsbForm();
@@ -683,12 +705,15 @@ const DeviceManagement: React.FC = () => {
                   </button>
                   <button 
                     type="submit" 
-                    className="btn btn-primary"
+                    className="px-3 py-2 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/30 rounded-md text-blue-500 text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     disabled={isLoading}
                   >
                     {isLoading ? (
                       <>
-                        <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                        <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-blue-500 inline" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
                         Registering...
                       </>
                     ) : (
@@ -704,18 +729,21 @@ const DeviceManagement: React.FC = () => {
       
       {/* Device Details Modal */}
       {selectedDevice && (
-        <div className="modal show d-block" tabIndex={-1}>
-          <div className="modal-dialog modal-lg">
-            <div className="modal-content">
-              <div className="modal-header">
-                <h5 className="modal-title">Device Details: {selectedDevice.name}</h5>
+        <div className="fixed inset-0 z-50 overflow-y-auto" tabIndex={-1}>
+          <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center">
+            <div className="fixed inset-0 bg-black/50 transition-opacity" onClick={handleCloseDeviceDetails}></div>
+            <div className="relative bg-slate-800 rounded-lg max-w-4xl w-full p-6 border border-slate-700 shadow-xl transform transition-all">
+              <div className="flex justify-between items-center mb-4 pb-3 border-b border-slate-700">
+                <h3 className="text-lg font-medium text-white">Device Details: {selectedDevice.name}</h3>
                 <button 
                   type="button" 
-                  className="btn-close" 
+                  className="text-slate-400 hover:text-white" 
                   onClick={handleCloseDeviceDetails}
-                ></button>
+                >
+                  <FiX size={20} />
+                </button>
               </div>
-              <div className="modal-body">
+              <div className="py-4">
                 <DeviceInfoPanel 
                   deviceInfo={{
                     name: selectedDevice.name,
@@ -738,6 +766,15 @@ const DeviceManagement: React.FC = () => {
                   }} 
                   onRefresh={() => fetchDevices()}
                 />
+              </div>
+              <div className="flex justify-end pt-4 border-t border-slate-700">
+                <button 
+                  type="button" 
+                  className="px-3 py-2 bg-slate-700 hover:bg-slate-600 border border-slate-600 rounded-md text-white text-sm font-medium transition-colors" 
+                  onClick={handleCloseDeviceDetails}
+                >
+                  Close
+                </button>
               </div>
             </div>
           </div>
