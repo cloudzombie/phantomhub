@@ -92,51 +92,95 @@ const AdminDashboard: React.FC = () => {
 
   // Fetch system stats
   useEffect(() => {
+    let isMounted = true;
+    const controller = new AbortController();
+    
     const fetchSystemStats = async () => {
       try {
-        setLoading(true);
+        if (isMounted) setLoading(true);
         const token = localStorage.getItem('token');
+        
+        console.log('Fetching system stats with token:', token ? 'Token exists' : 'No token');
+        
         const response = await axios.get(`${API_URL}/admin/system/stats`, {
           headers: {
             Authorization: `Bearer ${token}`
-          }
+          },
+          signal: controller.signal,
+          timeout: 10000 // 10 second timeout
         });
         
-        if (response.data.success) {
+        console.log('System stats response received');
+        
+        if (response.data.success && isMounted) {
           setSystemStats(response.data.data);
-        } else {
-          setError('Failed to fetch system statistics');
+          console.log('System stats loaded successfully');
+        } else if (isMounted) {
+          setError('Failed to fetch system statistics: ' + (response.data.message || 'Unknown error'));
+          console.error('API error:', response.data);
         }
-      } catch (err) {
-        setError('Error connecting to the server');
-        console.error('Error fetching system stats:', err);
+      } catch (err: any) {
+        if (isMounted) {
+          console.error('Error fetching system stats:', err);
+          setError(err.message || 'Error connecting to the server');
+        }
       } finally {
-        setLoading(false);
+        if (isMounted) setLoading(false);
       }
     };
 
     const fetchSystemHealth = async () => {
       try {
+        if (!isMounted) return;
+        
         const token = localStorage.getItem('token');
+        console.log('Fetching system health');
+        
         const response = await axios.get(`${API_URL}/admin/system/health`, {
           headers: {
             Authorization: `Bearer ${token}`
-          }
+          },
+          signal: controller.signal,
+          timeout: 10000 // 10 second timeout
         });
         
-        if (response.data.success) {
+        console.log('System health response received');
+        
+        if (response.data.success && isMounted) {
           setSystemHealth(response.data.data);
+          console.log('System health loaded successfully');
+        } else if (isMounted) {
+          console.error('API error:', response.data);
         }
       } catch (err) {
-        console.error('Error fetching system health:', err);
+        if (isMounted) {
+          console.error('Error fetching system health:', err);
+        }
       }
     };
 
+    // Set a timeout to prevent infinite loading
+    const timeoutId = setTimeout(() => {
+      if (isMounted && loading) {
+        setLoading(false);
+        setError('Loading timed out. The server might be unavailable.');
+        console.error('Loading timed out after 15 seconds');
+      }
+    }, 15000);
+    
     if (user && user.role === 'admin') {
       fetchSystemStats();
       fetchSystemHealth();
     }
-  }, [user]);
+    
+    // Cleanup function
+    return () => {
+      isMounted = false;
+      controller.abort();
+      clearTimeout(timeoutId);
+      console.log('AdminDashboard data fetching cleanup');
+    };
+  }, [user, loading]);
 
   // Toggle maintenance mode
   const handleToggleMaintenance = async () => {
@@ -167,19 +211,41 @@ const AdminDashboard: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+      <div className="container mx-auto px-4 py-8">
+        <div className="flex justify-between items-center mb-8">
+          <div>
+            <h1 className="text-3xl font-bold text-green-500">Admin Dashboard</h1>
+            <p className="text-gray-400 mt-2">Loading system information...</p>
+          </div>
+        </div>
+        <div className="flex items-center justify-center py-20">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-green-500 mr-3"></div>
+          <p className="text-gray-400">Loading dashboard data...</p>
+        </div>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen">
-        <div className="text-red-500 text-xl">{error}</div>
-        <Button onClick={() => window.location.reload()} className="mt-4">
-          Retry
-        </Button>
+      <div className="container mx-auto px-4 py-8">
+        <div className="flex justify-between items-center mb-8">
+          <div>
+            <h1 className="text-3xl font-bold text-green-500">Admin Dashboard</h1>
+            <p className="text-gray-400 mt-2">System administration and management</p>
+          </div>
+          <div className="space-x-4">
+            <Button onClick={() => window.location.reload()}>
+              Retry Loading Data
+            </Button>
+          </div>
+        </div>
+        
+        <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-8" role="alert">
+          <p className="font-bold">Error Loading Dashboard</p>
+          <p>{error}</p>
+          <p className="mt-2 text-sm">This could be due to server maintenance or connectivity issues. Please try again later.</p>
+        </div>
       </div>
     );
   }
