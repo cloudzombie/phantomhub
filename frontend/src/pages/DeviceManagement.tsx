@@ -98,36 +98,52 @@ const DeviceManagement: React.FC = () => {
   
   // Fetch devices on component mount and set up socket listeners
   useEffect(() => {
+    let isMounted = true;
     const socket = ApiService.getSocket();
-    let intervalId: NodeJS.Timeout;
+    let intervalId: NodeJS.Timeout | null = null;
 
     const fetchIfNeeded = async () => {
       const now = Date.now();
-      // Only fetch if more than 5 minutes have passed since last fetch
-      if (now - lastFetchTime >= 300000 && !isLoading) {
+      // Only fetch if more than 5 minutes have passed since last fetch and component is still mounted
+      if (now - lastFetchTime >= 300000 && !isLoading && isMounted) {
         await fetchDevices();
-        setLastFetchTime(now);
+        if (isMounted) {
+          setLastFetchTime(now);
+        }
       }
     };
 
-    // Initial fetch
-    fetchDevices();
+    // Initial fetch only if no devices loaded
+    if (devices.length === 0) {
+      fetchDevices();
+    }
     
     // Set up socket event listeners for real-time updates
     if (socket) {
+      // Remove any existing listeners first to prevent duplicates
+      socket.off('device_status_changed');
+      socket.off('device_registered');
+      socket.off('device_removed');
+
       socket.on('device_status_changed', (data: DeviceStatusUpdate) => {
-        setDevices(prev => prev.map(device => 
-          device.id === data.deviceId ? { ...device, ...data } : device
-        ));
+        if (isMounted) {
+          setDevices(prev => prev.map(device => 
+            device.id === data.deviceId ? { ...device, ...data } : device
+          ));
+        }
       });
 
       socket.on('device_registered', (data: DeviceRegistration) => {
-        setDevices(prev => [...prev, data]);
-        setSuccessMessage('New device registered successfully!');
+        if (isMounted) {
+          setDevices(prev => [...prev, data]);
+          setSuccessMessage('New device registered successfully!');
+        }
       });
 
       socket.on('device_removed', (deviceId: number) => {
-        setDevices(prev => prev.filter(device => device.id !== deviceId));
+        if (isMounted) {
+          setDevices(prev => prev.filter(device => device.id !== deviceId));
+        }
       });
     }
 
@@ -136,14 +152,17 @@ const DeviceManagement: React.FC = () => {
 
     // Cleanup
     return () => {
-      clearInterval(intervalId);
+      isMounted = false;
+      if (intervalId) {
+        clearInterval(intervalId);
+      }
       if (socket) {
         socket.off('device_status_changed');
         socket.off('device_registered');
         socket.off('device_removed');
       }
     };
-  }, [isLoading, lastFetchTime]);
+  }, []); // Remove lastFetchTime and isLoading from dependencies
   
   // Fetch devices from API with debounce and caching
   const fetchDevices = async () => {
