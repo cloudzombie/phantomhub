@@ -124,22 +124,22 @@ const Login = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-900">
+    <div className="min-h-screen flex items-center justify-center bg-slate-900 p-4">
       <div 
-        className="bg-slate-800 p-8 rounded-lg shadow-lg w-full max-w-md border border-slate-700"
+        className="bg-slate-800/90 backdrop-blur-sm p-8 rounded-lg shadow-xl w-full max-w-md border border-purple-500/20"
       >
-        <div className="flex justify-center mb-6">
-          <div className="flex items-center">
-            <FiShield className="text-purple-500 mr-2" size={20} />
-            <h1 className="text-2xl font-bold text-white">GHOST<span className="text-purple-500">WIRE</span></h1>
+        <div className="flex justify-center mb-4">
+          <div className="flex items-center bg-slate-900/50 px-4 py-2 rounded-full border border-purple-500/20">
+            <FiShield className="text-purple-500 mr-2" size={24} />
+            <h1 className="text-2xl font-bold text-white tracking-tight">GHOST<span className="text-purple-500">WIRE</span></h1>
           </div>
         </div>
-        <p className="text-center mb-8 text-sm text-slate-400">
+        <p className="text-center mb-6 text-sm text-slate-400">
           Advanced Penetration Testing Platform
         </p>
         
         {errorMessage && (
-          <div className="mb-5 p-3 bg-red-900/20 border border-red-500/30 rounded text-red-400 text-sm">
+          <div className="mb-4 p-3 bg-red-500/5 border border-red-500/20 rounded-lg text-red-400 text-sm">
             <div className="flex items-center">
               <FiAlertCircle className="mr-2 flex-shrink-0" size={16} />
               <p>{errorMessage}</p>
@@ -148,7 +148,7 @@ const Login = () => {
         )}
         
         {successMessage && (
-          <div className="mb-5 p-3 bg-purple-900/20 border border-purple-500/30 rounded text-purple-400 text-sm">
+          <div className="mb-4 p-3 bg-purple-500/5 border border-purple-500/20 rounded-lg text-purple-400 text-sm">
             <div className="flex items-center">
               <FiCheckCircle className="mr-2 flex-shrink-0" size={16} />
               <p>{successMessage}</p>
@@ -156,9 +156,9 @@ const Login = () => {
           </div>
         )}
         
-        <form onSubmit={handleSubmit}>
-          <div className="space-y-4">
-            <div className="relative border border-slate-600 rounded-md">
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="relative">
+            <div className="relative border border-purple-500/20 rounded-lg transition-colors focus-within:border-purple-500/50">
               <label className="absolute -top-2.5 left-2 px-1 bg-slate-800 text-xs font-medium text-slate-400">
                 Email
               </label>
@@ -166,12 +166,15 @@ const Login = () => {
                 type="email" 
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full px-3 py-2 bg-transparent text-white text-sm focus:outline-none"
+                className="w-full px-3 py-2 bg-transparent text-white text-sm focus:outline-none rounded-lg"
                 placeholder="admin@ghostwire.io"
+                disabled={isLoading}
               />
             </div>
-            
-            <div className="relative border border-slate-600 rounded-md">
+          </div>
+          
+          <div className="relative">
+            <div className="relative border border-purple-500/20 rounded-lg transition-colors focus-within:border-purple-500/50">
               <label className="absolute -top-2.5 left-2 px-1 bg-slate-800 text-xs font-medium text-slate-400">
                 Password
               </label>
@@ -179,44 +182,45 @@ const Login = () => {
                 type="password" 
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full px-3 py-2 bg-transparent text-white text-sm focus:outline-none"
+                className="w-full px-3 py-2 bg-transparent text-white text-sm focus:outline-none rounded-lg"
                 placeholder="********"
+                disabled={isLoading}
               />
             </div>
-            
-            <button 
-              type="submit"
-              className="w-full flex items-center justify-center py-2 px-4 bg-purple-500/10 text-purple-500 border border-purple-500/30 rounded hover:bg-purple-500/20 transition-colors mt-6"
-              disabled={isLoading}
-            >
-              {isLoading ? (
-                <>
-                  <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-purple-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                  Logging in...
-                </>
-              ) : (
-                <>
-                  <FiLogIn className="mr-2" size={16} />
-                  Log In
-                </>
-              )}
-            </button>
           </div>
+          
+          <button 
+            type="submit"
+            className="w-full flex items-center justify-center py-2.5 px-4 bg-purple-500/10 text-purple-400 border border-purple-500/20 rounded-lg hover:bg-purple-500/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed mt-2"
+            disabled={isLoading}
+          >
+            {isLoading ? (
+              <div className="flex items-center">
+                <svg className="animate-spin h-4 w-4 text-purple-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                <span className="ml-2">Authenticating...</span>
+              </div>
+            ) : (
+              <div className="flex items-center">
+                <FiLogIn className="mr-2" size={16} />
+                <span>Log In</span>
+              </div>
+            )}
+          </button>
         </form>
         
         <div className="mt-6 text-center">
           <p className="text-sm text-slate-400">
             Don't have an account?{' '}
-            <a href="/register" className="text-purple-500 hover:text-purple-400">
+            <a href="/register" className="text-purple-400 hover:text-purple-300 transition-colors">
               Sign up
             </a>
           </p>
         </div>
         
-        <div className="mt-8 pt-6 border-t border-slate-700 text-center">
+        <div className="mt-6 pt-6 border-t border-purple-500/20 text-center">
           <p className="text-xs text-slate-500">
             GhostWire © {new Date().getFullYear()} — Advanced Penetration Testing Platform
           </p>
