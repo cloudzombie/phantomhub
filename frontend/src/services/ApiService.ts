@@ -21,7 +21,7 @@ class ApiService {
     // Always use the Heroku URL for API endpoint
     this.config = {
       endpoint: 'https://ghostwire-backend-e0380bcf4e0e.herokuapp.com/api',
-      pollingInterval: 300, // Increased to 5 minutes
+      pollingInterval: 300, // 5 minutes
       timeout: 30
     };
 
@@ -141,8 +141,8 @@ class ApiService {
 
   // Public method to explicitly reload settings for the current user
   public reloadSettings(): void {
-    console.log('ApiService: Reloading settings for user');
-    this.loadStoredConfig();
+    console.log('ApiService: Using hardcoded Heroku URL');
+    // No need to reload settings as we're using hardcoded URL
   }
 
   public clearUserSettings(): void {
@@ -182,17 +182,18 @@ class ApiService {
   };
 
   private updateConfig(newConfig: ApiConfig): void {
-    console.log('ApiService: Ignoring configuration update in production', newConfig);
+    console.log('ApiService: Ignoring configuration update, using hardcoded Heroku URL');
     // In production, we always want to use the hardcoded Heroku URL
     // So we're not updating the config
-    
-    // Force the baseURL to always be the hardcoded Heroku URL
-    this.axiosInstance.defaults.baseURL = 'https://ghostwire-backend-e0380bcf4e0e.herokuapp.com/api';
-    this.axiosInstance.defaults.timeout = this.config.timeout * 1000;
   }
 
   public getConfig(): ApiConfig {
-    return { ...this.config };
+    // Always return the hardcoded config to prevent any overrides
+    return {
+      endpoint: 'https://ghostwire-backend-e0380bcf4e0e.herokuapp.com/api',
+      pollingInterval: 300,
+      timeout: 30
+    };
   }
 
   public getAxiosInstance(): AxiosInstance {
@@ -200,15 +201,14 @@ class ApiService {
   }
 
   public async get<T = any>(url: string, config?: AxiosRequestConfig): Promise<T> {
-    // Force the baseURL to be the hardcoded Heroku URL before each request
-    this.axiosInstance.defaults.baseURL = 'https://ghostwire-backend-e0380bcf4e0e.herokuapp.com/api';
+    // Ensure we're always using the Heroku URL
+    this.axiosInstance.defaults.baseURL = this.config.endpoint;
+    
     // Ensure auth token is included in request
     const token = getToken();
     if (token) {
       this.axiosInstance.defaults.headers.common['Authorization'] = `Bearer ${token}`;
     }
-    // Always send cookies
-    this.axiosInstance.defaults.withCredentials = true;
     
     console.log(`ApiService: Making GET request to ${this.axiosInstance.defaults.baseURL}${url}`);
     const response = await this.axiosInstance.get<T>(url, {
@@ -219,24 +219,24 @@ class ApiService {
   }
 
   public async post<T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T> {
-    // Force the baseURL to be the hardcoded Heroku URL before each request
-    this.axiosInstance.defaults.baseURL = 'https://ghostwire-backend-e0380bcf4e0e.herokuapp.com/api';
+    // Ensure we're always using the Heroku URL
+    this.axiosInstance.defaults.baseURL = this.config.endpoint;
     console.log(`ApiService: Making POST request to ${this.axiosInstance.defaults.baseURL}${url}`);
     const response = await this.axiosInstance.post<T>(url, data, config);
     return response.data;
   }
 
   public async put<T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T> {
-    // Force the baseURL to be the hardcoded Heroku URL before each request
-    this.axiosInstance.defaults.baseURL = 'https://ghostwire-backend-e0380bcf4e0e.herokuapp.com/api';
+    // Ensure we're always using the Heroku URL
+    this.axiosInstance.defaults.baseURL = this.config.endpoint;
     console.log(`ApiService: Making PUT request to ${this.axiosInstance.defaults.baseURL}${url}`);
     const response = await this.axiosInstance.put<T>(url, data, config);
     return response.data;
   }
 
   public async delete<T = any>(url: string, config?: AxiosRequestConfig): Promise<T> {
-    // Force the baseURL to be the hardcoded Heroku URL before each request
-    this.axiosInstance.defaults.baseURL = 'https://ghostwire-backend-e0380bcf4e0e.herokuapp.com/api';
+    // Ensure we're always using the Heroku URL
+    this.axiosInstance.defaults.baseURL = this.config.endpoint;
     console.log(`ApiService: Making DELETE request to ${this.axiosInstance.defaults.baseURL}${url}`);
     const response = await this.axiosInstance.delete<T>(url, config);
     return response.data;

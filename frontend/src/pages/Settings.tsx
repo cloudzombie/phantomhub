@@ -333,14 +333,16 @@ const Settings = () => {
   };
 
   const handleInputChange = (section: keyof SettingsState, key: string, value: string | number) => {
+    if (section === 'api' && key === 'endpoint') {
+      // Don't allow changing the API endpoint
+      return;
+    }
     setSettings(prev => {
-      const sectionData = prev[section] as Record<string, unknown>;
+      const updatedSection = { ...prev[section] as Record<string, unknown> };
+      updatedSection[key] = value;
       return {
         ...prev,
-        [section]: {
-          ...sectionData,
-          [key]: value
-        }
+        [section]: updatedSection
       };
     });
   };
