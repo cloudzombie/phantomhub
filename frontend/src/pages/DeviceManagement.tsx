@@ -87,17 +87,22 @@ const DeviceManagement: React.FC = () => {
   useEffect(() => {
     fetchDevices();
     
-    // Set up refresh interval
+    // Set up refresh interval with a more reasonable delay
     const intervalId = setInterval(() => {
-      fetchDevices();
-    }, 30000); // Refresh every 30 seconds
+      // Only fetch if we're not currently loading
+      if (!isLoading) {
+        fetchDevices();
+      }
+    }, 60000); // Increased to 60 seconds
     
     // Clean up interval on unmount
     return () => clearInterval(intervalId);
-  }, []);
+  }, [isLoading]); // Add isLoading to dependencies
   
-  // Fetch devices from API
+  // Fetch devices from API with debounce
   const fetchDevices = async () => {
+    if (isLoading) return; // Prevent concurrent fetches
+    
     setIsLoading(true);
     
     try {
@@ -120,22 +125,27 @@ const DeviceManagement: React.FC = () => {
           return device;
         });
         
-        setDevices(updatedDevices);
+        // Only update devices if the data has changed
+        if (JSON.stringify(devices) !== JSON.stringify(updatedDevices)) {
+          setDevices(updatedDevices);
+        }
       } else {
         console.error('Invalid response format:', response);
-        setErrorMessage('Failed to load O.MG Cables. Invalid response format.');
+        // Don't show error message for empty device list
+        if (response.data?.message) {
+          setErrorMessage(response.data.message);
+        }
       }
     } catch (error) {
       console.error('Error fetching devices:', error);
       
-      // If we get an unauthorized error, use tokenManager to handle it properly
       if (isAuthError(error)) {
         handleAuthError(error, 'Authentication error in DeviceManagement');
       } else {
-        // Set devices to empty array instead of showing error
-        // This is expected when no devices are available yet
-        setDevices([]);
-        setErrorMessage(null);
+        // Only show error if it's not a 404 (no devices found)
+        if ((error as any)?.response?.status !== 404) {
+          setErrorMessage((error as any)?.response?.data?.message || 'Error fetching devices');
+        }
       }
     } finally {
       setIsLoading(false);
@@ -213,11 +223,16 @@ const DeviceManagement: React.FC = () => {
     });
   };
   
-  // Register network device
+  // Register network device with improved error handling
   const registerDevice = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!validateForm()) {
+      return;
+    }
+    
+    if (isLoading) {
+      setErrorMessage('Registration already in progress');
       return;
     }
     
@@ -234,27 +249,24 @@ const DeviceManagement: React.FC = () => {
       
       if (response.data && response.data.success) {
         setSuccessMessage('O.MG Cable registered successfully!');
-        
-        // Reset form
         setFormData({
           name: '',
           ipAddress: '',
           firmwareVersion: ''
         });
-        
-        // Close modal
         setIsModalOpen(false);
         
-        // Refresh device list
-        fetchDevices();
+        // Wait a moment before refreshing the device list
+        setTimeout(() => {
+          fetchDevices();
+        }, 1000);
       } else {
-        setErrorMessage('Failed to register O.MG Cable. Please try again.');
+        throw new Error(response.data?.message || 'Failed to register device');
       }
     } catch (error) {
       console.error('Error registering device:', error);
       setErrorMessage((error as any)?.response?.data?.message || 'Failed to register O.MG Cable. Please try again.');
       
-      // If we get an unauthorized error, use tokenManager to handle it properly
       if (isAuthError(error)) {
         handleAuthError(error, 'Authentication error while registering device');
       }

@@ -497,13 +497,14 @@ const Settings = () => {
             <SettingItem
               icon={<FiGlobe size={16} />}
               title="API Endpoint"
-              description="Server URL for API requests"
+              description="Server URL for API requests (read-only)"
             >
               <input
                 type="text"
-                value={settings.api.endpoint}
-                onChange={(e) => handleInputChange('api', 'endpoint', e.target.value)}
-                className="w-full bg-slate-700 border border-slate-600 rounded px-2 py-1 text-xs"
+                value="https://ghostwire-backend-e0380bcf4e0e.herokuapp.com/api"
+                disabled
+                className="w-full bg-slate-700/50 border border-slate-600 rounded px-2 py-1 text-xs cursor-not-allowed opacity-75"
+                title="API endpoint is configured in production"
               />
             </SettingItem>
 
