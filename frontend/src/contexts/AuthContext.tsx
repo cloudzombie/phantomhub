@@ -79,7 +79,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           return;
         }
         
-        try {
         console.log('AuthContext: Fetching current user data');
         // Ensure credentials are sent with the request (for cookies)
         axios.defaults.withCredentials = true;
@@ -139,11 +138,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (axios.isAxiosError(err)) {
           if (err.code === 'ECONNABORTED' || !err.response) {
             console.log('AuthContext: Network error, keeping existing auth state');
-            // Keep the existing user state from localStorage to prevent logout on network issues
           } else if (err.response && err.response.status === 401) {
             console.log('AuthContext: Token invalid (401), but keeping credentials to prevent logout');
-            // CRITICAL: We're not clearing credentials even on 401 to prevent logout on refresh
-            // This is a temporary fix until we can properly debug the issue
           } else {
             console.log('AuthContext: Non-auth error, keeping credentials');
           }
@@ -177,6 +173,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const response = await axios.post(`${API_URL}/auth/login`, {
         email,
         password
+      }, {
+        withCredentials: true // Ensure cookies are sent/received
       });
       
       if (response.data.success) {
@@ -195,52 +193,48 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         storeToken(token);
         storeUserData(userData);
         
-        // CRITICAL: Force token into localStorage and sessionStorage for maximum persistence
+        // Extra precaution to ensure token is saved correctly 
         localStorage.setItem('token', token);
         sessionStorage.setItem('token', token);
+        
+        // Store user data in both storages
         localStorage.setItem('user', JSON.stringify(userData));
         sessionStorage.setItem('user', JSON.stringify(userData));
         
         // Set user state
         setUser(userData);
         
-        // CRITICAL: Set up axios defaults for future requests
+        // Set up axios defaults for future requests
         axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-        console.log('AuthContext: Set Authorization header for all future requests');
+        axios.defaults.withCredentials = true;
         
-        // Import ApiService and initialize socket connection after successful login
-        try {
-          const { ApiService } = await import('../services/ApiService');
-          setTimeout(() => {
-            console.log('AuthContext: Initializing socket connection after login');
-            ApiService.reconnectSocket();
-            
-            // Always dispatch user-authenticated event
-            document.dispatchEvent(new CustomEvent('user-authenticated', { 
-              detail: { userId: userData.id, role: userData.role || 'user' } 
-            }));
-            console.log('AuthContext: Dispatched user-authenticated event');
-            
-            // Verify the token is still in localStorage
-            const verifyToken = localStorage.getItem('token');
-            if (!verifyToken) {
-              console.error('AuthContext: Token disappeared from localStorage, restoring');
-              localStorage.setItem('token', token);
-            }
-          }, 100); // Reduced delay for faster response
-        } catch (serviceErr) {
-          console.error('AuthContext: Error initializing services after login', serviceErr);
-          // Continue with login success even if service initialization fails
-        }
+        console.log('AuthContext: Authentication set up successfully');
+        
+        // Force a check to verify authentication worked
+        setTimeout(async () => {
+          try {
+            const verifyResponse = await axios.get(`${API_URL}/auth/check`, {
+              headers: { Authorization: `Bearer ${token}` },
+              withCredentials: true
+            });
+            console.log('Authentication verification result:', verifyResponse.data);
+          } catch (err) {
+            console.error('Authentication verification failed:', err);
+          }
+        }, 500);
         
         return true;
       } else {
-        console.error('AuthContext: Login failed', response.data.message);
+        console.error('AuthContext: Login failed', response.data);
         setError(response.data.message || 'Login failed');
         return false;
       }
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Login failed');
+      console.error('AuthContext: Login error', err);
+      setError(
+        err.response?.data?.message ||
+        'Login failed. Please check your credentials and try again.'
+      );
       return false;
     }
   };

@@ -29,7 +29,8 @@ class ApiService {
     // Initialize axios instance with default config
     this.axiosInstance = axios.create({
       baseURL: this.config.endpoint,
-      timeout: this.config.timeout * 1000
+      timeout: this.config.timeout * 1000,
+      withCredentials: true // Always send cookies with requests
     });
 
     // Add request interceptor to include auth token - use tokenManager for consistency
@@ -39,9 +40,24 @@ class ApiService {
         if (token) {
           config.headers.Authorization = `Bearer ${token}`;
         }
+        // Always set withCredentials to true for all requests
+        config.withCredentials = true;
         return config;
       },
       (error) => Promise.reject(error)
+    );
+
+    // Add response interceptor to handle auth errors
+    this.axiosInstance.interceptors.response.use(
+      (response) => response,
+      (error) => {
+        // Special handling for auth errors
+        if (error.response && error.response.status === 401) {
+          console.warn('ApiService: Received 401 Unauthorized response');
+          // Don't clear auth data here to prevent unexpected logouts
+        }
+        return Promise.reject(error);
+      }
     );
 
     // Set up listener for configuration changes
@@ -184,8 +200,19 @@ class ApiService {
   public async get<T = any>(url: string, config?: AxiosRequestConfig): Promise<T> {
     // Force the baseURL to be the hardcoded Heroku URL before each request
     this.axiosInstance.defaults.baseURL = 'https://ghostwire-backend-e0380bcf4e0e.herokuapp.com/api';
+    // Ensure auth token is included in request
+    const token = getToken();
+    if (token) {
+      this.axiosInstance.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+    }
+    // Always send cookies
+    this.axiosInstance.defaults.withCredentials = true;
+    
     console.log(`ApiService: Making GET request to ${this.axiosInstance.defaults.baseURL}${url}`);
-    const response = await this.axiosInstance.get<T>(url, config);
+    const response = await this.axiosInstance.get<T>(url, {
+      ...config,
+      withCredentials: true
+    });
     return response.data;
   }
 

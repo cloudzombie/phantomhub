@@ -17,12 +17,24 @@ import { API_URL } from '../config';
  */
 export const getToken = (): string | null => {
   try {
-    // Check localStorage for backward compatibility
-    const token = localStorage.getItem('token');
+    // Try to get token from localStorage first
+    let token = localStorage.getItem('token');
+    
+    // Then try sessionStorage as a backup
+    if (!token) {
+      token = sessionStorage.getItem('token');
+      // If found in sessionStorage but not localStorage, sync it
+      if (token) {
+        localStorage.setItem('token', token);
+        console.log('TokenManager: Synced token from sessionStorage to localStorage');
+      }
+    }
     
     if (token) {
-      // Set the Authorization header for all future requests
+      // Always ensure axios header is set
       axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+      // Ensure cookies are sent with all requests
+      axios.defaults.withCredentials = true;
     }
     
     return token;
@@ -63,8 +75,10 @@ export const storeToken = (token: string): void => {
   }
 
   try {
-    // Store in localStorage for backward compatibility
+    // Store in both localStorage and sessionStorage for redundancy
     localStorage.setItem('token', token);
+    sessionStorage.setItem('token', token);
+    console.log('TokenManager: Token stored in both localStorage and sessionStorage');
     
     // Set the Authorization header for axios
     axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
@@ -170,8 +184,6 @@ export const isAuthError = (error: any): boolean => {
   
   return false;
 };
-
-
 
 /**
  * Safe logout that redirects to login page with proper action parameter
