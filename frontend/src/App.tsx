@@ -29,13 +29,30 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
 const AdminRoute = ({ children }: { children: React.ReactNode }) => {
   const { user, isAuthenticated } = useAuth();
   
+  // Debug logging
+  console.log('AdminRoute - Checking authentication');
+  console.log('AdminRoute - isAuthenticated:', isAuthenticated());
+  console.log('AdminRoute - user:', user);
+  console.log('AdminRoute - user role:', user?.role);
+  
   if (!isAuthenticated()) {
+    console.log('AdminRoute - Not authenticated, redirecting to login');
     return <Navigate to="/login" replace />;
   }
   
-  if (user?.role !== 'admin') {
+  if (!user) {
+    console.log('AdminRoute - User is null despite token, possibly still loading');
+    return <div className="flex justify-center items-center h-screen">
+      <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-green-500"></div>
+    </div>;
+  }
+  
+  if (user.role !== 'admin') {
+    console.log('AdminRoute - User is not admin, redirecting to home');
     return <Navigate to="/" replace />;
   }
+  
+  console.log('AdminRoute - Access granted to admin route');
   
   return <>{children}</>;
 };
