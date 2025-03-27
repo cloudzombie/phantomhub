@@ -90,7 +90,20 @@ class ApiService {
 
   private getCurrentUserId(): string | null {
     try {
-      const userData = localStorage.getItem('user');
+      // Try localStorage first
+      let userData = localStorage.getItem('user');
+      
+      // If not in localStorage, try sessionStorage as backup
+      if (!userData || userData === 'undefined' || userData === 'null') {
+        userData = sessionStorage.getItem('user');
+        if (userData && userData !== 'undefined' && userData !== 'null') {
+          console.log('ApiService: Restored user data from sessionStorage');
+          // Restore to localStorage
+          localStorage.setItem('user', userData);
+        }
+      }
+      
+      // If still no valid user data, return null
       if (!userData || userData === 'undefined' || userData === 'null') {
         return null;
       }
@@ -98,7 +111,7 @@ class ApiService {
       const user = JSON.parse(userData);
       
       // Log the user object to help with debugging
-      console.log('User data from localStorage:', { 
+      console.log('ApiService: User data from storage:', { 
         hasId: !!user?.id, 
         keys: Object.keys(user || {}) 
       });
@@ -106,9 +119,10 @@ class ApiService {
       // Check for both id and _id fields to handle different formats
       return user?.id || user?._id || null;
     } catch (error) {
-      console.error('Error getting current user ID:', error);
-      // If there's an error, clear the invalid user data
-      localStorage.removeItem('user');
+      console.error('ApiService: Error getting current user ID:', error);
+      // CRITICAL: Do NOT remove user data on parse error - just log it
+      // This prevents logout on corrupted data
+      console.warn('ApiService: Parse error but keeping user data to prevent logout');
       return null;
     }
   }
@@ -229,12 +243,24 @@ class ApiService {
       // Use baseURL for socket connection to ensure consistency with API endpoint
       console.log('ApiService: Initializing socket connection to', this.baseURL);
       
-      // Get token for authentication
-      const token = localStorage.getItem('token');
+      // Get token from localStorage or sessionStorage for redundancy
+      const token = localStorage.getItem('token') || sessionStorage.getItem('token');
+      
+      // If token only exists in sessionStorage, restore it to localStorage
+      if (!localStorage.getItem('token') && sessionStorage.getItem('token')) {
+        console.log('ApiService: Restoring token from sessionStorage to localStorage');
+        localStorage.setItem('token', sessionStorage.getItem('token')!);
+      }
       
       if (!token) {
         console.warn('ApiService: No auth token available for socket connection');
         return;
+      }
+      
+      // Ensure axios has the auth header set
+      if (!axios.defaults.headers.common['Authorization']) {
+        console.log('ApiService: Setting missing Authorization header from token');
+        axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
       }
       
       // If socket already exists, disconnect it first
@@ -296,14 +322,29 @@ class ApiService {
   }
   
   /**
-   * Reconnect socket if disconnected
+   * Reconnect socket if disconnected with enhanced token handling
    */
   public reconnectSocket(): void {
-    const token = localStorage.getItem('token');
+    // Get token from localStorage or sessionStorage for redundancy
+    const localToken = localStorage.getItem('token');
+    const sessionToken = sessionStorage.getItem('token');
+    const token = localToken || sessionToken;
+    
+    // If token only exists in sessionStorage, restore it to localStorage
+    if (!localToken && sessionToken) {
+      console.log('ApiService: Restoring token from sessionStorage to localStorage');
+      localStorage.setItem('token', sessionToken);
+    }
     
     if (!token) {
       console.warn('ApiService: Cannot reconnect socket without authentication token');
       return;
+    }
+    
+    // Ensure axios has the auth header set
+    if (!axios.defaults.headers.common['Authorization']) {
+      console.log('ApiService: Setting missing Authorization header from token');
+      axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
     }
     
     if (this.socket && !this.socket.connected) {

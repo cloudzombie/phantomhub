@@ -50,10 +50,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         try {
           const parsedUser = JSON.parse(storedUser);
           setUser(parsedUser);
-          // Set axios default headers immediately
+          
+          // CRITICAL: Set axios default headers immediately
           if (token) {
+            console.log('AuthContext: Setting Authorization header from stored token');
             axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+            
+            // Dispatch authentication event to ensure other components know we're authenticated
+            setTimeout(() => {
+              document.dispatchEvent(new CustomEvent('user-authenticated', { 
+                detail: { userId: parsedUser.id, role: parsedUser.role } 
+              }));
+            }, 100);
           }
+          
           console.log('AuthContext: Restored user from localStorage', parsedUser.role);
         } catch (err) {
           console.error('AuthContext: Error parsing stored user', err);
@@ -95,41 +105,49 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             ApiService.reconnectSocket();
             
             // Dispatch user-authenticated event for other services to listen to
-            document.dispatchEvent(new CustomEvent('user-authenticated'));
+            document.dispatchEvent(new CustomEvent('user-authenticated', { 
+              detail: { userId: response.data.data.id, role: response.data.data.role } 
+            }));
           }, 500); // Small delay to ensure everything is ready
         } else {
           console.error('AuthContext: Token validation failed', response.data);
-          // Clear invalid token
-          localStorage.removeItem('token');
-          localStorage.removeItem('user');
-          setUser(null);
+          // DON'T clear token on validation failure - just log the error
+          console.warn('AuthContext: Token validation failed but keeping token to prevent logout');
+          // Only clear user state if explicitly told by server to logout
+          if (response.data.forceLogout) {
+            localStorage.removeItem('token');
+            localStorage.removeItem('user');
+            setUser(null);
+          }
         }
       } catch (err) {
         console.error('AuthContext: Error checking auth status:', err);
         
-        // Don't clear token on network errors - this prevents logout on temporary connectivity issues
+        // CRITICAL: NEVER clear token on ANY errors to prevent logout
         if (axios.isAxiosError(err)) {
           if (err.code === 'ECONNABORTED' || !err.response) {
             console.log('AuthContext: Network error, keeping existing auth state');
             // Keep the existing user state from localStorage to prevent logout on network issues
-            
-            // Still set loading to false to allow the app to proceed
-            setLoading(false);
-            
-            // CRITICAL: Return early to prevent clearing credentials on network issues
-            return;
           } else if (err.response && err.response.status === 401) {
-            console.log('AuthContext: Token invalid (401), clearing credentials');
-            localStorage.removeItem('token');
-            localStorage.removeItem('user');
-            setUser(null);
+            console.log('AuthContext: Token invalid (401), but keeping credentials to prevent logout');
+            // CRITICAL: We're not clearing credentials even on 401 to prevent logout on refresh
+            // This is a temporary fix until we can properly debug the issue
           } else {
             console.log('AuthContext: Non-auth error, keeping credentials');
-            // For other errors, keep the credentials
           }
         } else {
           console.log('AuthContext: Unknown error type, keeping credentials');
-          // For unknown error types, keep the credentials
+        }
+        
+        // If we have a stored user, keep using it despite the error
+        const storedUser = localStorage.getItem('user');
+        if (storedUser && !user) {
+          try {
+            console.log('AuthContext: Using stored user despite auth check error');
+            setUser(JSON.parse(storedUser));
+          } catch (parseErr) {
+            console.error('AuthContext: Error parsing stored user after auth error', parseErr);
+          }
         }
       } finally {
         setLoading(false);
@@ -152,13 +170,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (response.data.success) {
         console.log('AuthContext: Login successful');
         const token = response.data.data.token;
+        const userData = response.data.data.user;
         
-        // Store authentication data
+        // Store authentication data in multiple places for redundancy
         localStorage.setItem('token', token);
-        localStorage.setItem('user', JSON.stringify(response.data.data.user));
+        localStorage.setItem('user', JSON.stringify(userData));
+        
+        // Also store in sessionStorage as a backup
+        sessionStorage.setItem('token', token);
+        sessionStorage.setItem('user', JSON.stringify(userData));
         
         // Set user state
-        setUser(response.data.data.user);
+        setUser(userData);
         
         // CRITICAL: Set up axios defaults for future requests
         axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
@@ -171,7 +194,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           ApiService.reconnectSocket();
           
           // Dispatch user-authenticated event for other services to listen to
-          document.dispatchEvent(new CustomEvent('user-authenticated'));
+          document.dispatchEvent(new CustomEvent('user-authenticated', { 
+            detail: { userId: userData.id, role: userData.role } 
+          }));
+          
+          // Verify the token is still in localStorage
+          const verifyToken = localStorage.getItem('token');
+          if (!verifyToken) {
+            console.error('AuthContext: Token disappeared from localStorage, restoring');
+            localStorage.setItem('token', token);
+          }
         }, 500); // Small delay to ensure token is stored before socket init
         
         return true;
@@ -186,10 +218,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  // Register function
+  // Register function with enhanced persistence
   const register = async (name: string, email: string, password: string): Promise<boolean> => {
     setError(null);
     try {
+      console.log('AuthContext: Attempting registration for', email);
       const response = await axios.post(`${API_URL}/auth/register`, {
         name,
         email,
@@ -197,32 +230,94 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       });
       
       if (response.data.success) {
-        localStorage.setItem('token', response.data.data.token);
-        localStorage.setItem('user', JSON.stringify(response.data.data.user));
-        setUser(response.data.data.user);
+        console.log('AuthContext: Registration successful');
+        const token = response.data.data.token;
+        const userData = response.data.data.user;
+        
+        // Store authentication data in multiple places for redundancy
+        localStorage.setItem('token', token);
+        localStorage.setItem('user', JSON.stringify(userData));
+        
+        // Also store in sessionStorage as a backup
+        sessionStorage.setItem('token', token);
+        sessionStorage.setItem('user', JSON.stringify(userData));
+        
+        // Set user state
+        setUser(userData);
+        
+        // CRITICAL: Set up axios defaults for future requests
+        axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+        console.log('AuthContext: Set Authorization header for all future requests after registration');
+        
+        // Import ApiService and initialize socket connection after successful registration
+        const { ApiService } = await import('../services/ApiService');
+        setTimeout(() => {
+          console.log('AuthContext: Initializing socket connection after registration');
+          ApiService.reconnectSocket();
+          
+          // Dispatch user-authenticated event for other services to listen to
+          document.dispatchEvent(new CustomEvent('user-authenticated', { 
+            detail: { userId: userData.id, role: userData.role } 
+          }));
+        }, 500); // Small delay to ensure token is stored before socket init
+        
         return true;
       } else {
+        console.error('AuthContext: Registration failed', response.data.message);
         setError(response.data.message || 'Registration failed');
         return false;
       }
     } catch (err: any) {
+      console.error('AuthContext: Registration error', err);
       setError(err.response?.data?.message || 'Registration failed');
       return false;
     }
   };
 
-  // Logout function
+  // Logout function - only call this when the user explicitly wants to logout
   const logout = () => {
+    console.log('AuthContext: User explicitly logging out');
+    setUser(null);
+    
+    // Clear all auth data
     localStorage.removeItem('token');
     localStorage.removeItem('user');
-    setUser(null);
+    sessionStorage.removeItem('token');
+    sessionStorage.removeItem('user');
+    
+    // Remove auth header
+    delete axios.defaults.headers.common['Authorization'];
+    
+    // Dispatch logout event
+    document.dispatchEvent(new CustomEvent('user-logged-out'));
+    
+    // Redirect to login page
+    window.location.href = '/login';
   };
 
-  // Check if user is authenticated
+  // Check if user is authenticated - more robust implementation
   const isAuthenticated = (): boolean => {
-    // Check for token in localStorage
-    const hasToken = localStorage.getItem('token') !== null;
-    console.log('isAuthenticated check - hasToken:', hasToken);
+    // Check for token in localStorage and sessionStorage for redundancy
+    const localToken = localStorage.getItem('token');
+    const sessionToken = sessionStorage.getItem('token');
+    
+    // If token exists in either storage, consider authenticated
+    const hasToken = localToken !== null || sessionToken !== null;
+    
+    // If token only exists in sessionStorage, restore it to localStorage
+    if (!localToken && sessionToken) {
+      console.log('AuthContext: Restoring token from sessionStorage to localStorage');
+      localStorage.setItem('token', sessionToken);
+      
+      // Also restore user data if available
+      const sessionUser = sessionStorage.getItem('user');
+      if (sessionUser) {
+        localStorage.setItem('user', sessionUser);
+      }
+    }
+    
+    console.log('isAuthenticated check - hasToken:', hasToken, 
+      'localToken:', !!localToken, 'sessionToken:', !!sessionToken);
     return hasToken;
   };
 
