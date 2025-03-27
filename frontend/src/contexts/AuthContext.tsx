@@ -94,31 +94,44 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           timeout: 8000
         });
         
-        if (response.data.success) {
+        // Handle both success and user data potentially being at different levels in response
+        // Some endpoints return {success: true, data: {...}}, others just return the data directly
+        const userData = response.data && (response.data.data || (response.data.success && response.data) || response.data);
+        const isSuccessful = response.data && (response.data.success === true || (userData && userData.id));
+        
+        if (isSuccessful && userData) {
           console.log('AuthContext: Token verified successfully');
           // Update user data with latest from server
-          setUser(response.data.data);
-          localStorage.setItem('user', JSON.stringify(response.data.data));
+          setUser(userData);
           
-          // Set axios default headers for all future requests
-          axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-          console.log('AuthContext: Set default Authorization header for future requests');
+          // Use tokenManager to properly store user data with validation
+          storeUserData(userData);
+          
+          // Ensure token is properly stored via tokenManager
+          if (token) {
+            storeToken(token);
+            console.log('AuthContext: Token stored and Authorization header set via tokenManager');
+          }
           
           // Import ApiService and ensure socket connection is initialized
-          const { ApiService } = await import('../services/ApiService');
-          setTimeout(() => {
-            console.log('AuthContext: Ensuring socket connection after auth check');
-            ApiService.reconnectSocket();
-            
-            // Dispatch user-authenticated event for other services to listen to
-            if (response.data && response.data.data && response.data.data.id) {
+          try {
+            const { ApiService } = await import('../services/ApiService');
+            setTimeout(() => {
+              console.log('AuthContext: Ensuring socket connection after auth check');
+              ApiService.reconnectSocket();
+              
+              // Always dispatch event with user data, adding fallbacks for missing fields
               document.dispatchEvent(new CustomEvent('user-authenticated', { 
-                detail: { userId: response.data.data.id, role: response.data.data.role || 'user' } 
+                detail: { 
+                  userId: userData.id || '0', 
+                  role: userData.role || 'user'
+                } 
               }));
-            } else {
-              console.warn('AuthContext: Invalid response data, cannot dispatch user-authenticated event');
-            }
-          }, 500); // Small delay to ensure everything is ready
+              console.log('AuthContext: Dispatched user-authenticated event');
+            }, 500); // Small delay to ensure everything is ready
+          } catch (serviceErr) {
+            console.error('AuthContext: Error initializing services', serviceErr);
+          }
         } else {
           console.error('AuthContext: Token validation failed', response.data);
           // DON'T clear token on validation failure - just log the error
