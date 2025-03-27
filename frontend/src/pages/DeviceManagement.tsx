@@ -54,6 +54,17 @@ interface Device {
   };
 }
 
+interface DeviceFormData {
+  name: string;
+  ipAddress: string;
+  firmwareVersion: string;
+}
+
+interface UsbDeviceFormData {
+  name: string;
+  firmwareVersion: string;
+}
+
 const DeviceManagement: React.FC = () => {
   const [devices, setDevices] = useState<Device[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -62,52 +73,53 @@ const DeviceManagement: React.FC = () => {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [selectedDevice, setSelectedDevice] = useState<Device | null>(null);
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<DeviceFormData>({
     name: '',
     ipAddress: '',
     firmwareVersion: ''
   });
-  const [usbFormData, setUsbFormData] = useState({
+  const [usbFormData, setUsbFormData] = useState<UsbDeviceFormData>({
     name: '',
     firmwareVersion: ''
   });
-  const [webSerialSupported, setWebSerialSupported] = useState(false);
   
+  // Fetch devices on component mount
   useEffect(() => {
-    // Check if WebSerial is supported
-    setWebSerialSupported(isWebSerialSupported());
     fetchDevices();
+    
+    // Set up refresh interval
+    const intervalId = setInterval(() => {
+      fetchDevices();
+    }, 30000); // Refresh every 30 seconds
+    
+    // Clean up interval on unmount
+    return () => clearInterval(intervalId);
   }, []);
   
-  // Clear messages after 5 seconds
-  useEffect(() => {
-    if (errorMessage || successMessage) {
-      const timer = setTimeout(() => {
-        setErrorMessage(null);
-        setSuccessMessage(null);
-      }, 5000);
-      return () => clearTimeout(timer);
-    }
-  }, [errorMessage, successMessage]);
-  
+  // Fetch devices from API
   const fetchDevices = async () => {
     setIsLoading(true);
-    setErrorMessage(null);
     
     try {
-      // Use apiServiceInstance instead of direct axios call
       const response = await apiServiceInstance.get('/devices');
       
-      // Access the devices array from the data property
-      if (response.success && Array.isArray(response.data)) {
-        // Update test devices to always show as offline in the UI
-        const updatedDevices = response.data.map((device: Device) => {
-          // If it's a test device and not explicitly set to online by a user, mark as offline
-          if (device.name.toLowerCase().includes('test') && !device.lastCheckIn) {
-            return { ...device, status: 'offline' };
+      if (response.data && response.data.success) {
+        // Process devices to add connection status
+        const updatedDevices = response.data.data.map((device: Device) => {
+          // Add connection status based on last check-in time
+          const lastCheckIn = device.lastCheckIn ? new Date(device.lastCheckIn) : null;
+          const now = new Date();
+          const diffMs = lastCheckIn ? now.getTime() - lastCheckIn.getTime() : Infinity;
+          const diffMins = diffMs / 60000;
+          
+          // If last check-in was more than 5 minutes ago, mark as offline
+          if (diffMins > 5) {
+            device.status = 'offline';
           }
+          
           return device;
         });
+        
         setDevices(updatedDevices);
       } else {
         console.error('Invalid response format:', response);
@@ -130,6 +142,7 @@ const DeviceManagement: React.FC = () => {
     }
   };
   
+  // Handle form input changes
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({
@@ -138,6 +151,7 @@ const DeviceManagement: React.FC = () => {
     }));
   };
   
+  // Handle USB form input changes
   const handleUsbInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setUsbFormData(prev => ({
@@ -146,149 +160,99 @@ const DeviceManagement: React.FC = () => {
     }));
   };
   
+  // Validate form data
   const validateForm = () => {
     if (!formData.name.trim()) {
-      setErrorMessage('Cable name is required');
+      setErrorMessage('Device name is required');
       return false;
     }
     
     if (!formData.ipAddress.trim()) {
-      setErrorMessage('IP address is required');
+      setErrorMessage('IP Address is required');
       return false;
     }
     
-    // Basic IP address validation
+    // Simple IP validation
     const ipPattern = /^(\d{1,3}\.){3}\d{1,3}$/;
     if (!ipPattern.test(formData.ipAddress)) {
-      setErrorMessage('Please enter a valid IP address (e.g., 192.168.1.100)');
+      setErrorMessage('Invalid IP Address format. Use format: xxx.xxx.xxx.xxx');
       return false;
     }
     
     return true;
   };
   
+  // Validate USB form data
   const validateUsbForm = () => {
     if (!usbFormData.name.trim()) {
-      setErrorMessage('Cable name is required');
+      setErrorMessage('Device name is required');
       return false;
     }
     
     return true;
   };
   
-  const handleConnectViaUsb = async () => {
+  // Reset form data
+  const resetForm = () => {
     setErrorMessage(null);
-    
-    if (!validateUsbForm()) return;
-    
-    try {
-      setIsLoading(true);
-      
-      // Request serial port
-      const port = await requestSerialPort();
-      if (!port) {
-        setErrorMessage('No serial port selected');
-        return;
-      }
-      
-      // Connect to the device
-      const deviceInfo = await connectToDevice(port);
-      
-      // Get token for API call
-      const token = localStorage.getItem('token');
-      if (!token) {
-        console.error('No authentication token found');
-        window.location.href = '/login';
-        return;
-      }
-      
-      // Create device in backend
-      const deviceData = {
-        name: usbFormData.name,
-        ipAddress: 'usb-connection', // Special marker for USB connections
-        firmwareVersion: usbFormData.firmwareVersion || deviceInfo.info.firmwareVersion || 'Unknown',
-        connectionType: 'usb',
-        serialPortId: deviceInfo.info.deviceId || 'unknown'
-      };
-      
-      const response = await apiServiceInstance.post('/devices', deviceData, {
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
-      });
-      
-      if (response.data && response.data.success) {
-        setSuccessMessage('O.MG Cable connected successfully via USB');
-        
-        // Reset form and close modal
-        setUsbFormData({
-          name: '',
-          firmwareVersion: ''
-        });
-        setIsUsbModalOpen(false);
-        
-        // Refresh device list
-        fetchDevices();
-      } else {
-        setErrorMessage(response.data?.message || 'Failed to register USB device');
-        
-        // Disconnect on failure
-        await disconnectFromDevice(deviceInfo);
-      }
-    } catch (error: any) {
-      console.error('Error connecting to USB device:', error);
-      setErrorMessage(error.message || 'Failed to connect to O.MG Cable via USB. Please try again.');
-    } finally {
-      setIsLoading(false);
-    }
+    setSuccessMessage(null);
+    setFormData({
+      name: '',
+      ipAddress: '',
+      firmwareVersion: ''
+    });
   };
   
-  const handleSubmit = async () => {
+  // Reset USB form data
+  const resetUsbForm = () => {
+    setErrorMessage(null);
+    setSuccessMessage(null);
+    setUsbFormData({
+      name: '',
+      firmwareVersion: ''
+    });
+  };
+  
+  // Register network device
+  const registerDevice = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!validateForm()) {
+      return;
+    }
+    
+    setIsLoading(true);
     setErrorMessage(null);
     
-    if (!validateForm()) return;
-    
     try {
-      setIsLoading(true);
-      
-      const token = localStorage.getItem('token');
-      if (!token) {
-        console.error('No authentication token found');
-        window.location.href = '/login';
-        return;
-      }
-      
-      const deviceData = {
-        ...formData,
-        status: 'offline', // Default status for new devices
+      const response = await apiServiceInstance.post('/devices', {
+        name: formData.name,
+        ipAddress: formData.ipAddress,
+        firmwareVersion: formData.firmwareVersion || '1.0.0',
         connectionType: 'network'
-      };
-      
-      const response = await apiServiceInstance.post('/devices', deviceData, {
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
       });
       
       if (response.data && response.data.success) {
-        setSuccessMessage('O.MG Cable registered successfully');
+        setSuccessMessage('O.MG Cable registered successfully!');
         
-        // Reset form and close modal
+        // Reset form
         setFormData({
           name: '',
           ipAddress: '',
           firmwareVersion: ''
         });
+        
+        // Close modal
         setIsModalOpen(false);
         
         // Refresh device list
         fetchDevices();
       } else {
-        setErrorMessage(response.data?.message || 'Failed to register device');
+        setErrorMessage('Failed to register O.MG Cable. Please try again.');
       }
-    } catch (error: any) {
+    } catch (error) {
       console.error('Error registering device:', error);
-      setErrorMessage(error.response?.data?.message || 'Failed to register O.MG Cable. Please try again.');
+      setErrorMessage((error as any)?.response?.data?.message || 'Failed to register O.MG Cable. Please try again.');
       
       // If we get an unauthorized error, use tokenManager to handle it properly
       if (isAuthError(error)) {
@@ -299,21 +263,88 @@ const DeviceManagement: React.FC = () => {
     }
   };
   
-  const handleUpdateStatus = async (id: number, status: 'online' | 'offline') => {
+  // Register USB device
+  const registerUsbDevice = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!validateUsbForm()) {
+      return;
+    }
+    
+    setIsLoading(true);
     setErrorMessage(null);
+    
     try {
-      // Use apiServiceInstance instead of direct axios call
-      const response = await apiServiceInstance.patch(`/devices/${id}`, { status });
+      // Request serial port access
+      const port = await requestSerialPort();
       
-      if (response && response.success) {
-        setSuccessMessage(`O.MG Cable status updated to ${status}`);
+      if (!port) {
+        setErrorMessage('Failed to access USB device. Please try again.');
+        setIsLoading(false);
+        return;
+      }
+      
+      // Get device info
+      const portInfo = port.getInfo();
+      
+      // Register device with backend
+      const response = await apiServiceInstance.post('/devices', {
+        name: usbFormData.name,
+        firmwareVersion: usbFormData.firmwareVersion || '1.0.0',
+        connectionType: 'usb',
+        serialPortId: `${portInfo.usbVendorId || 0}:${portInfo.usbProductId || 0}`
+      });
+      
+      if (response.data && response.data.success) {
+        setSuccessMessage('USB O.MG Cable registered successfully!');
         
-        // Update device in state
-        setDevices(prev => prev.map(device => 
-          device.id === id ? { ...device, status } : device
-        ));
+        // Reset form
+        setUsbFormData({
+          name: '',
+          firmwareVersion: ''
+        });
+        
+        // Close modal
+        setIsUsbModalOpen(false);
+        
+        // Refresh device list
+        fetchDevices();
       } else {
-        setErrorMessage(response?.message || 'Failed to update status');
+        setErrorMessage('Failed to register USB O.MG Cable. Please try again.');
+      }
+    } catch (error) {
+      console.error('Error registering USB device:', error);
+      setErrorMessage((error as any)?.response?.data?.message || 'Failed to register USB O.MG Cable. Please try again.');
+      
+      // If we get an unauthorized error, use tokenManager to handle it properly
+      if (isAuthError(error)) {
+        handleAuthError(error, 'Authentication error while registering USB device');
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  
+  // Update device status
+  const updateDeviceStatus = async (deviceId: number, status: 'online' | 'offline' | 'busy') => {
+    setErrorMessage(null);
+    
+    try {
+      const response = await apiServiceInstance.patch(`/devices/${deviceId}`, {
+        status
+      });
+      
+      if (response.data && response.data.success) {
+        setSuccessMessage(`Device status updated to ${status}`);
+        
+        // Update devices list
+        setDevices(prev => 
+          prev.map(device => 
+            device.id === deviceId ? { ...device, status } : device
+          )
+        );
+      } else {
+        setErrorMessage('Failed to update O.MG Cable status. Please try again.');
       }
     } catch (error) {
       console.error('Error updating device status:', error);
@@ -321,32 +352,48 @@ const DeviceManagement: React.FC = () => {
       
       // If we get an unauthorized error, use tokenManager to handle it properly
       if (isAuthError(error)) {
-        handleAuthError(error, 'Authentication error while registering device');
+        handleAuthError(error, 'Authentication error while updating device status');
       }
     }
   };
   
+  // Get status badge based on device status
   const getStatusBadge = (status: string, device: Device) => {
-    // For test devices, always show as offline unless explicitly set to online
-    if (device.name.toLowerCase().includes('test') && status !== 'online') {
-      return <span className="px-2 py-1 text-xs font-medium rounded-full bg-red-500/20 text-red-400 border border-red-500/30">Offline</span>;
-    }
-    
     switch (status) {
       case 'online':
-        return <span className="px-2 py-1 text-xs font-medium rounded-full bg-green-500/20 text-green-400 border border-green-500/30">Online</span>;
+        return (
+          <span className="badge bg-success">
+            <FiCheck className="me-1" /> Online
+          </span>
+        );
+      case 'offline':
+        return (
+          <span className="badge bg-secondary">
+            <FiX className="me-1" /> Offline
+          </span>
+        );
       case 'busy':
-        return <span className="px-2 py-1 text-xs font-medium rounded-full bg-orange-500/20 text-orange-400 border border-orange-500/30">Busy</span>;
+        return (
+          <span className="badge bg-warning">
+            <FiRefreshCw className="me-1" /> Busy
+          </span>
+        );
       default:
-        return <span className="px-2 py-1 text-xs font-medium rounded-full bg-red-500/20 text-red-400 border border-red-500/30">Offline</span>;
+        return (
+          <span className="badge bg-secondary">
+            <FiInfo className="me-1" /> Unknown
+          </span>
+        );
     }
   };
   
+  // Get connection type badge
   const getConnectionTypeBadge = (connectionType?: string) => {
-    if (connectionType === 'usb') {
-      return <span className="px-2 py-1 text-xs font-medium rounded-full bg-purple-500/20 text-purple-400 border border-purple-500/30 flex items-center"><FiHardDrive className="mr-1" size={10} />USB</span>;
-    }
-    return <span className="px-2 py-1 text-xs font-medium rounded-full bg-blue-500/20 text-blue-400 border border-blue-500/30 flex items-center"><FiWifi className="mr-1" size={10} />Network</span>;
+    return connectionType === 'usb' ? (
+      <span className="badge bg-info"><FiHardDrive className="me-1" /> USB</span>
+    ) : (
+      <span className="badge bg-primary"><FiWifi className="me-1" /> Network</span>
+    );
   };
   
   // Format date/time to be more readable
@@ -372,386 +419,327 @@ const DeviceManagement: React.FC = () => {
     });
   };
   
+  // View device details
   const handleViewDeviceDetails = (device: Device) => {
     setSelectedDevice(device);
   };
   
+  // Close device details
   const handleCloseDeviceDetails = () => {
     setSelectedDevice(null);
   };
   
   return (
-    <div className="p-6">
-      {/* Page Title */}
-      <div className="mb-6">
-        <h1 className="text-xl font-semibold text-white">Device Management</h1>
-        <p className="text-sm text-slate-400">Manage and monitor your O.MG Cables and device connections</p>
-      </div>
-      
-      {/* Action Buttons */}
-      <div className="flex flex-wrap gap-3 mb-6">
-        <button 
-          onClick={() => setIsModalOpen(true)}
-          className="inline-flex items-center px-3 py-2 text-sm font-medium bg-blue-500/10 text-blue-500 border border-blue-500/30 rounded hover:bg-blue-500/20 transition-colors"
-        >
-          <FiWifi className="mr-2" size={16} />
-          Register Network Cable
-        </button>
-        
-        {webSerialSupported && (
+    <div className="container-fluid mt-4">
+      <div className="d-flex justify-content-between align-items-center mb-4">
+        <h2>
+          <FiServer className="me-2" />
+          O.MG Cable Management
+        </h2>
+        <div>
           <button 
-            onClick={() => setIsUsbModalOpen(true)}
-            className="inline-flex items-center px-3 py-2 text-sm font-medium bg-purple-500/10 text-purple-500 border border-purple-500/30 rounded hover:bg-purple-500/20 transition-colors"
+            className="btn btn-primary me-2" 
+            onClick={() => setIsModalOpen(true)}
           >
-            <FiHardDrive className="mr-2" size={16} />
-            Connect USB Cable
+            <FiWifi className="me-1" /> Register Network Device
           </button>
-        )}
-        
-        <button 
-          onClick={fetchDevices}
-          className="inline-flex items-center px-3 py-2 text-sm font-medium bg-slate-700/50 text-slate-300 border border-slate-600/50 rounded hover:bg-slate-700 transition-colors"
-          disabled={isLoading}
-        >
-          <FiRefreshCw className={`mr-2 ${isLoading ? 'animate-spin' : ''}`} size={16} />
-          Refresh
-        </button>
+          
+          {isWebSerialSupported() && (
+            <button 
+              className="btn btn-info" 
+              onClick={() => setIsUsbModalOpen(true)}
+            >
+              <FiHardDrive className="me-1" /> Register USB Device
+            </button>
+          )}
+        </div>
       </div>
       
-      {/* Status Messages */}
       {errorMessage && (
-        <div className="mb-5 p-3 bg-red-900/20 border border-red-500/30 rounded text-red-400 text-sm">
-          <div className="flex items-center">
-            <FiAlertCircle className="mr-2 flex-shrink-0" size={16} />
-            <p>{errorMessage}</p>
-          </div>
+        <div className="alert alert-danger">
+          <FiAlertCircle className="me-2" />
+          {errorMessage}
         </div>
       )}
       
       {successMessage && (
-        <div className="mb-5 p-3 bg-green-900/20 border border-green-500/30 rounded text-green-400 text-sm">
-          <div className="flex items-center">
-            <FiCheck className="mr-2 flex-shrink-0" size={16} />
-            <p>{successMessage}</p>
-          </div>
+        <div className="alert alert-success">
+          <FiCheck className="me-2" />
+          {successMessage}
         </div>
       )}
       
-      {!webSerialSupported && (
-        <div className="mb-5 p-3 bg-orange-900/20 border border-orange-500/30 rounded text-orange-400 text-sm">
-          <div className="flex items-center">
-            <FiInfo className="mr-2 flex-shrink-0" size={16} />
-            <p>USB connections are not supported in this browser. Use Google Chrome or Microsoft Edge for USB connectivity.</p>
+      <div className="card">
+        <div className="card-header bg-light">
+          <div className="d-flex justify-content-between align-items-center">
+            <h5 className="mb-0">Registered Devices</h5>
+            <button 
+              className="btn btn-sm btn-outline-primary" 
+              onClick={fetchDevices}
+              disabled={isLoading}
+            >
+              <FiRefreshCw className={`me-1 ${isLoading ? 'spin' : ''}`} />
+              Refresh
+            </button>
           </div>
         </div>
-      )}
-      
-      {/* Devices Table */}
-      <div className="bg-slate-800 border border-slate-700 rounded-md shadow-sm overflow-hidden">
-        <div className="flex items-center justify-between border-b border-slate-700 px-4 py-3">
-          <h2 className="font-medium text-white flex items-center">
-            <FiServer className="mr-2 text-green-500" size={16} />
-            Registered Cables
-          </h2>
-          <span className="text-xs font-medium text-slate-400">
-            {devices.length} {devices.length === 1 ? 'Cable' : 'Cables'}
-          </span>
-        </div>
-        
-        {devices.length === 0 ? (
-          <div className="p-6 text-center text-slate-400">
-            <FiInfo className="mx-auto mb-2" size={20} />
-            <p className="text-sm">No cables registered yet. Register a new cable to get started.</p>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="bg-slate-700/30 text-left">
-                  <th className="px-4 py-2 text-xs font-medium text-slate-400">Name</th>
-                  <th className="px-4 py-2 text-xs font-medium text-slate-400">Connection</th>
-                  <th className="px-4 py-2 text-xs font-medium text-slate-400">IP/Port</th>
-                  <th className="px-4 py-2 text-xs font-medium text-slate-400">Firmware</th>
-                  <th className="px-4 py-2 text-xs font-medium text-slate-400">Owner</th>
-                  <th className="px-4 py-2 text-xs font-medium text-slate-400">Last Check-in</th>
-                  <th className="px-4 py-2 text-xs font-medium text-slate-400">Status</th>
-                  <th className="px-4 py-2 text-xs font-medium text-slate-400">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-700/50">
-                {devices.map(device => (
-                  <tr 
-                    key={device.id} 
-                    className="hover:bg-slate-700/10 transition-colors cursor-pointer"
-                    onClick={() => handleViewDeviceDetails(device)}
-                  >
-                    <td className="px-4 py-3 text-white text-sm">{device.name}</td>
-                    <td className="px-4 py-3">{getConnectionTypeBadge(device.connectionType)}</td>
-                    <td className="px-4 py-3 text-slate-300 text-sm font-mono">
-                      {device.ipAddress === 'usb-connection' ? device.serialPortId || 'USB' : device.ipAddress}
-                    </td>
-                    <td className="px-4 py-3 text-slate-300 text-sm">{device.firmwareVersion || 'Unknown'}</td>
-                    <td className="px-4 py-3 text-slate-300 text-sm">
-                      {device.owner ? device.owner.username : 'Unknown'}
-                    </td>
-                    <td className="px-4 py-3 text-slate-300 text-sm">{formatDateTime(device.lastCheckIn)}</td>
-                    <td className="px-4 py-3">{getStatusBadge(device.status, device)}</td>
-                    <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
-                      <div className="flex space-x-1">
-                        <button
-                          onClick={() => handleUpdateStatus(device.id, 'online')}
-                          disabled={device.status === 'online'}
-                          className={`p-1 rounded text-xs ${
-                            device.status === 'online'
-                              ? 'text-slate-500 cursor-not-allowed'
-                              : 'text-green-500 hover:bg-green-500/10 hover:border-green-500/30'
-                          }`}
-                          title="Set Online"
-                        >
-                          <FiCheck size={16} />
-                        </button>
-                        <button
-                          onClick={() => handleUpdateStatus(device.id, 'offline')}
-                          disabled={device.status === 'offline'}
-                          className={`p-1 rounded text-xs ${
-                            device.status === 'offline'
-                              ? 'text-slate-500 cursor-not-allowed'
-                              : 'text-red-500 hover:bg-red-500/10 hover:border-red-500/30'
-                          }`}
-                          title="Set Offline"
-                        >
-                          <FiX size={16} />
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleViewDeviceDetails(device);
-                          }}
-                          className="p-1 rounded text-xs text-blue-500 hover:bg-blue-500/10 hover:border-blue-500/30"
-                          title="View Details"
-                        >
-                          <FiEye size={16} />
-                        </button>
-                      </div>
-                    </td>
+        <div className="card-body">
+          {isLoading && devices.length === 0 ? (
+            <div className="text-center py-5">
+              <div className="spinner-border text-primary" role="status">
+                <span className="visually-hidden">Loading...</span>
+              </div>
+              <p className="mt-3">Loading devices...</p>
+            </div>
+          ) : devices.length === 0 ? (
+            <div className="text-center py-5">
+              <FiInfo size={48} className="text-muted mb-3" />
+              <h5>No O.MG Cables registered yet</h5>
+              <p className="text-muted">Register a new device to get started</p>
+            </div>
+          ) : (
+            <div className="table-responsive">
+              <table className="table table-hover">
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Connection</th>
+                    <th>Status</th>
+                    <th>Last Check-in</th>
+                    <th>Firmware</th>
+                    <th>Actions</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+                </thead>
+                <tbody>
+                  {devices.map(device => (
+                    <tr key={device.id}>
+                      <td>{device.name}</td>
+                      <td>{getConnectionTypeBadge(device.connectionType)}</td>
+                      <td>{getStatusBadge(device.status, device)}</td>
+                      <td>{formatDateTime(device.lastCheckIn)}</td>
+                      <td>{device.firmwareVersion || 'Unknown'}</td>
+                      <td>
+                        <button 
+                          className="btn btn-sm btn-outline-info me-2"
+                          onClick={() => handleViewDeviceDetails(device)}
+                        >
+                          <FiEye className="me-1" /> Details
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
       </div>
       
-      {/* Usage Info Card */}
-      <div className="mt-6 bg-slate-800 border border-slate-700 rounded-md p-4 shadow-sm">
-        <h3 className="text-sm font-medium text-white flex items-center mb-2">
-          <FiInfo className="mr-2 text-green-500" size={16} />
-          How to Use O.MG Cables
-        </h3>
-        <ul className="text-xs text-slate-400 space-y-2">
-          <li className="flex">
-            <span className="mr-2">1.</span>
-            <span>Connect your O.MG Cable via USB or register using its network IP address</span>
-          </li>
-          <li className="flex">
-            <span className="mr-2">2.</span>
-            <span>Create a payload in the Payload Editor to deploy to your cables</span>
-          </li>
-          <li className="flex">
-            <span className="mr-2">3.</span>
-            <span>Monitor the status and activity of your cables in the Dashboard</span>
-          </li>
-          <li className="flex">
-            <span className="mr-2">4.</span>
-            <span>View results and captured data in the Results page</span>
-          </li>
-        </ul>
-      </div>
-      
-      {/* Add Network Device Modal */}
+      {/* Network Device Registration Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="bg-slate-800 border border-slate-700 rounded-lg shadow-lg w-full max-w-md p-6 relative">
-            <button 
-              onClick={() => setIsModalOpen(false)}
-              className="absolute top-3 right-3 text-slate-400 hover:text-white"
-            >
-              <FiX size={18} />
-            </button>
-            <div className="mb-5">
-              <h2 className="text-lg font-medium text-white">Register Network O.MG Cable</h2>
-              <p className="text-sm text-slate-400">Enter the details of your network-connected cable</p>
-            </div>
-            <div className="space-y-4">
-              <div className="relative border border-slate-600 rounded-md">
-                <label className="absolute -top-2.5 left-2 px-1 bg-slate-800 text-xs font-medium text-slate-400">
-                  Cable Name
-                </label>
-                <input
-                  type="text"
-                  name="name"
-                  value={formData.name}
-                  onChange={handleInputChange}
-                  placeholder="Conference Room Cable"
-                  className="w-full px-3 py-2 bg-transparent text-white text-sm focus:outline-none"
-                />
+        <div className="modal show d-block" tabIndex={-1}>
+          <div className="modal-dialog">
+            <div className="modal-content">
+              <div className="modal-header">
+                <h5 className="modal-title">Register Network O.MG Cable</h5>
+                <button 
+                  type="button" 
+                  className="btn-close" 
+                  onClick={() => {
+                    setIsModalOpen(false);
+                    resetForm();
+                  }}
+                ></button>
               </div>
-              <div className="relative border border-slate-600 rounded-md">
-                <label className="absolute -top-2.5 left-2 px-1 bg-slate-800 text-xs font-medium text-slate-400">
-                  IP Address
-                </label>
-                <input
-                  type="text"
-                  name="ipAddress"
-                  value={formData.ipAddress}
-                  onChange={handleInputChange}
-                  placeholder="192.168.1.100"
-                  className="w-full px-3 py-2 bg-transparent text-white text-sm focus:outline-none"
-                />
-              </div>
-              <div className="relative border border-slate-600 rounded-md">
-                <label className="absolute -top-2.5 left-2 px-1 bg-slate-800 text-xs font-medium text-slate-400">
-                  Firmware Version (optional)
-                </label>
-                <input
-                  type="text"
-                  name="firmwareVersion"
-                  value={formData.firmwareVersion}
-                  onChange={handleInputChange}
-                  placeholder="v1.0.0"
-                  className="w-full px-3 py-2 bg-transparent text-white text-sm focus:outline-none"
-                />
-              </div>
-              <div className="pt-4 flex justify-end space-x-3">
-                <button
-                  type="button"
-                  onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 bg-slate-700 border border-slate-600 rounded-md text-sm text-slate-300 hover:bg-slate-600"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={handleSubmit}
-                  disabled={isLoading}
-                  className="px-4 py-2 bg-green-500/10 border border-green-500/30 rounded-md text-sm text-green-500 hover:bg-green-500/20 flex items-center"
-                >
-                  {isLoading && <FiRefreshCw className="mr-2 animate-spin" size={14} />}
-                  Register Cable
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-      
-      {/* Add USB Device Modal */}
-      {isUsbModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="bg-slate-800 border border-slate-700 rounded-lg shadow-lg w-full max-w-md p-6 relative">
-            <button 
-              onClick={() => setIsUsbModalOpen(false)}
-              className="absolute top-3 right-3 text-slate-400 hover:text-white"
-            >
-              <FiX size={18} />
-            </button>
-            <div className="mb-5">
-              <h2 className="text-lg font-medium text-white">Connect USB O.MG Cable</h2>
-              <p className="text-sm text-slate-400">Plug in your O.MG Cable and enter its details</p>
-            </div>
-            <div className="space-y-4">
-              <div className="relative border border-slate-600 rounded-md">
-                <label className="absolute -top-2.5 left-2 px-1 bg-slate-800 text-xs font-medium text-slate-400">
-                  Cable Name
-                </label>
-                <input
-                  type="text"
-                  name="name"
-                  value={usbFormData.name}
-                  onChange={handleUsbInputChange}
-                  placeholder="USB O.MG Cable"
-                  className="w-full px-3 py-2 bg-transparent text-white text-sm focus:outline-none"
-                />
-              </div>
-              <div className="relative border border-slate-600 rounded-md">
-                <label className="absolute -top-2.5 left-2 px-1 bg-slate-800 text-xs font-medium text-slate-400">
-                  Firmware Version (optional)
-                </label>
-                <input
-                  type="text"
-                  name="firmwareVersion"
-                  value={usbFormData.firmwareVersion}
-                  onChange={handleUsbInputChange}
-                  placeholder="v1.0.0"
-                  className="w-full px-3 py-2 bg-transparent text-white text-sm focus:outline-none"
-                />
-              </div>
-              <div className="bg-purple-500/10 border border-purple-500/30 rounded p-3 text-sm text-purple-400">
-                <div className="flex items-start">
-                  <FiInfo className="mr-2 mt-0.5 flex-shrink-0" size={16} />
-                  <p>When you click "Connect Cable", your browser will ask you to select a USB device. Select your O.MG Cable from the list to establish a direct connection.</p>
+              <form onSubmit={registerDevice}>
+                <div className="modal-body">
+                  <div className="mb-3">
+                    <label htmlFor="name" className="form-label">Device Name</label>
+                    <input
+                      type="text"
+                      className="form-control"
+                      id="name"
+                      name="name"
+                      value={formData.name}
+                      onChange={handleInputChange}
+                      required
+                    />
+                  </div>
+                  <div className="mb-3">
+                    <label htmlFor="ipAddress" className="form-label">IP Address</label>
+                    <input
+                      type="text"
+                      className="form-control"
+                      id="ipAddress"
+                      name="ipAddress"
+                      placeholder="192.168.1.100"
+                      value={formData.ipAddress}
+                      onChange={handleInputChange}
+                      required
+                    />
+                  </div>
+                  <div className="mb-3">
+                    <label htmlFor="firmwareVersion" className="form-label">Firmware Version (Optional)</label>
+                    <input
+                      type="text"
+                      className="form-control"
+                      id="firmwareVersion"
+                      name="firmwareVersion"
+                      placeholder="1.0.0"
+                      value={formData.firmwareVersion}
+                      onChange={handleInputChange}
+                    />
+                  </div>
                 </div>
-              </div>
-              <div className="pt-4 flex justify-end space-x-3">
-                <button
-                  type="button"
-                  onClick={() => setIsUsbModalOpen(false)}
-                  className="px-4 py-2 bg-slate-700 border border-slate-600 rounded-md text-sm text-slate-300 hover:bg-slate-600"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={handleConnectViaUsb}
-                  disabled={isLoading}
-                  className="px-4 py-2 bg-purple-500/10 border border-purple-500/30 rounded-md text-sm text-purple-500 hover:bg-purple-500/20 flex items-center"
-                >
-                  {isLoading && <FiRefreshCw className="mr-2 animate-spin" size={14} />}
-                  <FiHardDrive className="mr-2" size={14} />
-                  Connect Cable
-                </button>
-              </div>
+                <div className="modal-footer">
+                  <button 
+                    type="button" 
+                    className="btn btn-secondary" 
+                    onClick={() => {
+                      setIsModalOpen(false);
+                      resetForm();
+                    }}
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    type="submit" 
+                    className="btn btn-primary"
+                    disabled={isLoading}
+                  >
+                    {isLoading ? (
+                      <>
+                        <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                        Registering...
+                      </>
+                    ) : (
+                      'Register Device'
+                    )}
+                  </button>
+                </div>
+              </form>
             </div>
           </div>
         </div>
       )}
       
-      {/* Device Info Panel Modal */}
-      {selectedDevice && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="bg-slate-800 border border-slate-700 rounded-lg shadow-lg w-full max-w-4xl p-6 relative max-h-[90vh] overflow-y-auto">
-            <button 
-              onClick={handleCloseDeviceDetails}
-              className="absolute top-3 right-3 text-slate-400 hover:text-white"
-            >
-              <FiX size={18} />
-            </button>
-            <div className="mb-5">
-              <h2 className="text-lg font-medium text-white">{selectedDevice.name} Details</h2>
-              <p className="text-sm text-slate-400">View detailed information about this O.MG Cable</p>
+      {/* USB Device Registration Modal */}
+      {isUsbModalOpen && (
+        <div className="modal show d-block" tabIndex={-1}>
+          <div className="modal-dialog">
+            <div className="modal-content">
+              <div className="modal-header">
+                <h5 className="modal-title">Register USB O.MG Cable</h5>
+                <button 
+                  type="button" 
+                  className="btn-close" 
+                  onClick={() => {
+                    setIsUsbModalOpen(false);
+                    resetUsbForm();
+                  }}
+                ></button>
+              </div>
+              <form onSubmit={registerUsbDevice}>
+                <div className="modal-body">
+                  <div className="alert alert-info">
+                    <FiInfo className="me-2" />
+                    You will be prompted to select your O.MG Cable from the USB devices list after clicking "Register Device".
+                  </div>
+                  <div className="mb-3">
+                    <label htmlFor="usbName" className="form-label">Device Name</label>
+                    <input
+                      type="text"
+                      className="form-control"
+                      id="usbName"
+                      name="name"
+                      value={usbFormData.name}
+                      onChange={handleUsbInputChange}
+                      required
+                    />
+                  </div>
+                  <div className="mb-3">
+                    <label htmlFor="usbFirmwareVersion" className="form-label">Firmware Version (Optional)</label>
+                    <input
+                      type="text"
+                      className="form-control"
+                      id="usbFirmwareVersion"
+                      name="firmwareVersion"
+                      placeholder="1.0.0"
+                      value={usbFormData.firmwareVersion}
+                      onChange={handleUsbInputChange}
+                    />
+                  </div>
+                </div>
+                <div className="modal-footer">
+                  <button 
+                    type="button" 
+                    className="btn btn-secondary" 
+                    onClick={() => {
+                      setIsUsbModalOpen(false);
+                      resetUsbForm();
+                    }}
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    type="submit" 
+                    className="btn btn-primary"
+                    disabled={isLoading}
+                  >
+                    {isLoading ? (
+                      <>
+                        <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                        Registering...
+                      </>
+                    ) : (
+                      'Register Device'
+                    )}
+                  </button>
+                </div>
+              </form>
             </div>
-            
-            <DeviceInfoPanel 
-              deviceInfo={{
-                port: {} as SerialPort, // Mock SerialPort object
-                reader: null,
-                writer: null,
-                connectionStatus: selectedDevice.status === 'online' ? 'connected' : 'disconnected',
-                info: {
-                  name: selectedDevice.name,
-                  firmwareVersion: selectedDevice.firmwareVersion,
-                  deviceId: selectedDevice.id.toString(),
-                  capabilities: {
-                    usbHid: true,
-                    wifi: selectedDevice.connectionType === 'network',
-                    bluetooth: false,
-                    storage: "4MB",
-                    supportedFeatures: ['DuckyScript', 'Payloads']
-                  }
-                }
-              }} 
-              onRefresh={() => fetchDevices()}
-            />
+          </div>
+        </div>
+      )}
+      
+      {/* Device Details Modal */}
+      {selectedDevice && (
+        <div className="modal show d-block" tabIndex={-1}>
+          <div className="modal-dialog modal-lg">
+            <div className="modal-content">
+              <div className="modal-header">
+                <h5 className="modal-title">Device Details: {selectedDevice.name}</h5>
+                <button 
+                  type="button" 
+                  className="btn-close" 
+                  onClick={handleCloseDeviceDetails}
+                ></button>
+              </div>
+              <div className="modal-body">
+                <DeviceInfoPanel 
+                  deviceInfo={{
+                    name: selectedDevice.name,
+                    port: {} as SerialPort, // Mock SerialPort object
+                    reader: null,
+                    writer: null,
+                    connectionStatus: selectedDevice.status === 'online' ? 'connected' : 'disconnected',
+                    info: {
+                      name: selectedDevice.name,
+                      firmwareVersion: selectedDevice.firmwareVersion,
+                      deviceId: selectedDevice.id.toString(),
+                      capabilities: {
+                        usbHid: true,
+                        wifi: selectedDevice.connectionType === 'network',
+                        bluetooth: false,
+                        storage: "4MB",
+                        supportedFeatures: ['DuckyScript', 'Payloads']
+                      }
+                    }
+                  }} 
+                  onRefresh={() => fetchDevices()}
+                />
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -759,4 +747,4 @@ const DeviceManagement: React.FC = () => {
   );
 };
 
-export default DeviceManagement; 
+export default DeviceManagement;
