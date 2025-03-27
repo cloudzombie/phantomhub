@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, ChangeEvent } from 'react';
 import { FiSave, FiCode, FiZap, FiInfo, FiAlertCircle, FiCheckCircle, FiRefreshCw, FiHardDrive, FiWifi, FiUpload, FiLink, FiList, FiFile, FiTrash2, FiPlusCircle, FiX, FiEdit2, FiEdit, FiCheck } from 'react-icons/fi';
 import axios from 'axios';
 import apiServiceInstance from '../services/ApiService';
+import { handleAuthError, isAuthError } from '../utils/tokenManager';
 import * as monaco from 'monaco-editor';
 import { registerDuckyScriptLanguage } from '../utils/duckyScriptLanguage';
 import { 
@@ -195,10 +196,9 @@ const PayloadEditor = () => {
     } catch (error) {
       console.error('Error fetching devices:', error);
       
-      // If we get a 401, redirect to login
-      if (axios.isAxiosError(error) && error.response?.status === 401) {
-        localStorage.removeItem('token');
-        window.location.href = '/login';
+      // If we get a 401, handle auth error without removing token
+      if (isAuthError(error)) {
+        handleAuthError(error, 'Authentication error while fetching devices');
       }
       // Handle 500 errors gracefully - likely due to empty collections
       else if (axios.isAxiosError(error) && error.response?.status === 500) {
@@ -234,10 +234,9 @@ const PayloadEditor = () => {
     } catch (error) {
       console.error('Error fetching payloads:', error);
       
-      // If we get a 401, redirect to login
-      if (axios.isAxiosError(error) && error.response?.status === 401) {
-        localStorage.removeItem('token');
-        window.location.href = '/login';
+      // If we get a 401, handle auth error without removing token
+      if (isAuthError(error)) {
+        handleAuthError(error, 'Authentication error while fetching devices');
       }
       // Handle 500 errors gracefully - likely due to empty collections
       else if (axios.isAxiosError(error) && error.response?.status === 500) {
@@ -268,10 +267,9 @@ const PayloadEditor = () => {
     } catch (error) {
       console.error('Error fetching scripts:', error);
       
-      // If we get a 401, redirect to login
-      if (axios.isAxiosError(error) && error.response?.status === 401) {
-        localStorage.removeItem('token');
-        window.location.href = '/login';
+      // If we get a 401, handle auth error without removing token
+      if (isAuthError(error)) {
+        handleAuthError(error, 'Authentication error while fetching devices');
       }
       // Handle 500 errors gracefully - likely due to empty collections
       else if (axios.isAxiosError(error) && error.response?.status === 500) {
@@ -429,8 +427,7 @@ const PayloadEditor = () => {
               type: 'error',
               text: 'Authentication failed. Please log in again.'
             });
-            localStorage.removeItem('token');
-            window.location.href = '/login';
+            handleAuthError(error, 'Authentication error while deleting payload');
           } else {
             setMessage({
               type: 'error',
@@ -539,10 +536,9 @@ const PayloadEditor = () => {
         text: 'Failed to save payload. Please try again.'
       });
       
-      // If we get a 401, redirect to login
-      if (axios.isAxiosError(error) && error.response?.status === 401) {
-        localStorage.removeItem('token');
-        window.location.href = '/login';
+      // If we get a 401, handle auth error without removing token
+      if (isAuthError(error)) {
+        handleAuthError(error, 'Authentication error while fetching devices');
       }
       
       return null;
@@ -716,10 +712,9 @@ const PayloadEditor = () => {
         text: 'Failed to deploy payload. Please try again.'
       });
       
-      // If we get a 401, redirect to login
-      if (axios.isAxiosError(error) && error.response?.status === 401) {
-        localStorage.removeItem('token');
-        window.location.href = '/login';
+      // If we get a 401, handle auth error without removing token
+      if (isAuthError(error)) {
+        handleAuthError(error, 'Authentication error while fetching devices');
       }
     } finally {
       setIsLoading(false);
@@ -816,10 +811,9 @@ const PayloadEditor = () => {
         text: 'Failed to create script. Please try again.'
       });
       
-      // If we get a 401, redirect to login
-      if (axios.isAxiosError(error) && error.response?.status === 401) {
-        localStorage.removeItem('token');
-        window.location.href = '/login';
+      // If we get a 401, handle auth error without removing token
+      if (isAuthError(error)) {
+        handleAuthError(error, 'Authentication error while fetching devices');
       }
     } finally {
       setIsLoading(false);
@@ -1123,10 +1117,9 @@ const PayloadEditor = () => {
         text: 'Failed to load script. Please try again.'
       });
       
-      // If we get a 401, redirect to login
-      if (axios.isAxiosError(error) && error.response?.status === 401) {
-        localStorage.removeItem('token');
-        window.location.href = '/login';
+      // If we get a 401, handle auth error without removing token
+      if (isAuthError(error)) {
+        handleAuthError(error, 'Authentication error while fetching devices');
       }
     }
   };
@@ -1177,10 +1170,9 @@ const PayloadEditor = () => {
         text: 'Failed to update script. Please try again.'
       });
       
-      // If we get a 401, redirect to login
-      if (axios.isAxiosError(error) && error.response?.status === 401) {
-        localStorage.removeItem('token');
-        window.location.href = '/login';
+      // If we get a 401, handle auth error without removing token
+      if (isAuthError(error)) {
+        handleAuthError(error, 'Authentication error while fetching devices');
       }
     } finally {
       setIsLoading(false);

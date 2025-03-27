@@ -17,6 +17,7 @@ import {
 import ThemeService from '../services/ThemeService';
 import ApiService from '../services/ApiService';
 import NotificationService from '../services/NotificationService';
+import { safeLogout } from '../utils/tokenManager';
 
 // Import UI components
 import ThemeToggle from '../components/ui/ThemeToggle';
@@ -240,10 +241,10 @@ const Settings = () => {
           localStorage.removeItem(`phantomhub_settings_${userId}`);
         }
         
-        // Log the user out
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
-        window.location.href = '/login';
+        // Log the user out safely without directly removing tokens
+        // This will redirect to login with the action=logout parameter
+        // which will properly handle the logout process
+        safeLogout();
       } else {
         // Check again in a minute
         autoLogoutTimerId = window.setTimeout(checkInactivity, 60000);

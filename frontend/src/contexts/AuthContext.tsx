@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import axios from 'axios';
 import { API_URL } from '../config';
+import { getToken, storeToken, storeUserData, getUserData } from '../utils/tokenManager';
 
 // Define user interface
 interface User {
@@ -277,6 +278,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Logout function - only call this when the user explicitly wants to logout
   const logout = () => {
     console.log('AuthContext: User explicitly logging out');
+    
+    // Save any user settings before logout
+    try {
+      // Import ApiService to use its instance
+      import('../services/ApiService').then(module => {
+        const apiService = module.default;
+        if (apiService && typeof apiService.saveUserSettings === 'function') {
+          console.log('AuthContext: Saving user settings before logout');
+          apiService.saveUserSettings();
+        }
+      }).catch(err => {
+        console.error('AuthContext: Error importing ApiService', err);
+      });
+    } catch (error) {
+      console.error('AuthContext: Error saving user settings before logout', error);
+    }
+    
+    // Clear user state
     setUser(null);
     
     // Clear all auth data

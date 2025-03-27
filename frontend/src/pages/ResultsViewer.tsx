@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { FiDownload, FiRefreshCw, FiFileText, FiInfo, FiAlertCircle, FiServer } from 'react-icons/fi';
 import axios from 'axios';
+import { handleAuthError, isAuthError } from '../utils/tokenManager';
 
 const API_URL = 'https://ghostwire-backend-e0380bcf4e0e.herokuapp.com/api';
 
@@ -57,10 +58,9 @@ const ResultsViewer = () => {
     } catch (error) {
       console.error('Error fetching results:', error);
       
-      // If we get a 401, redirect to login
-      if (axios.isAxiosError(error) && error.response?.status === 401) {
-        localStorage.removeItem('token');
-        window.location.href = '/login';
+      // If we get a 401, handle auth error without removing token
+      if (isAuthError(error)) {
+        handleAuthError(error, 'Authentication error while fetching results');
       }
       // Handle 500 errors gracefully - likely due to empty collections
       else if (axios.isAxiosError(error) && error.response?.status === 500) {
