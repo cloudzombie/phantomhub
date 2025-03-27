@@ -93,7 +93,26 @@
 
 /* Border color adjustments */
 .light-theme .border-slate-700 {
-  border-color: #cbd5e1;
+  border-color: var(--border-secondary);
+}
+
+.light-theme .border-r-slate-200 {
+  border-right-color: var(--border-secondary) !important;
+}
+
+.light-theme .border-slate-800,
+.light-theme .border-slate-700,
+.light-theme .border-slate-600 {
+  border-color: var(--border-secondary) !important;
+}
+
+.light-theme .glass .border-slate-700\/50,
+.light-theme .glass .border-slate-600\/50 {
+  border-color: var(--border-secondary) !important;
+}
+
+.light-theme .glass .border-red-500\/20 {
+  border-color: rgba(239, 68, 68, 0.3) !important;
 }
 
 /* Navigation sidebar specific overrides for light theme */
@@ -142,12 +161,6 @@
 .light-theme .bg-slate-800, 
 .light-theme .bg-slate-700 {
   background-color: var(--bg-secondary) !important;
-}
-
-.light-theme .border-slate-800, 
-.light-theme .border-slate-700, 
-.light-theme .border-slate-600 {
-  border-color: rgba(203, 213, 225, 0.5) !important;
 }
 
 .light-theme .text-white,
@@ -277,10 +290,6 @@
 /* Error message in API Health Status */
 .light-theme .glass .bg-red-500\/10 {
   background-color: rgba(254, 226, 226, 0.6) !important; /* Light red background */
-}
-
-.light-theme .glass .border-red-500\/20 {
-  border-color: rgba(239, 68, 68, 0.3) !important;
 }
 
 .light-theme .glass .text-red-400 {
