@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { FiDownload, FiRefreshCw, FiFileText, FiInfo, FiAlertCircle, FiServer } from 'react-icons/fi';
 import axios from 'axios';
-import { handleAuthError, isAuthError } from '../utils/tokenManager';
+import { handleAuthError, isAuthError, getToken } from '../utils/tokenManager';
 
 const API_URL = 'https://ghostwire-backend-e0380bcf4e0e.herokuapp.com/api';
 
@@ -37,7 +37,7 @@ const ResultsViewer = () => {
     setIsLoading(true);
     
     try {
-      const token = localStorage.getItem('token');
+      const token = getToken();
       if (!token) {
         console.error('No authentication token found');
         window.location.href = '/login';

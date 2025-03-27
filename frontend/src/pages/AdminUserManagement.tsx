@@ -4,6 +4,7 @@ import axios from 'axios';
 // Import directly from the absolute path to avoid module resolution issues
 import { API_URL } from '../config.ts';
 import { useAuth } from '../contexts/AuthContext.tsx';
+import { getToken } from '../utils/tokenManager';
 
 // Component imports
 import { Card } from '../components/ui/Card';
@@ -57,7 +58,7 @@ const AdminUserManagement: React.FC = () => {
     const fetchUsers = async () => {
       try {
         setLoading(true);
-        const token = localStorage.getItem('token');
+        const token = getToken();
         const response = await axios.get(`${API_URL}/admin/users`, {
           params: {
             page,
@@ -122,7 +123,7 @@ const AdminUserManagement: React.FC = () => {
         
         // Refresh user list
         setPage(1);
-        const token = localStorage.getItem('token');
+        const token = getToken();
         const refreshResponse = await axios.get(`${API_URL}/admin/users`, {
           params: { page: 1, limit: 10 },
           headers: {

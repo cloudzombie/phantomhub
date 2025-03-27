@@ -4,6 +4,7 @@ import axios from 'axios';
 // Import directly from the absolute path to avoid module resolution issues
 import { API_URL } from '../config.ts';
 import { useAuth } from '../contexts/AuthContext.tsx';
+import { getToken } from '../utils/tokenManager';
 
 // Component imports
 import { Card } from '../components/ui/Card';
@@ -99,7 +100,7 @@ const AdminDashboard: React.FC = () => {
     const fetchSystemStats = async () => {
       try {
         if (isMounted) setLoading(true);
-        const token = localStorage.getItem('token');
+        const token = getToken();
         
         console.log('Fetching system stats with token:', token ? 'Token exists' : 'No token');
         
@@ -138,7 +139,7 @@ const AdminDashboard: React.FC = () => {
       try {
         if (!isMounted) return;
         
-        const token = localStorage.getItem('token');
+        const token = getToken();
         console.log('Fetching system health');
         
         const response = await axios.get(`${API_URL}/admin/system/health`, {

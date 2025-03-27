@@ -400,6 +400,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // First check if we have a user in state
     if (user) {
       console.log('AuthContext: User already in state, authenticated');
+      // CRITICAL: Always ensure the token is in axios headers for Heroku deployment
+      const token = getToken();
+      if (token) {
+        axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+      }
       return true;
     }
     
@@ -411,16 +416,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (token && userData) {
       console.log('AuthContext: Found valid token and user data in storage');
       
+      // CRITICAL: ALWAYS set axios headers for Heroku production deployment
+      console.log('AuthContext: Ensuring Authorization header is set for Heroku');
+      axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+      
+      // Force token into storage again for maximum persistence
+      try {
+        localStorage.setItem('token', token);
+        sessionStorage.setItem('token', token);
+      } catch (err) {
+        console.warn('AuthContext: Error ensuring token in storage:', err);
+      }
+      
       // If we have valid token and user data but no user state, set the user state
       if (userData.id && !user) {
         console.log('AuthContext: Setting user state from storage in isAuthenticated');
         setUser(userData);
-        
-        // Also ensure axios headers are set
-        if (!axios.defaults.headers.common['Authorization']) {
-          console.log('AuthContext: Setting missing Authorization header in isAuthenticated');
-          axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-        }
         
         // Dispatch authentication event
         setTimeout(() => {

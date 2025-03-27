@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, ChangeEvent } from 'react';
 import { FiSave, FiCode, FiZap, FiInfo, FiAlertCircle, FiCheckCircle, FiRefreshCw, FiHardDrive, FiWifi, FiUpload, FiLink, FiList, FiFile, FiTrash2, FiPlusCircle, FiX, FiEdit2, FiEdit, FiCheck } from 'react-icons/fi';
 import axios from 'axios';
 import apiServiceInstance from '../services/ApiService';
-import { handleAuthError, isAuthError } from '../utils/tokenManager';
+import { handleAuthError, isAuthError, getToken, getUserData } from '../utils/tokenManager';
 import * as monaco from 'monaco-editor';
 import { registerDuckyScriptLanguage } from '../utils/duckyScriptLanguage';
 import { 
@@ -171,7 +171,7 @@ const PayloadEditor = () => {
   
   const fetchDevices = async () => {
     try {
-      const token = localStorage.getItem('token');
+      const token = getToken();
       if (!token) {
         console.error('No authentication token found');
         window.location.href = '/login';
@@ -217,7 +217,7 @@ const PayloadEditor = () => {
   
   const fetchPayloads = async () => {
     try {
-      const token = localStorage.getItem('token');
+      const token = getToken();
       if (!token) {
         console.error('No authentication token found');
         window.location.href = '/login';
@@ -248,7 +248,7 @@ const PayloadEditor = () => {
   
   const fetchScripts = async () => {
     try {
-      const token = localStorage.getItem('token');
+      const token = getToken();
       if (!token) {
         console.error('No authentication token found');
         window.location.href = '/login';
@@ -281,7 +281,7 @@ const PayloadEditor = () => {
   
   const fetchScriptsForPayload = async (payloadId: string) => {
     try {
-      const token = localStorage.getItem('token');
+      const token = getToken();
       if (!token) {
         console.error('No authentication token found');
         window.location.href = '/login';
@@ -329,7 +329,7 @@ const PayloadEditor = () => {
     try {
       setIsLoading(true);
       
-      const token = localStorage.getItem('token');
+      const token = getToken();
       if (!token) {
         console.error('No authentication token found');
         window.location.href = '/login';
@@ -339,7 +339,7 @@ const PayloadEditor = () => {
       console.log(`Deleting payload with ID: ${payloadId}`);
       
       // Get user data to check role
-      const userData = localStorage.getItem('user');
+      const userData = getUserData();
       let userRole = 'user';
       if (userData) {
         try {
@@ -477,7 +477,7 @@ const PayloadEditor = () => {
         return null;
       }
       
-      const token = localStorage.getItem('token');
+      const token = getToken();
       if (!token) {
         console.error('No authentication token found');
         window.location.href = '/login';
@@ -592,7 +592,7 @@ const PayloadEditor = () => {
         }
         
         // First, create a deployment record on the backend
-        const token = localStorage.getItem('token');
+        const token = getToken();
         if (!token) {
           console.error('No authentication token found');
           window.location.href = '/login';
@@ -678,7 +678,7 @@ const PayloadEditor = () => {
         }
       } else {
         // For network devices, use the API
-        const token = localStorage.getItem('token');
+        const token = getToken();
         if (!token) {
           console.error('No authentication token found');
           window.location.href = '/login';
@@ -741,7 +741,7 @@ const PayloadEditor = () => {
     try {
       setIsLoading(true);
       
-      const token = localStorage.getItem('token');
+      const token = getToken();
       if (!token) {
         console.error('No authentication token found');
         window.location.href = '/login';
@@ -875,7 +875,7 @@ const PayloadEditor = () => {
       
       setIsLoading(true);
       
-      const token = localStorage.getItem('token');
+      const token = getToken();
       if (!token) {
         console.error('No authentication token found');
         window.location.href = '/login';
@@ -1032,7 +1032,7 @@ const PayloadEditor = () => {
     try {
       setIsLoading(true);
       
-      const token = localStorage.getItem('token');
+      const token = getToken();
       if (!token) {
         console.error('No authentication token found');
         return;
@@ -1085,7 +1085,7 @@ const PayloadEditor = () => {
   
   const openScriptEditor = async (script: Script) => {
     try {
-      const token = localStorage.getItem('token');
+      const token = getToken();
       if (!token) {
         console.error('No authentication token found');
         window.location.href = '/login';
@@ -1130,7 +1130,7 @@ const PayloadEditor = () => {
       
       setIsLoading(true);
       
-      const token = localStorage.getItem('token');
+      const token = getToken();
       if (!token) {
         console.error('No authentication token found');
         window.location.href = '/login';
@@ -1197,7 +1197,7 @@ const PayloadEditor = () => {
       
       setIsLoading(true);
       
-      const token = localStorage.getItem('token');
+      const token = getToken();
       if (!token) {
         console.error('No authentication token found');
         window.location.href = '/login';
@@ -1260,7 +1260,7 @@ const PayloadEditor = () => {
   // Add this helper function to get the current user from storage
   const getCurrentUserFromStorage = () => {
     try {
-      const userData = localStorage.getItem('user');
+      const userData = getUserData();
       if (userData) {
         return JSON.parse(userData);
       }
@@ -1273,7 +1273,7 @@ const PayloadEditor = () => {
   // Add this function near the top of the component, before it's used
   const getCurrentUserRole = (): string => {
     try {
-      const userData = localStorage.getItem('user');
+      const userData = getUserData();
       if (userData) {
         const user = JSON.parse(userData);
         return user.role || 'user';

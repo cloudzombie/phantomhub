@@ -1,6 +1,7 @@
 import { io, Socket } from 'socket.io-client';
 import apiServiceInstance, { ApiService } from './ApiService';
 import { getSocket } from '../utils/socketUtils';
+import { getToken, getUserData } from '../utils/tokenManager';
 
 interface NotificationSettings {
   deviceStatus: boolean;
@@ -39,7 +40,8 @@ class NotificationService {
     });
     
     // Try to connect if we already have a token
-    if (localStorage.getItem('token')) {
+    const token = getToken();
+    if (token) {
       // Delay initial connection attempt to allow ApiService to initialize
       setTimeout(() => this.connect(), 1000);
     }
@@ -84,7 +86,7 @@ class NotificationService {
 
   private getCurrentUserId(): string | null {
     try {
-      const userData = localStorage.getItem('user');
+      const userData = getUserData();
       if (userData) {
         const user = JSON.parse(userData);
         return user.id || null;
@@ -141,7 +143,8 @@ class NotificationService {
 
   public connect(): void {
     // Check if we have a token before attempting to connect
-    if (!localStorage.getItem('token')) {
+    const token = getToken();
+    if (!token) {
       console.log('NotificationService: No auth token available, skipping connection');
       return;
     }
@@ -225,7 +228,7 @@ class NotificationService {
       
       // Handle authentication errors
       if (error.message && error.message.includes('Authentication')) {
-        const token = localStorage.getItem('token');
+        const token = getToken();
         console.warn('NotificationService: Authentication error with socket connection. Token exists:', !!token);
         
         if (this.connectionAttempts > 2) {

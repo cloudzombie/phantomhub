@@ -115,8 +115,13 @@ const ApiHealthStatus: React.FC<ApiHealthStatusProps> = ({ onStatusChange }) => 
       const healthEndpoint = `${apiUrl}/system/health`;
       console.log('Checking API health at:', healthEndpoint);
       
-      // Make a direct axios request without using the service
-      const response = await axios.get(healthEndpoint);
+      // Create a clean axios instance without auth headers for health check
+      // This ensures the health check isn't affected by authentication state
+      const cleanAxios = axios.create();
+      delete cleanAxios.defaults.headers.common['Authorization'];
+      
+      // Make a direct request without authentication headers
+      const response = await cleanAxios.get(healthEndpoint);
       
       // Calculate response time
       const responseTime = Date.now() - startTime;

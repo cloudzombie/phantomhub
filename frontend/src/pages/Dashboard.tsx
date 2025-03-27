@@ -4,6 +4,7 @@ import axios from 'axios';
 import { Socket } from 'socket.io-client';
 import DeviceInfoPanel from '../components/DeviceInfoPanel';
 import apiServiceInstance, { ApiService } from '../services/ApiService';
+import { getToken } from '../utils/tokenManager';
 
 const API_URL = 'https://ghostwire-backend-e0380bcf4e0e.herokuapp.com/api';
 
@@ -123,7 +124,7 @@ const Dashboard = () => {
     setIsLoading(true);
     setError(null);
     try {
-      const token = localStorage.getItem('token');
+      const token = getToken();
       if (!token) {
         console.error('No authentication token found');
         window.location.href = '/login';

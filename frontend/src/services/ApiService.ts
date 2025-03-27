@@ -95,7 +95,17 @@ class ApiService {
 
   private getCurrentUserId(): string | null {
     try {
-      // Try localStorage first
+      // Use tokenManager's getUserData for consistent user data handling
+      import('../utils/tokenManager').then(({ getUserData }) => {
+        const userData = getUserData();
+        if (userData) {
+          return userData.id || null;
+        }
+      }).catch(err => {
+        console.error('ApiService: Error importing tokenManager:', err);
+      });
+      
+      // Fallback to direct storage access if import fails
       let userData = localStorage.getItem('user');
       
       // If not in localStorage, try sessionStorage as backup

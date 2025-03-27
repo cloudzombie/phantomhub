@@ -107,45 +107,55 @@ export const storeToken = (token: string): void => {
     // Continue execution - don't let storage errors prevent setting the header
   }
   
-  // Set the Authorization header for axios
+  // CRITICAL: Set the Authorization header for axios - this is essential for Heroku deployment
   axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
   
-  // Optional token sync with backend - use direct axios to avoid circular dependency
+  // Force a synchronous token verification to ensure it's properly set
+  try {
+    const verifyToken = localStorage.getItem('token');
+    if (verifyToken !== token) {
+      console.warn('TokenManager: Token verification failed, forcing token into storage');
+      localStorage.setItem('token', token);
+      sessionStorage.setItem('token', token);
+    }
+  } catch (err) {
+    console.error('TokenManager: Error during token verification:', err);
+  }
+  
+  // Token sync with backend - use direct axios to avoid circular dependency
+  // This is essential for maintaining session state on Heroku
   if (token && token.length > 20) {
-    // Use a small delay to ensure token is set in storage first
-    setTimeout(() => {
-      console.log('TokenManager: Syncing token with database...');
+    console.log('TokenManager: Syncing token with database...');
+    
+    // Use direct axios call instead of ApiService to avoid circular dependency
+    // Always use the Heroku URL as specified in the application configuration
+    const apiUrl = 'https://ghostwire-backend-e0380bcf4e0e.herokuapp.com/api';
+    
+    // Set the Authorization header globally before making the request
+    axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+    
+    // Make the request with explicit headers as well for redundancy
+    axios.post(`${apiUrl}/auth/sync-token`, { token }, {
+      headers: { 
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      }
+    })
+    .then(() => {
+      console.log('TokenManager: Token synced with database successfully');
       
-      // Use direct axios call instead of ApiService to avoid circular dependency
-      // Always use the Heroku URL as specified in the application configuration
-      const apiUrl = 'https://ghostwire-backend-e0380bcf4e0e.herokuapp.com/api';
-      
-      // Set the Authorization header globally before making the request
-      axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-      
-      // Make the request with explicit headers as well for redundancy
-      axios.post(`${apiUrl}/auth/sync-token`, { token }, {
-        headers: { 
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      })
-      .then(() => {
-        console.log('TokenManager: Token synced with database successfully');
-        
-        // Double-check token still exists in storage after sync
-        const verifyToken = localStorage.getItem('token');
-        if (!verifyToken) {
-          console.warn('TokenManager: Token disappeared from localStorage after sync, restoring');
-          localStorage.setItem('token', token);
-          sessionStorage.setItem('token', token);
-        }
-      })
-      .catch(() => {
-        // Non-critical operation, just log error - don't remove token
-        console.warn('TokenManager: Failed to sync token with database');
-      });
-    }, 100);
+      // Double-check token still exists in storage after sync
+      const verifyToken = localStorage.getItem('token');
+      if (!verifyToken) {
+        console.warn('TokenManager: Token disappeared from localStorage after sync, restoring');
+        localStorage.setItem('token', token);
+        sessionStorage.setItem('token', token);
+      }
+    })
+    .catch(() => {
+      // Non-critical operation, just log error - don't remove token
+      console.warn('TokenManager: Failed to sync token with database');
+    });
   }
   
   console.log('TokenManager: Token stored and Authorization header set');
