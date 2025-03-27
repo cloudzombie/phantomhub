@@ -17,6 +17,7 @@ const Login = () => {
   const [successMessage, setSuccessMessage] = useState('');
   const navigate = useNavigate();
   const { isAuthenticated, logout } = useAuth();
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
   
   // Check for logout action and handle authentication
   useEffect(() => {
@@ -24,19 +25,27 @@ const Login = () => {
     const params = new URLSearchParams(window.location.search);
     const action = params.get('action');
     
-    if (action === 'logout') {
+    if (action === 'logout' && !isLoggingOut) {
+      // Set flag to prevent multiple logout calls
+      setIsLoggingOut(true);
+      
       // Use the AuthContext's logout method for proper cleanup
       console.log('Login: Handling logout action from URL parameter');
-      logout();
-      // Clear the URL parameter to prevent repeated logout
-      window.history.replaceState({}, document.title, '/login');
-
-    } else if (isAuthenticated()) {
-      // If already authenticated and not logging out, redirect to home
-      console.log('Login: User already authenticated, redirecting to home');
-      navigate('/');
+      logout().finally(() => {
+        // Clear the URL parameter to prevent repeated logout
+        window.history.replaceState({}, document.title, '/login');
+      });
+    } else {
+      // Check authentication status
+      isAuthenticated().then(isAuth => {
+        if (isAuth) {
+          // If already authenticated and not logging out, redirect to home
+          console.log('Login: User already authenticated, redirecting to home');
+          navigate('/');
+        }
+      });
     }
-  }, [isAuthenticated, navigate, logout]);
+  }, [isAuthenticated, navigate, logout, isLoggingOut]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
