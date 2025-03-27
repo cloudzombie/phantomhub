@@ -119,6 +119,56 @@ const DeviceManagement: React.FC = () => {
     stealthMode: false
   });
   
+  // Manual refresh function with debounce
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const refreshTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const lastRefreshTimeRef = useRef<number>(0);
+  const REFRESH_COOLDOWN = 5000; // 5 second cooldown between refreshes
+
+  const handleRefresh = async () => {
+    const now = Date.now();
+    if (isLoading || isRefreshing || (now - lastRefreshTimeRef.current < REFRESH_COOLDOWN)) {
+      return;
+    }
+    
+    // Clear any pending refresh
+    if (refreshTimeoutRef.current) {
+      clearTimeout(refreshTimeoutRef.current);
+    }
+
+    setIsRefreshing(true);
+    setErrorMessage(null);
+    
+    try {
+      const response = await apiServiceInstance.get('/devices/detailed');
+      if (response.data?.success) {
+        setDevices(response.data.data);
+        lastRefreshTimeRef.current = now;
+      }
+    } catch (error) {
+      console.error('Error refreshing devices:', error);
+      if (isAuthError(error)) {
+        handleAuthError(error, 'Authentication error in DeviceManagement');
+      } else {
+        setErrorMessage((error as any)?.response?.data?.message || 'Error refreshing devices');
+      }
+    } finally {
+      // Set a timeout before allowing another refresh
+      refreshTimeoutRef.current = setTimeout(() => {
+        setIsRefreshing(false);
+      }, REFRESH_COOLDOWN);
+    }
+  };
+
+  // Cleanup refresh timeout
+  useEffect(() => {
+    return () => {
+      if (refreshTimeoutRef.current) {
+        clearTimeout(refreshTimeoutRef.current);
+      }
+    };
+  }, []);
+  
   // Fetch devices and set up socket subscription
   useEffect(() => {
     let isMounted = true;
@@ -172,50 +222,6 @@ const DeviceManagement: React.FC = () => {
     };
   }, []); // No dependencies needed as we're using the subscription pattern
 
-  // Manual refresh function with debounce
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const refreshTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-
-  const handleRefresh = async () => {
-    if (isLoading || isRefreshing) return;
-    
-    // Clear any pending refresh
-    if (refreshTimeoutRef.current) {
-      clearTimeout(refreshTimeoutRef.current);
-    }
-
-    setIsRefreshing(true);
-    setErrorMessage(null);
-    
-    try {
-      const response = await apiServiceInstance.get('/devices/detailed');
-      if (response.data?.success) {
-        setDevices(response.data.data);
-      }
-    } catch (error) {
-      console.error('Error refreshing devices:', error);
-      if (isAuthError(error)) {
-        handleAuthError(error, 'Authentication error in DeviceManagement');
-      } else {
-        setErrorMessage((error as any)?.response?.data?.message || 'Error refreshing devices');
-      }
-    } finally {
-      // Set a timeout before allowing another refresh
-      refreshTimeoutRef.current = setTimeout(() => {
-        setIsRefreshing(false);
-      }, 5000); // 5 second cooldown
-    }
-  };
-
-  // Cleanup refresh timeout
-  useEffect(() => {
-    return () => {
-      if (refreshTimeoutRef.current) {
-        clearTimeout(refreshTimeoutRef.current);
-      }
-    };
-  }, []);
-  
   // Handle form input changes
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
