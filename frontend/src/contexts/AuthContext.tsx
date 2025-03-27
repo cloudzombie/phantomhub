@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import axios from 'axios';
 import { API_URL } from '../config';
-import { getToken, storeToken, storeUserData, getUserData, isAuthenticated as checkAuthStatus, clearAuthData } from '../utils/tokenManager';
+import { getToken, storeToken, storeUserData, getUserData, isAuthenticated as checkAuthStatus, clearAuthData, safeLogout } from '../utils/tokenManager';
 
 // Define user interface
 interface User {
@@ -312,35 +312,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Logout function - only call this when the user explicitly wants to logout
   const logout = async () => {
-    console.log('AuthContext: User explicitly logging out');
-    
-    // Save any user settings before logout
     try {
-      // Import ApiService to use its instance
-      import('../services/ApiService').then(module => {
-        const apiService = module.default;
-        if (apiService && typeof apiService.saveUserSettings === 'function') {
-          console.log('AuthContext: Saving user settings before logout');
-          apiService.saveUserSettings();
-        }
-      }).catch(err => {
-        console.error('AuthContext: Error importing ApiService', err);
-      });
+      // Use the safeLogout function which handles both clearing data and redirection
+      await safeLogout();
     } catch (error) {
-      console.error('AuthContext: Error saving user settings before logout', error);
+      console.error('AuthContext: Error during logout:', error);
+      // Even if there's an error, force a redirect to login
+      window.location.replace('/login?action=logout');
     }
-    
-    // Clear user state
-    setUser(null);
-    
-    // Clear all auth data including HTTP-only cookies
-    await clearAuthData();
-    
-    // Dispatch logout event
-    document.dispatchEvent(new CustomEvent('user-logged-out'));
-    
-    // Redirect to login page
-    window.location.href = '/login';
   };
 
   // Check if user is authenticated - more robust implementation that works with HTTP-only cookies

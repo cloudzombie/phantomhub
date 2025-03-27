@@ -186,25 +186,16 @@ export const isAuthError = (error: any): boolean => {
 };
 
 /**
- * Safe logout that redirects to login page with proper action parameter
- * This should be used instead of directly manipulating localStorage
- */
-export const safeLogout = async (): Promise<void> => {
-  // Clear auth data first (including HTTP-only cookies)
-  await clearAuthData();
-  // Redirect to login with a special parameter that will handle logout properly
-  window.location.href = '/login?action=logout';
-};
-
-/**
  * Clear all authentication data
  * This now clears both localStorage and HTTP-only cookies
  */
 export const clearAuthData = async (): Promise<void> => {
   try {
-    // Remove token and user data from localStorage
+    // Remove token and user data from localStorage and sessionStorage
     localStorage.removeItem('token');
     localStorage.removeItem('user');
+    sessionStorage.removeItem('token');
+    sessionStorage.removeItem('user');
     
     // Clear Authorization header
     delete axios.defaults.headers.common['Authorization'];
@@ -222,4 +213,16 @@ export const clearAuthData = async (): Promise<void> => {
   } catch (err) {
     console.error('TokenManager: Error clearing auth data:', err);
   }
+};
+
+/**
+ * Safe logout that redirects to login page with proper action parameter
+ * This should be used instead of directly manipulating localStorage
+ */
+export const safeLogout = async (): Promise<void> => {
+  // Clear auth data first (including HTTP-only cookies)
+  await clearAuthData();
+  
+  // Force a hard redirect to login page
+  window.location.replace('/login?action=logout');
 };
