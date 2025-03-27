@@ -1,6 +1,6 @@
 import axios, { AxiosInstance, AxiosRequestConfig } from 'axios';
 import { io, Socket } from 'socket.io-client';
-import { getToken } from '../utils/tokenManager';
+import { getToken, getUserData } from '../utils/tokenManager';
 
 interface ApiConfig {
   endpoint: string;
@@ -96,43 +96,11 @@ class ApiService {
   private getCurrentUserId(): string | null {
     try {
       // Use tokenManager's getUserData for consistent user data handling
-      import('../utils/tokenManager').then(({ getUserData }) => {
-        const userData = getUserData();
-        if (userData) {
-          return userData.id || null;
-        }
-      }).catch(err => {
-        console.error('ApiService: Error importing tokenManager:', err);
-      });
-      
-      // Fallback to direct storage access if import fails
-      let userData = localStorage.getItem('user');
-      
-      // If not in localStorage, try sessionStorage as backup
-      if (!userData || userData === 'undefined' || userData === 'null') {
-        userData = sessionStorage.getItem('user');
-        if (userData && userData !== 'undefined' && userData !== 'null') {
-          console.log('ApiService: Restored user data from sessionStorage');
-          // Restore to localStorage
-          localStorage.setItem('user', userData);
-        }
+      const userData = getUserData();
+      if (userData && userData.id) {
+        return userData.id;
       }
-      
-      // If still no valid user data, return null
-      if (!userData || userData === 'undefined' || userData === 'null') {
-        return null;
-      }
-      
-      const user = JSON.parse(userData);
-      
-      // Log the user object to help with debugging
-      console.log('ApiService: User data from storage:', { 
-        hasId: !!user?.id, 
-        keys: Object.keys(user || {}) 
-      });
-      
-      // Check for both id and _id fields to handle different formats
-      return user?.id || user?._id || null;
+      return null;
     } catch (error) {
       console.error('ApiService: Error getting current user ID:', error);
       // CRITICAL: Do NOT remove user data on parse error - just log it

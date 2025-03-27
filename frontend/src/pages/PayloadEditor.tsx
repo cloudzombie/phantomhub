@@ -342,13 +342,10 @@ const PayloadEditor = () => {
       const userData = getUserData();
       let userRole = 'user';
       if (userData) {
-        try {
-          const user = JSON.parse(userData);
-          userRole = user.role;
-          console.log('User role from localStorage:', userRole);
-        } catch (e) {
-          console.error('Error parsing user data:', e);
-        }
+        // userData is already parsed by getUserData, no need to parse again
+        userRole = userData.role || 'user';
+        console.log('User role from tokenManager:', userRole);
+      }
       }
       
       // Check if user has permission to delete
@@ -1261,9 +1258,8 @@ const PayloadEditor = () => {
   const getCurrentUserFromStorage = () => {
     try {
       const userData = getUserData();
-      if (userData) {
-        return JSON.parse(userData);
-      }
+      // userData is already parsed by getUserData, no need to parse again
+      return userData;
     } catch (error) {
       console.error('Error parsing user data:', error);
     }
@@ -1275,8 +1271,8 @@ const PayloadEditor = () => {
     try {
       const userData = getUserData();
       if (userData) {
-        const user = JSON.parse(userData);
-        return user.role || 'user';
+        // userData is already parsed by getUserData, no need to parse again
+        return userData.role || 'user';
       }
     } catch (error) {
       console.error('Error parsing user data:', error);

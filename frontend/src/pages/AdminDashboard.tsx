@@ -97,6 +97,20 @@ const AdminDashboard: React.FC = () => {
     let isMounted = true;
     const controller = new AbortController();
     
+    // Add exponential backoff retry logic for rate limiting
+    const fetchWithRetry = async (url: string, options: any, retries = 3, delay = 2000) => {
+      try {
+        return await axios.get(url, options);
+      } catch (error: any) {
+        if (error.response && error.response.status === 429 && retries > 0) {
+          console.log(`Rate limited, retrying in ${delay}ms... (${retries} retries left)`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+          return fetchWithRetry(url, options, retries - 1, delay * 2);
+        }
+        throw error;
+      }
+    };
+    
     const fetchSystemStats = async () => {
       try {
         if (isMounted) setLoading(true);
@@ -104,13 +118,14 @@ const AdminDashboard: React.FC = () => {
         
         console.log('Fetching system stats with token:', token ? 'Token exists' : 'No token');
         
-        const response = await axios.get(`${API_URL}/admin/system/stats`, {
+        // Use fetchWithRetry to handle rate limiting
+        const response = await fetchWithRetry(`${API_URL}/admin/system/stats`, {
           headers: {
             Authorization: `Bearer ${token}`
           },
           signal: controller.signal,
-          timeout: 10000 // 10 second timeout
-        });
+          timeout: 15000 // Increased timeout to 15 seconds
+        }, 3, 2000);
         
         console.log('System stats response received');
         
@@ -127,8 +142,13 @@ const AdminDashboard: React.FC = () => {
         }
       } catch (err: any) {
         if (isMounted) {
-          console.error('Error fetching system stats:', err);
-          setError(err.message || 'Error connecting to the server');
+          if (err.response && err.response.status === 429) {
+            console.error('Rate limit exceeded. Please try again later.');
+            setError('Rate limit exceeded. Please try again in a few minutes.');
+          } else {
+            console.error('Error fetching system stats:', err);
+            setError(err.message || 'Error connecting to the server');
+          }
         }
       } finally {
         if (isMounted) setLoading(false);
@@ -142,13 +162,14 @@ const AdminDashboard: React.FC = () => {
         const token = getToken();
         console.log('Fetching system health');
         
-        const response = await axios.get(`${API_URL}/admin/system/health`, {
+        // Use fetchWithRetry to handle rate limiting
+        const response = await fetchWithRetry(`${API_URL}/admin/system/health`, {
           headers: {
             Authorization: `Bearer ${token}`
           },
           signal: controller.signal,
-          timeout: 10000 // 10 second timeout
-        });
+          timeout: 15000 // Increased timeout to 15 seconds
+        }, 3, 2000);
         
         console.log('System health response received');
         
@@ -158,9 +179,15 @@ const AdminDashboard: React.FC = () => {
         } else if (isMounted) {
           console.error('API error:', response.data);
         }
-      } catch (err) {
+      } catch (err: any) {
         if (isMounted) {
-          console.error('Error fetching system health:', err);
+          if (err.response && err.response.status === 429) {
+            console.error('Rate limit exceeded. Please try again later.');
+            setError('Rate limit exceeded. Please try again in a few minutes.');
+          } else {
+            console.error('Error fetching system health:', err);
+            setError(err.message || 'Error connecting to the server');
+          }
           // Ensure loading is set to false even if this request fails
           setLoading(false);
         }

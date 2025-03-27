@@ -33,9 +33,8 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
       if (!authenticated) {
         console.log('ProtectedRoute: Not authenticated via AuthContext, checking tokenManager');
         const token = getToken();
-        const userData = getUserData();
-        
-        if (token && userData) {
+        // Don't rely on userData being valid - just check if token exists
+        if (token) {
           console.log('ProtectedRoute: Found valid token and user data via tokenManager');
           // Force token into axios headers
           axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
@@ -63,8 +62,10 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   }
   
   // Check authentication after verification is complete
-  if (!isAuthenticated() && !getToken()) {
-    console.log('ProtectedRoute: Not authenticated, redirecting to login');
+  // CRITICAL: Only check token existence for authentication persistence
+  const token = getToken();
+  if (!token) {
+    console.log('ProtectedRoute: No token found, redirecting to login');
     return <Navigate to="/login" replace />;
   }
   

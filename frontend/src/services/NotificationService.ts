@@ -88,8 +88,8 @@ class NotificationService {
     try {
       const userData = getUserData();
       if (userData) {
-        const user = JSON.parse(userData);
-        return user.id || null;
+        // getUserData already returns the parsed object, no need to parse again
+        return userData.id || null;
       }
     } catch (error) {
       console.error('Error getting current user ID:', error);

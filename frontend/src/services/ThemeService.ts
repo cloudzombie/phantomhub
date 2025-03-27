@@ -1,3 +1,5 @@
+import { getUserData } from '../utils/tokenManager';
+
 type ThemeType = 'dark' | 'light' | 'system';
 
 interface ThemeConfig {
@@ -44,13 +46,13 @@ class ThemeService {
 
   private getCurrentUserId(): string | null {
     try {
-      const userData = localStorage.getItem('user');
+      // Use tokenManager's getUserData instead of direct localStorage access
+      const userData = getUserData();
       if (userData) {
-        const user = JSON.parse(userData);
-        return user.id || null;
+        return userData.id || null;
       }
     } catch (error) {
-      console.error('Error getting current user ID:', error);
+      console.error('ThemeService: Error getting current user ID:', error);
     }
     return null;
   }

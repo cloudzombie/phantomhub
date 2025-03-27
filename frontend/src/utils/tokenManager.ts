@@ -208,12 +208,14 @@ export const getUserData = (): any => {
     }
     
     // Safety check - if no data available, return null
-    if (!userDataString) {
+    if (!userDataString || userDataString === 'undefined' || userDataString === 'null') {
+      console.log('TokenManager: No valid user data found in storage');
       return null;
     }
     
-    // Parse the data with validation
-    const userData = JSON.parse(userDataString);
+    try {
+      // Parse the data with validation
+      const userData = JSON.parse(userDataString);
     
     // Validate user data has minimum required fields
     if (!userData || typeof userData !== 'object') {
@@ -221,14 +223,18 @@ export const getUserData = (): any => {
       return null;
     }
     
-    // Create a validated user object with defaults for missing properties
-    const validatedUser = {
-      id: userData.id || 0,
-      role: userData.role || 'user',
-      ...userData
-    };
-    
-    return validatedUser;
+      // Create a validated user object with defaults for missing properties
+      const validatedUser = {
+        id: userData.id || 0,
+        role: userData.role || 'user',
+        ...userData
+      };
+      
+      return validatedUser;
+    } catch (parseError) {
+      console.error('TokenManager: Error parsing user data JSON', parseError);
+      return null;
+    }
   } catch (error) {
     console.error('TokenManager: Error parsing user data', error);
     // Don't remove anything on error, just return null

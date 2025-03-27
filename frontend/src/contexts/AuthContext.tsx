@@ -410,10 +410,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     
     // If no user in state, use tokenManager utilities for consistency
     const token = getToken();
-    const userData = getUserData();
     
-    // If token and userData exist, we're authenticated
-    if (token && userData) {
+    // CRITICAL: For authentication persistence, we only check if token exists
+    // Don't rely on userData being valid as it might cause JSON parsing errors
+    if (token) {
       console.log('AuthContext: Found valid token and user data in storage');
       
       // CRITICAL: ALWAYS set axios headers for Heroku production deployment
@@ -428,25 +428,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         console.warn('AuthContext: Error ensuring token in storage:', err);
       }
       
-      // If we have valid token and user data but no user state, set the user state
-      if (userData.id && !user) {
+      // Try to get user data if available
+      const userData = getUserData();
+      
+      // If we have valid user data but no user state, set the user state
+      if (userData && userData.id && !user) {
         console.log('AuthContext: Setting user state from storage in isAuthenticated');
         setUser(userData);
         
         // Dispatch authentication event
         setTimeout(() => {
-          if (userData && userData.id) {
-            document.dispatchEvent(new CustomEvent('user-authenticated', { 
-              detail: { userId: userData.id, role: userData.role || 'user' } 
-            }));
-            console.log('AuthContext: Dispatched user-authenticated event from isAuthenticated');
-          }
+          document.dispatchEvent(new CustomEvent('user-authenticated', { 
+            detail: { userId: userData.id, role: userData.role || 'user' } 
+          }));
+          console.log('AuthContext: Dispatched user-authenticated event from isAuthenticated');
         }, 100);
       }
       return true;
     }
     
-    console.log('AuthContext: Not authenticated - no valid token or user data');
+    console.log('AuthContext: Not authenticated - no valid token found');
     return false;
   };
 
