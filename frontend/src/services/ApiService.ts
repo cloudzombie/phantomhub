@@ -15,14 +15,14 @@ class ApiService {
   private config: ApiConfig;
   private socket: Socket | null = null;
   private baseURL: string;
-  private lastSocketAttempt: number = 0;
-  private socketReconnectDelay: number = API_CONFIG.reconnectDelay;
-  private deviceSubscribers: ((devices: any[]) => void)[] = [];
+  private deviceState: Map<number, any> = new Map();
+  private deviceSubscribers: Set<(devices: any[]) => void> = new Set();
   private lastDeviceUpdate: number = 0;
-  private deviceUpdateThrottle: number = 5000; // 5 seconds minimum between updates
+  private deviceUpdateThrottle: number = 5000; // 5 seconds
   private isReconnecting: boolean = false;
   private reconnectAttempts: number = 0;
   private maxReconnectAttempts: number = API_CONFIG.maxReconnectAttempts;
+  private socketReconnectDelay: number = API_CONFIG.reconnectDelay;
   private subscriptionTimeout: NodeJS.Timeout | null = null;
 
   private constructor() {
@@ -238,12 +238,44 @@ class ApiService {
     return response.data;
   }
 
-  /**
-   * Subscribe to device status updates
-   * @param callback Function to call when device status updates
-   */
+  // Add method to get current device state
+  public getDeviceState(): any[] {
+    return Array.from(this.deviceState.values());
+  }
+
+  // Add method to update device state
+  private updateDeviceState(devices: any[]): void {
+    const now = Date.now();
+    if (now - this.lastDeviceUpdate < this.deviceUpdateThrottle) {
+      return;
+    }
+
+    this.lastDeviceUpdate = now;
+    
+    // Update device state map
+    devices.forEach(device => {
+      this.deviceState.set(device.id, device);
+    });
+
+    // Notify subscribers with current state
+    this.notifyDeviceSubscribers();
+  }
+
+  // Update notifyDeviceSubscribers to use current state
+  private notifyDeviceSubscribers(): void {
+    const currentDevices = this.getDeviceState();
+    this.deviceSubscribers.forEach(callback => {
+      try {
+        callback(currentDevices);
+      } catch (error) {
+        console.error('ApiService: Error in device update subscriber:', error);
+      }
+    });
+  }
+
+  // Update subscribeToDeviceUpdates to use Set and handle state
   public subscribeToDeviceUpdates(callback: (devices: any[]) => void): () => void {
-    this.deviceSubscribers.push(callback);
+    this.deviceSubscribers.add(callback);
 
     // Clear any existing subscription timeout
     if (this.subscriptionTimeout) {
@@ -257,39 +289,18 @@ class ApiService {
       }
     }, 1000);
 
+    // Immediately notify with current state
+    callback(this.getDeviceState());
+
     // Return unsubscribe function
     return () => {
-      this.deviceSubscribers = this.deviceSubscribers.filter(cb => cb !== callback);
+      this.deviceSubscribers.delete(callback);
       
       // If no more subscribers, unsubscribe from updates
-      if (this.deviceSubscribers.length === 0 && this.socket?.connected) {
+      if (this.deviceSubscribers.size === 0 && this.socket?.connected) {
         this.socket.emit('unsubscribe_device_updates');
       }
     };
-  }
-
-  /**
-   * Notify all subscribers of device updates
-   * @param devices Updated device list
-   */
-  private notifyDeviceSubscribers(devices: any[]): void {
-    const now = Date.now();
-    
-    // More aggressive throttling of updates
-    if (now - this.lastDeviceUpdate < this.deviceUpdateThrottle) {
-      console.log('ApiService: Throttling device update');
-      return;
-    }
-    
-    // Only notify if there are actual changes
-    this.lastDeviceUpdate = now;
-    this.deviceSubscribers.forEach(callback => {
-      try {
-        callback(devices);
-      } catch (error) {
-        console.error('ApiService: Error in device update subscriber:', error);
-      }
-    });
   }
 
   /**
@@ -300,7 +311,7 @@ class ApiService {
       this.socket.disconnect();
     }
 
-    this.socket = io(this.config.endpoint, {
+    this.socket = io(this.baseURL, {
       auth: {
         token: getToken()
       },
@@ -317,7 +328,7 @@ class ApiService {
       this.reconnectAttempts = 0;
       
       // Only emit subscribe if we have subscribers
-      if (this.deviceSubscribers.length > 0) {
+      if (this.deviceSubscribers.size > 0) {
         this.socket?.emit('subscribe_device_updates');
       }
     });
@@ -334,11 +345,11 @@ class ApiService {
     });
 
     this.socket.on('device_status_update', (devices: any[]) => {
-      this.notifyDeviceSubscribers(devices);
+      this.updateDeviceState(devices);
     });
 
     this.socket.on('device_status_changed', (update: any) => {
-      this.notifyDeviceSubscribers([update]);
+      this.updateDeviceState([update]);
     });
   }
 
@@ -403,6 +414,8 @@ class ApiService {
       this.socket = null;
     }
     
+    this.deviceState.clear();
+    this.deviceSubscribers.clear();
     this.isReconnecting = false;
     this.reconnectAttempts = 0;
   }

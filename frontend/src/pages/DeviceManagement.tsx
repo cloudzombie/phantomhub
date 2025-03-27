@@ -123,54 +123,25 @@ const DeviceManagement: React.FC = () => {
   useEffect(() => {
     let isMounted = true;
     let unsubscribe: (() => void) | null = null;
-    let isInitialFetch = true;
-    let refreshTimeout: NodeJS.Timeout | null = null;
 
     const initializeDevices = async () => {
       if (!isMounted) return;
       
-      // Only show loading indicator on initial fetch
-      if (isInitialFetch) {
-        setIsLoading(true);
-      }
+      setIsLoading(true);
+      setErrorMessage(null);
 
       try {
         // Initial fetch
         const response = await apiServiceInstance.get('/devices/detailed');
         if (response.data?.success && isMounted) {
-          setDevices(prev => {
-            // Only update if data has changed
-            const newDevices = response.data.data;
-            if (JSON.stringify(prev) === JSON.stringify(newDevices)) {
-              return prev;
-            }
-            return newDevices;
-          });
+          setDevices(response.data.data);
         }
 
         // Subscribe to device updates
-        if (isMounted && !unsubscribe) {
+        if (isMounted) {
           unsubscribe = apiServiceInstance.subscribeToDeviceUpdates((updatedDevices) => {
             if (isMounted) {
-              setDevices(prev => {
-                // If it's a single device update
-                if (updatedDevices.length === 1) {
-                  const update = updatedDevices[0];
-                  const newDevices = prev.map(device => 
-                    device.id === update.id ? { ...device, ...update } : device
-                  );
-                  // Only update if the device actually changed
-                  if (JSON.stringify(prev) === JSON.stringify(newDevices)) {
-                    return prev;
-                  }
-                  return newDevices;
-                }
-                // If it's a full device list update, only update if changed
-                if (JSON.stringify(prev) === JSON.stringify(updatedDevices)) {
-                  return prev;
-                }
-                return updatedDevices;
-              });
+              setDevices(updatedDevices);
             }
           });
         }
@@ -184,9 +155,8 @@ const DeviceManagement: React.FC = () => {
           }
         }
       } finally {
-        if (isMounted && isInitialFetch) {
+        if (isMounted) {
           setIsLoading(false);
-          isInitialFetch = false;
         }
       }
     };
@@ -198,9 +168,6 @@ const DeviceManagement: React.FC = () => {
       isMounted = false;
       if (unsubscribe) {
         unsubscribe();
-      }
-      if (refreshTimeout) {
-        clearTimeout(refreshTimeout);
       }
     };
   }, []); // No dependencies needed as we're using the subscription pattern
@@ -223,14 +190,7 @@ const DeviceManagement: React.FC = () => {
     try {
       const response = await apiServiceInstance.get('/devices/detailed');
       if (response.data?.success) {
-        setDevices(prev => {
-          // Only update if data has changed
-          const newDevices = response.data.data;
-          if (JSON.stringify(prev) === JSON.stringify(newDevices)) {
-            return prev;
-          }
-          return newDevices;
-        });
+        setDevices(response.data.data);
       }
     } catch (error) {
       console.error('Error refreshing devices:', error);
@@ -327,7 +287,7 @@ const DeviceManagement: React.FC = () => {
     });
   };
   
-  // Register network device with improved error handling
+  // Register network device
   const registerDevice = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
@@ -353,9 +313,7 @@ const DeviceManagement: React.FC = () => {
           ipAddress: '',
           firmwareVersion: ''
         });
-        
-        // Instead of refreshing immediately, wait for the socket update
-        // The socket will notify us of the new device
+        setIsModalOpen(false);
       } else {
         setErrorMessage(response.data?.message || 'Failed to register device');
       }
@@ -408,8 +366,7 @@ const DeviceManagement: React.FC = () => {
 
       if (response.data?.success) {
         setSuccessMessage('USB device registered successfully!');
-        // Instead of refreshing immediately, wait for the socket update
-        // The socket will notify us of the new device
+        setIsUsbModalOpen(false);
       } else {
         setErrorMessage(response.data?.message || 'Failed to register USB device');
       }
