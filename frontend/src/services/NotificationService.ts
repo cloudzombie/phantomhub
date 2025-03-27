@@ -28,10 +28,21 @@ class NotificationService {
 
   private constructor() {
     this.loadSettings();
-    this.connect();
     
     // Set up listener for settings changes
     document.addEventListener('notification-settings-changed', this.handleSettingsChange as EventListener);
+    
+    // Set up listener for auth events to connect when user logs in
+    document.addEventListener('user-authenticated', () => {
+      console.log('NotificationService: User authenticated event received, attempting connection');
+      this.connect();
+    });
+    
+    // Try to connect if we already have a token
+    if (localStorage.getItem('token')) {
+      // Delay initial connection attempt to allow ApiService to initialize
+      setTimeout(() => this.connect(), 1000);
+    }
   }
 
   public static getInstance(): NotificationService {
@@ -129,13 +140,40 @@ class NotificationService {
   }
 
   public connect(): void {
+    // Check if we have a token before attempting to connect
+    if (!localStorage.getItem('token')) {
+      console.log('NotificationService: No auth token available, skipping connection');
+      return;
+    }
+    
     // Use the socket from ApiService instead of creating a new one
     this.socket = getSocket();
     
     if (!this.socket) {
-      console.warn('NotificationService: No socket available from ApiService');
+      console.log('NotificationService: No socket available from ApiService, will retry');
+      
+      // Try to initialize the socket in ApiService
+      ApiService.reconnectSocket();
+      
+      // Retry after a short delay
+      setTimeout(() => {
+        this.socket = getSocket();
+        if (this.socket) {
+          console.log('NotificationService: Socket obtained after retry');
+          this.setupSocketConnection();
+        } else {
+          console.warn('NotificationService: Still no socket available after retry');
+        }
+      }, 1500);
+      
       return;
     }
+    
+    this.setupSocketConnection();
+  }
+  
+  private setupSocketConnection(): void {
+    if (!this.socket) return;
     
     if (!this.socket.connected) {
       console.log('NotificationService: ApiService socket not connected, requesting reconnection');
@@ -147,12 +185,18 @@ class NotificationService {
         this.isConnected = true;
         this.setupSocketEventListeners();
         this.configureNotifications();
+        
+        // Dispatch an event that the socket is connected
+        document.dispatchEvent(new CustomEvent('socket-connected'));
       });
     } else {
       console.log('NotificationService: Using existing socket from ApiService:', this.socket.id);
       this.isConnected = true;
       this.setupSocketEventListeners();
       this.configureNotifications();
+      
+      // Dispatch an event that the socket is connected
+      document.dispatchEvent(new CustomEvent('socket-connected'));
     }
   }
 

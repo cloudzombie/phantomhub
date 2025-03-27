@@ -64,6 +64,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setTimeout(() => {
             console.log('AuthContext: Ensuring socket connection after auth check');
             ApiService.reconnectSocket();
+            
+            // Dispatch user-authenticated event for other services to listen to
+            document.dispatchEvent(new CustomEvent('user-authenticated'));
           }, 500); // Small delay to ensure everything is ready
         } else {
           // Clear invalid token
@@ -107,6 +110,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setTimeout(() => {
           console.log('AuthContext: Initializing socket connection after login');
           ApiService.reconnectSocket();
+          
+          // Dispatch user-authenticated event for other services to listen to
+          document.dispatchEvent(new CustomEvent('user-authenticated'));
         }, 500); // Small delay to ensure token is stored before socket init
         
         return true;
