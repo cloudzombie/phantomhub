@@ -96,6 +96,7 @@ const AdminDashboard: React.FC = () => {
   useEffect(() => {
     let isMounted = true;
     const controller = new AbortController();
+    console.log('AdminDashboard effect running, user:', user, 'loading:', loading);
     
     // Add exponential backoff retry logic for rate limiting
     const fetchWithRetry = async (url: string, options: any, retries = 3, delay = 2000) => {
@@ -118,7 +119,7 @@ const AdminDashboard: React.FC = () => {
         
         console.log('Fetching system stats with token:', token ? 'Token exists' : 'No token');
         
-        // Use fetchWithRetry to handle rate limiting
+        // Use the correct admin endpoint path
         const response = await fetchWithRetry(`${API_URL}/admin/system/stats`, {
           headers: {
             Authorization: `Bearer ${token}`
@@ -145,6 +146,9 @@ const AdminDashboard: React.FC = () => {
           if (err.response && err.response.status === 429) {
             console.error('Rate limit exceeded. Please try again later.');
             setError('Rate limit exceeded. Please try again in a few minutes.');
+          } else if (err.response && err.response.status === 404) {
+            console.error('System stats endpoint not found');
+            setError('System statistics endpoint not available. The server may need to be updated.');
           } else {
             console.error('Error fetching system stats:', err);
             setError(err.message || 'Error connecting to the server');
@@ -162,7 +166,7 @@ const AdminDashboard: React.FC = () => {
         const token = getToken();
         console.log('Fetching system health');
         
-        // Use fetchWithRetry to handle rate limiting
+        // Use the correct admin endpoint path
         const response = await fetchWithRetry(`${API_URL}/admin/system/health`, {
           headers: {
             Authorization: `Bearer ${token}`
@@ -184,9 +188,16 @@ const AdminDashboard: React.FC = () => {
           if (err.response && err.response.status === 429) {
             console.error('Rate limit exceeded. Please try again later.');
             setError('Rate limit exceeded. Please try again in a few minutes.');
+          } else if (err.response && err.response.status === 404) {
+            console.error('System health endpoint not found');
+            // Don't set error here to avoid showing error message if only health fails but stats succeed
+            console.warn('Health endpoint not available. Continuing with limited dashboard functionality.');
           } else {
             console.error('Error fetching system health:', err);
-            setError(err.message || 'Error connecting to the server');
+            // Only set error if it's a critical failure
+            if (!systemStats) {
+              setError(err.message || 'Error connecting to the server');
+            }
           }
           // Ensure loading is set to false even if this request fails
           setLoading(false);
@@ -194,14 +205,14 @@ const AdminDashboard: React.FC = () => {
       }
     };
 
-    // Set a timeout to prevent infinite loading - shorter timeout for better UX
+    // Set a timeout to prevent infinite loading - increased timeout for better reliability
     const timeoutId = setTimeout(() => {
       if (isMounted && loading) {
         setLoading(false);
         setError('Loading timed out. The server might be unavailable.');
-        console.error('Loading timed out after 8 seconds');
+        console.error('Loading timed out after 15 seconds');
       }
-    }, 8000);
+    }, 15000);
     
     if (user && user.role === 'admin') {
       fetchSystemStats();
@@ -215,12 +226,12 @@ const AdminDashboard: React.FC = () => {
       clearTimeout(timeoutId);
       console.log('AdminDashboard data fetching cleanup');
     };
-  }, [user, loading]);
+  }, [user]);
 
   // Toggle maintenance mode
   const handleToggleMaintenance = async () => {
     try {
-      const token = localStorage.getItem('token');
+      const token = getToken(); // Use tokenManager for consistency
       const response = await axios.post(
         `${API_URL}/admin/system/maintenance`,
         { enabled: !maintenanceMode },
@@ -234,8 +245,14 @@ const AdminDashboard: React.FC = () => {
       if (response.data.success) {
         setMaintenanceMode(!maintenanceMode);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error toggling maintenance mode:', err);
+      // Show a more user-friendly error message
+      if (err.response && err.response.status === 404) {
+        alert('Maintenance mode toggle is not available. The server may need to be updated.');
+      } else {
+        alert(`Failed to toggle maintenance mode: ${err.message || 'Unknown error'}`);
+      }
     }
   };
 
