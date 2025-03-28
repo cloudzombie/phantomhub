@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { FiServer, FiCode, FiActivity, FiCheckCircle, FiInfo, FiAlertCircle, FiRefreshCw, FiX } from 'react-icons/fi';
 import axios from 'axios';
 import { Socket } from 'socket.io-client';
 import DeviceInfoPanel from '../components/DeviceInfoPanel';
-import apiServiceInstance, { ApiService } from '../services/ApiService';
+import { apiService } from '../services/ApiService';
 import { getToken } from '../utils/tokenManager';
 
 const API_URL = 'https://ghostwire-backend-e0380bcf4e0e.herokuapp.com/api';
@@ -68,8 +69,8 @@ const Dashboard = () => {
   const [error, setError] = useState<string | null>(null);
   
   useEffect(() => {
-    // Get socket from ApiService static method
-    const socket = ApiService.getSocket();
+    // Get socket from apiService instance
+    const socket = apiService.getSocket();
     
     if (socket) {
       // Listen for device status changes
@@ -91,7 +92,7 @@ const Dashboard = () => {
       });
     } else {
       // If socket is not available, try to reconnect
-      ApiService.reconnectSocket();
+      apiService.reconnectSocket();
     }
     
     // Fetch initial data

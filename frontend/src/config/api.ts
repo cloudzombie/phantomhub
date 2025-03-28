@@ -10,10 +10,11 @@ export const DEFAULT_SERIAL_OPTIONS = {
 };
 
 export const API_CONFIG = {
-  endpoint: API_ENDPOINT,
-  socketEndpoint: SOCKET_ENDPOINT,
-  pollingInterval: 300, // 5 minutes
-  timeout: 30,
-  maxReconnectAttempts: 5,
-  reconnectDelay: 30000 // 30 seconds
+  baseURL: process.env.REACT_APP_API_URL || 'http://localhost:3001/api',
+  endpoint: process.env.REACT_APP_API_URL || 'http://localhost:3001/api',
+  socketEndpoint: process.env.REACT_APP_SOCKET_URL || 'http://localhost:3001',
+  pollingInterval: 30000, // 30 seconds
+  timeout: 30000, // 30 seconds
+  maxReconnectAttempts: 3,
+  reconnectDelay: 5000 // 5 seconds
 }; 

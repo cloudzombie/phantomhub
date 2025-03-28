@@ -1,5 +1,5 @@
 import { io, Socket } from 'socket.io-client';
-import apiServiceInstance, { ApiService } from './ApiService';
+import { apiService } from './ApiService';
 import { getSocket } from '../utils/socketUtils';
 import { getToken, getUserData } from '../utils/tokenManager';
 

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, ChangeEvent } from 'react';
 import { FiSave, FiCode, FiZap, FiInfo, FiAlertCircle, FiCheckCircle, FiRefreshCw, FiHardDrive, FiWifi, FiUpload, FiLink, FiList, FiFile, FiTrash2, FiPlusCircle, FiX, FiEdit2, FiEdit, FiCheck } from 'react-icons/fi';
 import axios from 'axios';
-import apiServiceInstance from '../services/ApiService';
+import { apiService } from '../services/ApiService';
 import { handleAuthError, isAuthError, getToken, getUserData } from '../utils/tokenManager';
 import * as monaco from 'monaco-editor';
 import { registerDuckyScriptLanguage } from '../utils/duckyScriptLanguage';
@@ -172,7 +172,7 @@ const PayloadEditor = () => {
       if (!isMounted) return;
       
       try {
-        const response = await apiServiceInstance.get('/devices/usb');
+        const response = await apiService.get('/devices/usb');
         if (response.data?.success && isMounted) {
           setUsbDevices(response.data.data);
         }
@@ -220,8 +220,8 @@ const PayloadEditor = () => {
         return;
       }
       
-      // Use apiServiceInstance instead of direct axios call
-      const response = await apiServiceInstance.get('/devices');
+      // Use apiService instead of direct axios call
+      const response = await apiService.get('/devices');
       
       if (response.data && response.data.success) {
         const fetchedDevices = response.data.data || [];
@@ -266,8 +266,8 @@ const PayloadEditor = () => {
         return;
       }
       
-      // Use apiServiceInstance instead of direct axios call
-      const response = await apiServiceInstance.get('/payloads');
+      // Use apiService instead of direct axios call
+      const response = await apiService.get('/payloads');
       
       if (response.data && response.data.success) {
         const fetchedPayloads = response.data.data || [];

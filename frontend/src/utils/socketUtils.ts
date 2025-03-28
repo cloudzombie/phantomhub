@@ -1,4 +1,4 @@
-import apiServiceInstance, { ApiService } from '../services/ApiService';
+import { apiService } from '../services/ApiService';
 import { Socket } from 'socket.io-client';
 
 /**
@@ -6,8 +6,7 @@ import { Socket } from 'socket.io-client';
  */
 export function getSocket(): Socket | null {
   try {
-    // Access the static method from the class
-    return ApiService.getSocket();
+    return apiService.getSocket();
   } catch (error) {
     console.error('Error getting socket:', error);
     return null;
