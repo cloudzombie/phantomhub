@@ -124,4 +124,13 @@ export class WebSocketManager {
   public getSocket(): Socket | null {
     return this.socket;
   }
+
+  public reconnectSocket(): void {
+    if (this.socket) {
+      this.socket.disconnect();
+      this.socket = null;
+    }
+    this.reconnectAttempts = 0;
+    this.connect();
+  }
 } 

@@ -587,6 +587,10 @@ export class ApiService {
       }
     }
   }
+
+  public reconnectSocket(): void {
+    this.wsManager.reconnectSocket();
+  }
 }
 
 export const apiService = ApiService.getInstance(); 
