@@ -14,7 +14,8 @@ import {
   FiSearch,
   FiFilter,
   FiTrash2,
-  FiEdit2
+  FiEdit2,
+  FiZap
 } from 'react-icons/fi';
 import { apiService, DeviceStatus, ApiResponse } from '../services/ApiService';
 import { handleAuthError, isAuthError } from '../utils/tokenManager';
@@ -23,7 +24,8 @@ import {
   requestSerialPort, 
   connectToDevice, 
   disconnectFromDevice,
-  type SerialConnectionStatus
+  type SerialConnectionStatus,
+  OMGDeviceInfo
 } from '../utils/webSerialUtils';
 import DeviceInfoPanel from '../components/DeviceInfoPanel';
 
@@ -415,9 +417,12 @@ const DeviceManagement: React.FC = () => {
       // Request serial port access
       const port = await requestSerialPort();
       if (!port) {
-        setErrorMessage('No USB device selected');
+        setErrorMessage('No USB device selected or selection was cancelled');
         return;
       }
+
+      // Show connecting message
+      setSuccessMessage('Connecting to device...');
 
       // Connect to the device with timeout
       const connectPromise = connectToDevice(port, {
@@ -430,24 +435,27 @@ const DeviceManagement: React.FC = () => {
       
       // Add timeout to prevent hanging
       const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('Connection timeout')), 10000);
+        setTimeout(() => reject(new Error('Connection timeout - please try again')), 15000);
       });
       
-      const deviceInfo = await Promise.race([connectPromise, timeoutPromise]) as DeviceInfo;
+      const deviceInfo = await Promise.race([connectPromise, timeoutPromise]) as OMGDeviceInfo;
 
       if (!isMountedRef.current) return;
 
       if (deviceInfo.connectionStatus !== 'connected') {
-        setErrorMessage('Failed to connect to USB device');
+        setErrorMessage('Failed to establish connection with the device');
         return;
       }
 
+      // Show device info message
+      setSuccessMessage(`Connected to ${deviceInfo.info.name || formData.name || 'O.MG Cable'}...`);
+
       // Register the device
       const response = await apiService.post<DeviceResponse>('/devices', {
-        name: deviceInfo.info?.name || 'USB Device',
-        serialPortId: deviceInfo.info?.deviceId,
+        name: deviceInfo.info.name || formData.name || 'O.MG Cable',
+        serialPortId: deviceInfo.info.deviceId,
         connectionType: 'usb',
-        firmwareVersion: deviceInfo.info?.firmwareVersion || null
+        firmwareVersion: deviceInfo.info.firmwareVersion || formData.firmwareVersion || null
       });
 
       if (!isMountedRef.current) return;
@@ -459,6 +467,9 @@ const DeviceManagement: React.FC = () => {
         
         // Update devices list
         setDevices(prev => [...prev, response.data.device]);
+
+        // Clear form data
+        resetUsbForm();
       } else {
         setErrorMessage(response.message || 'Failed to register USB device');
       }

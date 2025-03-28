@@ -31,11 +31,12 @@ const Login = () => {
       
       // Use the AuthContext's logout method for proper cleanup
       console.log('Login: Handling logout action from URL parameter');
-      logout().finally(() => {
+      logout().then(() => {
         // Clear the URL parameter to prevent repeated logout
         window.history.replaceState({}, document.title, '/login');
+        setIsLoggingOut(false);
       });
-    } else {
+    } else if (!isLoggingOut) {
       // Check authentication status
       isAuthenticated().then(isAuth => {
         if (isAuth) {

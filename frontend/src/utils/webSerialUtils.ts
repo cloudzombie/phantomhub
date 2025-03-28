@@ -120,6 +120,12 @@ const OMG_COMMANDS = {
 // Store connected devices
 const connectedDevices: Map<string, OMGDeviceInfo> = new Map();
 
+// O.MG Cable USB IDs (these are examples, replace with actual values)
+const OMG_USB_FILTERS = [
+  { usbVendorId: 0x1209, usbProductId: 0x2711 },  // O.MG Cable
+  { usbVendorId: 0x1209, usbProductId: 0x2712 }   // O.MG Cable Pro
+];
+
 /**
  * Check if Web Serial API is supported in the current browser
  */
@@ -137,8 +143,10 @@ export const requestSerialPort = async (): Promise<SerialPort | null> => {
   }
 
   try {
-    // Request port without filters to allow any USB device
-    const port = await navigator.serial.requestPort();
+    // Request port with O.MG Cable filters
+    const port = await navigator.serial.requestPort({
+      filters: OMG_USB_FILTERS
+    });
     
     // Log the device info for debugging
     const portInfo = port.getInfo();
@@ -149,8 +157,12 @@ export const requestSerialPort = async (): Promise<SerialPort | null> => {
     
     return port;
   } catch (error) {
+    if (error instanceof Error && error.name === 'NotFoundError') {
+      console.log('No compatible USB devices found or user cancelled');
+      return null;
+    }
     console.error('Error requesting serial port:', error);
-    return null;
+    throw error;
   }
 };
 
@@ -188,52 +200,99 @@ export const connectToDevice = async (
     await port.open(options);
     
     // Setup reader and writer
-    deviceInfo.reader = port.readable?.getReader() || null;
-    deviceInfo.writer = port.writable?.getWriter() || null;
+    const reader = port.readable?.getReader();
+    const writer = port.writable?.getWriter();
     
-    if (!deviceInfo.reader || !deviceInfo.writer) {
+    if (!reader || !writer) {
       throw new Error('Failed to set up communication with the device');
     }
+    
+    deviceInfo.reader = reader;
+    deviceInfo.writer = writer;
     
     // Set status to connected
     deviceInfo.connectionStatus = 'connected';
     
-    // Try to get device information
+    // Get device information with a longer timeout
     try {
-      // Get basic device info
-      const infoResponse = await sendCommand(deviceInfo, OMG_COMMANDS.GET_INFO);
-      if (infoResponse.success) {
-        const info = JSON.parse(infoResponse.data);
-        deviceInfo.info.name = info.name || 'O.MG Cable';
-        deviceInfo.info.firmwareVersion = info.firmwareVersion;
-        deviceInfo.info.deviceId = info.deviceId;
-      }
+      // Send identification command
+      const encoder = new TextEncoder();
+      const identifyCmd = encoder.encode('GET_INFO\r\n');
+      await writer.write(identifyCmd);
       
-      // Get device capabilities
-      const capabilitiesResponse = await sendCommand(deviceInfo, OMG_COMMANDS.GET_CAPABILITIES);
-      if (capabilitiesResponse.success) {
-        const capabilities = JSON.parse(capabilitiesResponse.data);
-        deviceInfo.info.capabilities = {
-          ...deviceInfo.info.capabilities,
-          ...capabilities
+      // Read response with timeout
+      const response = await Promise.race([
+        readDeviceResponse(reader),
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Device identification timeout')), 5000)
+        )
+      ]);
+      
+      if (typeof response === 'string') {
+        // Parse device info from response
+        const info = JSON.parse(response);
+        deviceInfo.info = {
+          ...deviceInfo.info,
+          name: info.name || 'O.MG Cable',
+          firmwareVersion: info.version || null,
+          deviceId: info.id || null,
+          capabilities: {
+            ...deviceInfo.info.capabilities,
+            ...info.capabilities
+          }
         };
       }
-    } catch (error) {
-      console.warn('Could not get device info, using defaults:', error);
-      // Continue with default values if we can't get device info
+    } catch (identifyError) {
+      console.warn('Could not identify device:', identifyError);
+      // Continue with default info if identification fails
     }
     
     // Store the connected device
-    const deviceId = deviceInfo.info.deviceId || `device-${Date.now()}`;
-    connectedDevices.set(deviceId, deviceInfo);
+    if (deviceInfo.info.deviceId) {
+      connectedDevices.set(deviceInfo.info.deviceId, deviceInfo);
+    }
     
     return deviceInfo;
   } catch (error) {
-    console.error('Error connecting to device:', error);
+    // Clean up if connection fails
+    try {
+      if (deviceInfo.reader) {
+        deviceInfo.reader.releaseLock();
+      }
+      if (deviceInfo.writer) {
+        deviceInfo.writer.releaseLock();
+      }
+      await port.close();
+    } catch (cleanupError) {
+      console.error('Error during cleanup:', cleanupError);
+    }
+    
     deviceInfo.connectionStatus = 'error';
     throw error;
   }
 };
+
+/**
+ * Read a response from the device
+ * @param reader The reader to use
+ * @returns The response as a string
+ */
+async function readDeviceResponse(reader: ReadableStreamDefaultReader<Uint8Array>): Promise<string> {
+  const decoder = new TextDecoder();
+  let response = '';
+  
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    
+    response += decoder.decode(value);
+    if (response.includes('\n')) {
+      break;
+    }
+  }
+  
+  return response.trim();
+}
 
 /**
  * Disconnect from an o.MG Cable device

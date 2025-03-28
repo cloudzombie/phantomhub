@@ -319,12 +319,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Logout function - only call this when the user explicitly wants to logout
   const logout = async () => {
     try {
-      // Use the safeLogout function which handles both clearing data and redirection
-      await safeLogout();
+      // Clear auth data without redirecting
+      await clearAuthData();
+      // Update local state
+      setUser(null);
+      setError(null);
     } catch (error) {
       console.error('AuthContext: Error during logout:', error);
-      // Even if there's an error, force a redirect to login
-      window.location.replace('/login?action=logout');
     }
   };
 
