@@ -1,7 +1,6 @@
 /// <reference types="react" />
 
 import React from 'react';
-import { BrowserRouter as Router } from 'react-router-dom';
 import { StoreProvider } from './contexts/StoreContext';
 import AppRoutes from './routes';
 import { AuthProvider } from './contexts/AuthContext';
@@ -14,9 +13,7 @@ function App() {
       <StoreProvider>
         <AuthProvider>
           <ThemeProvider>
-            <Router>
-              <AppRoutes />
-            </Router>
+            <AppRoutes />
           </ThemeProvider>
         </AuthProvider>
       </StoreProvider>
