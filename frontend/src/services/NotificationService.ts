@@ -1,6 +1,6 @@
 import { Socket } from 'socket.io-client';
 import { getSocket } from '../utils/webSocket';
-import { getToken, getUserData } from '../utils/tokenManager';
+import { getUserData } from '../utils/tokenManager';
 import { WebSocketManager } from '../core/WebSocketManager';
 
 interface NotificationSettings {
@@ -41,9 +41,9 @@ class NotificationService {
       this.connect();
     });
     
-    // Try to connect if we already have a token
-    const token = getToken();
-    if (token) {
+    // Try to connect if we have user data
+    const userData = getUserData();
+    if (userData) {
       // Delay initial connection attempt to allow systems to initialize
       setTimeout(() => this.connect(), 1000);
     }
@@ -100,41 +100,38 @@ class NotificationService {
 
   private getSettingsKey(): string {
     const userId = this.getCurrentUserId();
-    return userId ? `ghostwire_settings_${userId}` : 'ghostwire_settings';
+    return userId ? `notification_settings_${userId}` : 'notification_settings';
   }
 
   private loadSettings(): void {
     try {
-      const storedSettings = localStorage.getItem(this.getSettingsKey());
-      if (storedSettings) {
-        const settings = JSON.parse(storedSettings);
-        if (settings.notifications) {
-          this.updateSettings(settings.notifications);
-        }
+      const settingsKey = this.getSettingsKey();
+      const savedSettings = localStorage.getItem(settingsKey);
+      if (savedSettings) {
+        this.settings = JSON.parse(savedSettings);
       }
     } catch (error) {
-      console.error('Error loading stored notification settings:', error);
+      console.error('Error loading notification settings:', error);
     }
   }
 
-  // Public method to explicitly reload settings for the current user
   public reloadSettings(): void {
-    console.log('NotificationService: Reloading settings for user');
     this.loadSettings();
     this.configureNotifications();
   }
 
   private handleSettingsChange = (event: CustomEvent<NotificationSettings>): void => {
-    if (event.detail) {
-      this.updateSettings(event.detail);
-    }
+    this.updateSettings(event.detail);
   };
 
   private updateSettings(newSettings: NotificationSettings): void {
-    console.log('NotificationService: Updating settings', newSettings);
-    this.settings = { ...this.settings, ...newSettings };
-    
-    // Update subscriptions based on new settings
+    this.settings = newSettings;
+    try {
+      const settingsKey = this.getSettingsKey();
+      localStorage.setItem(settingsKey, JSON.stringify(newSettings));
+    } catch (error) {
+      console.error('Error saving notification settings:', error);
+    }
     this.configureNotifications();
   }
 
@@ -143,126 +140,115 @@ class NotificationService {
   }
 
   public connect(): void {
-    // Check if we have a token before attempting to connect
-    const token = getToken();
-    if (!token) {
-      console.log('NotificationService: No auth token available, skipping connection');
+    if (this.isConnected) {
       return;
     }
-    
-    // Use the WebSocketManager
-    this.socket = this.wsManager.getSocket();
-    
-    if (!this.socket) {
-      console.log('NotificationService: No socket available, will retry');
-      
-      // Check if the socket becomes available
-      const checkSocket = () => {
-        this.socket = this.wsManager.getSocket();
-        if (this.socket) {
-          console.log('NotificationService: Socket obtained after retry');
-          this.setupSocketConnection();
-        } else {
-          console.warn('NotificationService: Still no socket available, will retry in 5 seconds');
-          setTimeout(checkSocket, 5000);
-        }
-      };
-      
-      checkSocket();
+
+    const userData = getUserData();
+    if (!userData) {
+      console.log('NotificationService: No user data available, skipping connection');
       return;
     }
-    
+
+    this.connectionAttempts = 0;
     this.setupSocketConnection();
   }
-  
+
   private setupSocketConnection(): void {
-    if (!this.socket) return;
-    
-    if (!this.socket.connected) {
-      console.log('NotificationService: Socket not connected, waiting for connection');
-      
-      // Wait for the socket to connect
-      this.wsManager.subscribe('connect', () => {
-        console.log('NotificationService: Socket connected successfully');
+    if (this.socket) {
+      return;
+    }
+
+    this.socket = getSocket();
+    if (!this.socket) {
+      console.error('NotificationService: Failed to get socket instance');
+      return;
+    }
+
+    const checkSocket = () => {
+      if (this.connectionAttempts >= this.maxConnectionAttempts) {
+        console.error('NotificationService: Max connection attempts reached');
+        return;
+      }
+
+      if (this.socket?.connected) {
         this.isConnected = true;
+        this.connectionAttempts = 0;
         this.setupSocketEventListeners();
         this.configureNotifications();
-        
-        // Dispatch an event that the socket is connected
-        document.dispatchEvent(new CustomEvent('socket-connected'));
-      });
-    } else {
-      console.log('NotificationService: Using existing socket:', this.socket.id);
-      this.isConnected = true;
-      this.setupSocketEventListeners();
-      this.configureNotifications();
-    }
+      } else {
+        this.connectionAttempts++;
+        setTimeout(checkSocket, 1000);
+      }
+    };
+
+    checkSocket();
   }
 
   private setupSocketEventListeners(): void {
     if (!this.socket) return;
-    
-    // Set up listeners for different notification types
-    this.wsManager.subscribe('notification', (data) => {
-      console.log('NotificationService: Received notification', data);
-      if (data && data.type) {
-        this.notifySubscribers(data.type, data);
-        
-        // Show browser notification if appropriate
-        if (data.browserNotification && Notification.permission === 'granted') {
-          this.showBrowserNotification(data.title || 'GhostWire Notification', {
-            body: data.message || '',
-            icon: '/logo.png'
-          });
-        }
-      }
-    });
-    
-    // Listen for device status updates
-    this.wsManager.subscribe('device_status_changed', (data) => {
+
+    // Device status updates
+    this.socket.on('device:*:status', (data) => {
       if (this.settings.deviceStatus) {
         this.notifySubscribers('device_status', data);
       }
     });
-    
-    // Listen for deployment events
-    this.wsManager.subscribe('deployment_status', (data) => {
+
+    // Deployment alerts
+    this.socket.on('deployment:*:status', (data) => {
       if (this.settings.deploymentAlerts) {
         this.notifySubscribers('deployment', data);
       }
     });
-    
-    // Listen for system updates
-    this.wsManager.subscribe('system_update', (data) => {
+
+    // System updates
+    this.socket.on('system:update', (data) => {
       if (this.settings.systemUpdates) {
         this.notifySubscribers('system_update', data);
       }
     });
-    
-    // Listen for security alerts
-    this.wsManager.subscribe('security_alert', (data) => {
+
+    // Security alerts
+    this.socket.on('security:alert', (data) => {
       if (this.settings.securityAlerts) {
         this.notifySubscribers('security', data);
       }
     });
+
+    // Handle disconnection
+    this.socket.on('disconnect', () => {
+      this.isConnected = false;
+      console.log('NotificationService: Socket disconnected');
+    });
+
+    // Handle reconnection
+    this.socket.on('reconnect', () => {
+      this.isConnected = true;
+      console.log('NotificationService: Socket reconnected');
+      this.configureNotifications();
+    });
   }
 
   public disconnect(): void {
-    // We don't disconnect the socket since it's managed by WebSocketManager
-    this.isConnected = false;
-    console.log('NotificationService: Disconnected from notification service');
+    if (this.socket) {
+      this.socket.disconnect();
+      this.socket = null;
+      this.isConnected = false;
+    }
   }
 
   private configureNotifications(): void {
     if (!this.isConnected || !this.socket) return;
-    
-    // Send current notification settings to the server
-    this.wsManager.emit('configure_notifications', {
-      settings: this.settings,
-      userId: this.getCurrentUserId()
+
+    const userId = this.getCurrentUserId();
+    if (!userId) return;
+
+    // Subscribe to user-specific notification channels
+    this.socket.emit('subscribe:notifications', {
+      userId,
+      settings: this.settings
     });
-    
-    console.log('NotificationService: Configured notifications with settings', this.settings);
   }
 
   public subscribe(type: NotificationType, callback: NotificationCallback): void {
@@ -273,31 +259,25 @@ class NotificationService {
   }
 
   public unsubscribe(type: NotificationType, callback: NotificationCallback): void {
-    const callbacks = this.subscribers.get(type);
-    if (callbacks) {
-      callbacks.delete(callback);
-    }
+    this.subscribers.get(type)?.delete(callback);
   }
 
   private notifySubscribers(type: NotificationType, data: any): void {
-    const callbacks = this.subscribers.get(type);
-    if (callbacks) {
-      callbacks.forEach(callback => {
-        try {
-          callback(data);
-        } catch (error) {
-          console.error('Error in notification callback:', error);
-        }
-      });
-    }
+    this.subscribers.get(type)?.forEach(callback => {
+      try {
+        callback(data);
+      } catch (error) {
+        console.error(`Error in ${type} notification handler:`, error);
+      }
+    });
   }
 
   public showBrowserNotification(title: string, options?: NotificationOptions): void {
     if (!('Notification' in window)) {
-      console.log('NotificationService: Browser does not support notifications');
+      console.warn('Browser notifications are not supported');
       return;
     }
-    
+
     if (Notification.permission === 'granted') {
       new Notification(title, options);
     } else if (Notification.permission !== 'denied') {
@@ -310,49 +290,40 @@ class NotificationService {
   }
 
   public async testSocketConnection(): Promise<boolean> {
-    if (!this.socket) {
-      console.log('NotificationService: No socket available for testing');
-      return false;
-    }
-    
-    return new Promise<boolean>(resolve => {
-      const timeout = setTimeout(() => {
+    return new Promise((resolve) => {
+      if (!this.socket) {
         resolve(false);
-      }, 5000);
-      
-      this.emitTestEvent();
-      
+        return;
+      }
+
+      let timeoutId: NodeJS.Timeout;
       const testHandler = () => {
-        clearTimeout(timeout);
+        clearTimeout(timeoutId);
+        this.socket?.off('test:response', testHandler);
         resolve(true);
       };
-      
-      this.wsManager.subscribe('test_response', testHandler);
-      
-      // Clean up after 5 seconds
-      setTimeout(() => {
-        this.wsManager.unsubscribe('test_response', testHandler);
+
+      timeoutId = setTimeout(() => {
+        this.socket?.off('test:response', testHandler);
+        resolve(false);
       }, 5000);
+
+      this.socket.on('test:response', testHandler);
+      this.emitTestEvent();
     });
   }
 
   private emitTestEvent(): void {
-    if (this.isConnected && this.socket) {
-      this.wsManager.emit('test_ping', { timestamp: Date.now() });
+    if (this.socket?.connected) {
+      this.socket.emit('test:connection');
     }
   }
 
   public cleanup() {
-    // Clean up listeners
+    this.disconnect();
     document.removeEventListener('notification-settings-changed', this.handleSettingsChange as EventListener);
     document.removeEventListener('user-authenticated', () => this.connect());
-    
-    // Clear all subscribers
-    this.subscribers.clear();
-    
-    // We don't disconnect the socket here as it's managed by WebSocketManager
   }
 }
 
-// Export a singleton instance
-export default NotificationService.getInstance();
+export default NotificationService;
