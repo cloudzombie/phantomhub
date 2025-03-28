@@ -1,7 +1,7 @@
-import { io, Socket } from 'socket.io-client';
-import { apiService } from './ApiService';
-import { getSocket } from '../utils/socketUtils';
+import { Socket } from 'socket.io-client';
+import { getSocket } from '../utils/webSocket';
 import { getToken, getUserData } from '../utils/tokenManager';
+import { WebSocketManager } from '../core/WebSocketManager';
 
 interface NotificationSettings {
   deviceStatus: boolean;
@@ -16,6 +16,7 @@ type NotificationCallback = (data: any) => void;
 class NotificationService {
   private static instance: NotificationService;
   private socket: Socket | null = null;
+  private wsManager: WebSocketManager;
   private isConnected: boolean = false;
   private settings: NotificationSettings = {
     deviceStatus: true,
@@ -26,13 +27,9 @@ class NotificationService {
   private subscribers: Map<string, Set<NotificationCallback>> = new Map();
   private connectionAttempts: number = 0;
   private maxConnectionAttempts: number = 5;
-  private isReconnecting: boolean = false;
-  private reconnectAttempts: number = 0;
-  private maxReconnectAttempts: number = 5;
-  private socketReconnectDelay: number = 30000; // 30 seconds
-  private reconnectTimeout: NodeJS.Timeout | null = null;
 
   private constructor() {
+    this.wsManager = WebSocketManager.getInstance();
     this.loadSettings();
     
     // Set up listener for settings changes
@@ -47,7 +44,7 @@ class NotificationService {
     // Try to connect if we already have a token
     const token = getToken();
     if (token) {
-      // Delay initial connection attempt to allow ApiService to initialize
+      // Delay initial connection attempt to allow systems to initialize
       setTimeout(() => this.connect(), 1000);
     }
   }
@@ -93,7 +90,6 @@ class NotificationService {
     try {
       const userData = getUserData();
       if (userData) {
-        // getUserData already returns the parsed object, no need to parse again
         return userData.id || null;
       }
     } catch (error) {
@@ -104,7 +100,7 @@ class NotificationService {
 
   private getSettingsKey(): string {
     const userId = this.getCurrentUserId();
-    return userId ? `phantomhub_settings_${userId}` : 'phantomhub_settings';
+    return userId ? `ghostwire_settings_${userId}` : 'ghostwire_settings';
   }
 
   private loadSettings(): void {
@@ -154,15 +150,15 @@ class NotificationService {
       return;
     }
     
-    // Use the socket from ApiService instead of creating a new one
-    this.socket = getSocket();
+    // Use the WebSocketManager
+    this.socket = this.wsManager.getSocket();
     
     if (!this.socket) {
-      console.log('NotificationService: No socket available from ApiService, will retry');
+      console.log('NotificationService: No socket available, will retry');
       
-      // Instead of triggering reconnection, just wait for the socket to be available
+      // Check if the socket becomes available
       const checkSocket = () => {
-        this.socket = getSocket();
+        this.socket = this.wsManager.getSocket();
         if (this.socket) {
           console.log('NotificationService: Socket obtained after retry');
           this.setupSocketConnection();
@@ -183,9 +179,10 @@ class NotificationService {
     if (!this.socket) return;
     
     if (!this.socket.connected) {
-      console.log('NotificationService: ApiService socket not connected, waiting for connection');
-      // Instead of requesting reconnection, just wait for the socket to connect
-      this.socket.once('connect', () => {
+      console.log('NotificationService: Socket not connected, waiting for connection');
+      
+      // Wait for the socket to connect
+      this.wsManager.subscribe('connect', () => {
         console.log('NotificationService: Socket connected successfully');
         this.isConnected = true;
         this.setupSocketEventListeners();
@@ -195,128 +192,84 @@ class NotificationService {
         document.dispatchEvent(new CustomEvent('socket-connected'));
       });
     } else {
-      console.log('NotificationService: Using existing socket from ApiService:', this.socket.id);
+      console.log('NotificationService: Using existing socket:', this.socket.id);
       this.isConnected = true;
       this.setupSocketEventListeners();
       this.configureNotifications();
-      
-      // Dispatch an event that the socket is connected
-      document.dispatchEvent(new CustomEvent('socket-connected'));
     }
   }
 
   private setupSocketEventListeners(): void {
     if (!this.socket) return;
     
-    // Clean up existing listeners
-    this.socket.off('connect');
-    this.socket.off('disconnect');
-    this.socket.off('connect_error');
-    
-    // Set up new listeners
-    this.socket.on('connect', () => {
-      console.log('NotificationService: Socket connected');
-      this.isConnected = true;
-      this.connectionAttempts = 0;
-      
-      // Configure notifications after successful connection
-      this.configureNotifications();
-    });
-    
-    this.socket.on('connect_error', (error) => {
-      console.error('NotificationService: Connection error', error);
-      this.connectionAttempts++;
-      this.isConnected = false;
-      
-      // Handle authentication errors
-      if (error.message && error.message.includes('Authentication')) {
-        const token = getToken();
-        console.warn('NotificationService: Authentication error with socket connection. Token exists:', !!token);
+    // Set up listeners for different notification types
+    this.wsManager.subscribe('notification', (data) => {
+      console.log('NotificationService: Received notification', data);
+      if (data && data.type) {
+        this.notifySubscribers(data.type, data);
         
-        if (this.connectionAttempts > 2) {
-          console.warn('NotificationService: Multiple authentication failures, token may be invalid or expired');
+        // Show browser notification if appropriate
+        if (data.browserNotification && Notification.permission === 'granted') {
+          this.showBrowserNotification(data.title || 'GhostWire Notification', {
+            body: data.message || '',
+            icon: '/logo.png'
+          });
         }
       }
     });
     
-    this.socket.on('disconnect', (reason) => {
-      console.log('NotificationService: Socket disconnected', reason);
-      this.isConnected = false;
+    // Listen for device status updates
+    this.wsManager.subscribe('device_status_changed', (data) => {
+      if (this.settings.deviceStatus) {
+        this.notifySubscribers('device_status', data);
+      }
+    });
+    
+    // Listen for deployment events
+    this.wsManager.subscribe('deployment_status', (data) => {
+      if (this.settings.deploymentAlerts) {
+        this.notifySubscribers('deployment', data);
+      }
+    });
+    
+    // Listen for system updates
+    this.wsManager.subscribe('system_update', (data) => {
+      if (this.settings.systemUpdates) {
+        this.notifySubscribers('system_update', data);
+      }
+    });
+    
+    // Listen for security alerts
+    this.wsManager.subscribe('security_alert', (data) => {
+      if (this.settings.securityAlerts) {
+        this.notifySubscribers('security', data);
+      }
     });
   }
 
   public disconnect(): void {
-    // Just clear our reference and event listeners, don't actually disconnect the socket
-    // as it's managed by ApiService
-    if (this.socket) {
-      this.socket.off('connect');
-      this.socket.off('disconnect');
-      this.socket.off('connect_error');
-      this.socket.off('device_status_changed');
-      this.socket.off('deployment_status_changed');
-      this.socket.off('payload_status_update');
-      this.socket.off('system_update_available');
-      this.socket.off('security_alert');
-      
-      this.socket = null;
-      this.isConnected = false;
-    }
+    // We don't disconnect the socket since it's managed by WebSocketManager
+    this.isConnected = false;
+    console.log('NotificationService: Disconnected from notification service');
   }
 
   private configureNotifications(): void {
-    if (!this.socket || !this.isConnected) {
-      return;
-    }
-
-    // Remove all existing listeners first
-    this.socket.off('device_status_changed');
-    this.socket.off('deployment_status_changed');
-    this.socket.off('payload_status_update');
-    this.socket.off('system_update_available');
-    this.socket.off('security_alert');
-
-    // Set up device status notifications
-    if (this.settings.deviceStatus) {
-      this.socket.on('device_status_changed', (data) => {
-        console.log('Received device status update:', data);
-        this.notifySubscribers('device_status', data);
-      });
-    }
-
-    // Set up deployment notifications
-    if (this.settings.deploymentAlerts) {
-      this.socket.on('deployment_status_changed', (data) => {
-        console.log('Received deployment status update:', data);
-        this.notifySubscribers('deployment', data);
-      });
-      this.socket.on('payload_status_update', (data) => {
-        console.log('Received payload status update:', data);
-        this.notifySubscribers('deployment', data);
-      });
-    }
-
-    // Set up system update notifications
-    if (this.settings.systemUpdates) {
-      this.socket.on('system_update_available', (data) => {
-        this.notifySubscribers('system_update', data);
-      });
-    }
-
-    // Set up security notifications
-    if (this.settings.securityAlerts) {
-      this.socket.on('security_alert', (data) => {
-        this.notifySubscribers('security', data);
-      });
-    }
+    if (!this.isConnected || !this.socket) return;
+    
+    // Send current notification settings to the server
+    this.wsManager.emit('configure_notifications', {
+      settings: this.settings,
+      userId: this.getCurrentUserId()
+    });
+    
+    console.log('NotificationService: Configured notifications with settings', this.settings);
   }
 
   public subscribe(type: NotificationType, callback: NotificationCallback): void {
     if (!this.subscribers.has(type)) {
       this.subscribers.set(type, new Set());
     }
-    
-    const callbacks = this.subscribers.get(type);
-    callbacks?.add(callback);
+    this.subscribers.get(type)?.add(callback);
   }
 
   public unsubscribe(type: NotificationType, callback: NotificationCallback): void {
@@ -333,19 +286,18 @@ class NotificationService {
         try {
           callback(data);
         } catch (error) {
-          console.error(`Error in notification subscriber for ${type}:`, error);
+          console.error('Error in notification callback:', error);
         }
       });
     }
   }
 
-  // Factory method to create a browser notification
   public showBrowserNotification(title: string, options?: NotificationOptions): void {
     if (!('Notification' in window)) {
-      console.warn('This browser does not support desktop notifications');
+      console.log('NotificationService: Browser does not support notifications');
       return;
     }
-
+    
     if (Notification.permission === 'granted') {
       new Notification(title, options);
     } else if (Notification.permission !== 'denied') {
@@ -357,115 +309,50 @@ class NotificationService {
     }
   }
 
-  /**
-   * Test the socket connection and emit a diagnostic event
-   */
   public async testSocketConnection(): Promise<boolean> {
-    console.log('NotificationService: Testing socket connection...');
-    
-    // Get socket from ApiService
-    this.socket = getSocket();
-    console.log('NotificationService: Socket exists:', !!this.socket);
-    console.log('NotificationService: Socket connected:', this.socket?.connected);
-    console.log('NotificationService: Socket ID:', this.socket?.id);
-    
-    // If socket doesn't exist or isn't connected, wait for it
-    if (!this.socket || !this.socket.connected) {
-      console.log('NotificationService: Socket not connected, waiting for connection...');
-      
-      // Wait for connection with timeout
-      return new Promise((resolve) => {
-        // Set timeout for 5 seconds
-        const timeoutId = setTimeout(() => {
-          console.log('NotificationService: Socket connection timed out');
-          this.notifySubscribers('system_update', {
-            type: 'socket_test',
-            success: false,
-            message: 'WebSocket connection timed out',
-            data: null
-          });
-          resolve(false);
-        }, 5000);
-        
-        if (this.socket) {
-          this.socket.once('connect', () => {
-            clearTimeout(timeoutId);
-            console.log('NotificationService: Socket connected, proceeding with test');
-            this.emitTestEvent();
-            resolve(true);
-          });
-        } else {
-          clearTimeout(timeoutId);
-          resolve(false);
-        }
-      });
+    if (!this.socket) {
+      console.log('NotificationService: No socket available for testing');
+      return false;
     }
-
-    // If socket is already connected, emit test event directly
-    this.emitTestEvent();
-    return true;
+    
+    return new Promise<boolean>(resolve => {
+      const timeout = setTimeout(() => {
+        resolve(false);
+      }, 5000);
+      
+      this.emitTestEvent();
+      
+      const testHandler = () => {
+        clearTimeout(timeout);
+        resolve(true);
+      };
+      
+      this.wsManager.subscribe('test_response', testHandler);
+      
+      // Clean up after 5 seconds
+      setTimeout(() => {
+        this.wsManager.unsubscribe('test_response', testHandler);
+      }, 5000);
+    });
   }
 
   private emitTestEvent(): void {
-    if (!this.socket) {
-      console.error('NotificationService: Cannot emit test event - socket is null');
-      this.notifySubscribers('system_update', {
-        type: 'socket_test',
-        success: false,
-        message: 'WebSocket connection failed - socket is null',
-        data: null
-      });
-      return;
-    }
-    
-    console.log('NotificationService: Emitting test event...');
-    
-    try {
-      this.socket.emit('ping_test', { 
-        timestamp: new Date().toISOString(),
-        clientInfo: {
-          url: window.location.href,
-          userAgent: navigator.userAgent
-        }
-      });
-      
-      // Register a one-time listener for the server's response
-      this.socket.once('pong_test', (data) => {
-        console.log('NotificationService: Received pong response:', data);
-        // Notify any subscribers
-        this.notifySubscribers('system_update', {
-          type: 'socket_test',
-          success: true,
-          message: 'WebSocket connectivity test succeeded',
-          data
-        });
-      });
-    } catch (error) {
-      console.error('NotificationService: Error during test:', error);
-      this.notifySubscribers('system_update', {
-        type: 'socket_test',
-        success: false,
-        message: `WebSocket test failed: ${error instanceof Error ? error.message : String(error)}`,
-        data: null
-      });
+    if (this.isConnected && this.socket) {
+      this.wsManager.emit('test_ping', { timestamp: Date.now() });
     }
   }
 
   public cleanup() {
-    if (this.socket) {
-      this.socket.off('connect');
-      this.socket.off('disconnect');
-      this.socket.off('connect_error');
-      this.socket.off('device_status_changed');
-      this.socket.off('deployment_status_changed');
-      this.socket.off('payload_status_update');
-      this.socket.off('system_update_available');
-      this.socket.off('security_alert');
-      
-      this.socket = null;
-      this.isConnected = false;
-    }
+    // Clean up listeners
+    document.removeEventListener('notification-settings-changed', this.handleSettingsChange as EventListener);
+    document.removeEventListener('user-authenticated', () => this.connect());
+    
+    // Clear all subscribers
+    this.subscribers.clear();
+    
+    // We don't disconnect the socket here as it's managed by WebSocketManager
   }
 }
 
-export default NotificationService.getInstance(); 
+// Export a singleton instance
+export default NotificationService.getInstance();

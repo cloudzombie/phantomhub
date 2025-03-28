@@ -1,51 +1,43 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { FiServer, FiCode, FiActivity, FiCheckCircle, FiInfo, FiAlertCircle, FiRefreshCw, FiX } from 'react-icons/fi';
+import { 
+  FiServer, 
+  FiCode, 
+  FiActivity, 
+  FiCheckCircle, 
+  FiInfo, 
+  FiAlertCircle, 
+  FiRefreshCw, 
+  FiX,
+  FiCheck,
+  FiCpu,
+  FiZap,
+  FiList,
+  FiLoader
+} from 'react-icons/fi';
 import axios from 'axios';
 import { Socket } from 'socket.io-client';
 import DeviceInfoPanel from '../components/DeviceInfoPanel';
-import { apiService } from '../services/ApiService';
 import { getToken } from '../utils/tokenManager';
+import { observer } from 'mobx-react-lite';
+import { useStores } from '../hooks/useStores';
+import { useWebSocket } from '../hooks/useWebSocket';
+import { 
+  useGetDevicesQuery, 
+  useGetPayloadsQuery
+} from '../core/apiClient';
+import type { Device, Payload } from '../core/apiClient';
 
 const API_URL = 'https://ghostwire-backend-e0380bcf4e0e.herokuapp.com/api';
 
-interface Device {
-  id: string;
-  name: string;
-  status: 'online' | 'offline' | 'busy' | 'maintenance';
-  lastCheckIn: string | null;
-  firmwareVersion: string | null;
-  connectionType: 'usb' | 'network';
-  serialPortId?: string;
-  ipAddress?: string;
-}
-
 interface Deployment {
-  id: number;
-  payloadId: number;
-  deviceId: number;
-  userId: number;
-  status: string;
-  createdAt: string;
-  updatedAt: string;
-  result: string | null;
-  payload?: {
-    id: number;
-    name: string;
-    description: string;
-    script: string;
-  };
-  device?: {
-    id: number;
-    name: string;
-    ipAddress: string;
-    status: string;
-  };
-  initiator?: {
-    id: number;
-    username: string;
-    email: string;
-  };
+  id: string;
+  deviceId: string;
+  payloadId: string;
+  status: 'pending' | 'in_progress' | 'completed' | 'failed';
+  timestamp: string;
+  device?: Device;
+  payload?: Payload;
 }
 
 interface Stats {
@@ -55,447 +47,252 @@ interface Stats {
   successRate: number;
 }
 
-const Dashboard = () => {
-  const [devices, setDevices] = useState<Device[]>([]);
-  const [recentDeployments, setRecentDeployments] = useState<Deployment[]>([]);
+const Dashboard = observer(() => {
+  // Use MobX stores
+  const { deviceStore } = useStores();
+  
+  // Use Redux RTK Query
+  const { data: devicesData, isLoading: isLoadingDevices } = useGetDevicesQuery();
+  const { data: payloadsData, isLoading: isLoadingPayloads } = useGetPayloadsQuery();
+  
+  // Local state
   const [selectedDevice, setSelectedDevice] = useState<Device | null>(null);
+  const [recentDeployments, setRecentDeployments] = useState<Deployment[]>([]);
   const [stats, setStats] = useState<Stats>({
     activeDevices: 0,
     totalPayloads: 0,
     totalAttacks: 0,
     successRate: 0,
   });
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   
+  // Initialize WebSocket
+  const { subscribe } = useWebSocket({ autoConnect: true });
+  
+  // Calculate stats
   useEffect(() => {
-    // Get socket from apiService instance
-    const socket = apiService.getSocket();
-    
-    if (socket) {
-      // Listen for device status changes
-      socket.on('device_status_changed', (data: any) => {
-        setDevices(prevDevices => 
-          prevDevices.map(device => 
-            device.id === data.id 
-              ? { ...device, status: data.status } 
-              : device
-          )
-        );
-        calculateStats();
-      });
+    if (devicesData?.success && payloadsData?.success) {
+      const devices = devicesData.data || [];
+      const payloads = payloadsData.data || [];
       
-      // Listen for new deployments
-      socket.on('payload_status_update', () => {
-        // Update deployments and stats as needed
-        fetchData();
+      const activeDeviceCount = devices.filter(device => device.status === 'online').length;
+      
+      setStats({
+        activeDevices: activeDeviceCount,
+        totalPayloads: payloads.length,
+        totalAttacks: recentDeployments.length,
+        successRate: recentDeployments.length > 0 
+          ? Math.round((recentDeployments.filter(d => d.status === 'completed').length / recentDeployments.length) * 100) 
+          : 0
       });
-    } else {
-      // If socket is not available, try to reconnect
-      apiService.reconnectSocket();
     }
+  }, [devicesData, payloadsData, recentDeployments]);
+  
+  // Subscribe to WebSocket events
+  useEffect(() => {
+    // Listen for device status changes
+    const unsubDeviceStatus = subscribe<{id: string, status: string}>('device_status_changed', data => {
+      deviceStore.handleDeviceStatusUpdate(data);
+    });
     
-    // Fetch initial data
-    fetchData();
+    // Listen for new deployments
+    const unsubDeployments = subscribe('payload_status_update', () => {
+      // Fetch deployments - this would ideally come from another RTK Query hook
+      fetchRecentDeployments();
+    });
     
     return () => {
-      // No need to disconnect as ApiService manages the socket lifecycle
+      unsubDeviceStatus();
+      unsubDeployments();
     };
-  }, []);
+  }, [deviceStore, subscribe]);
   
-  const calculateStats = () => {
-    // Calculate stats based on devices and deployments
-    const activeDevices = devices.filter(d => 
-      d.status === 'online' && (!d.name.toLowerCase().includes('test') || d.lastCheckIn)
-    ).length;
-    
-    const totalPayloads = recentDeployments.length;
-    const completedAttacks = recentDeployments.filter(d => d.status === 'completed').length;
-    const successRate = totalPayloads > 0 ? Math.round((completedAttacks / totalPayloads) * 100) : 0;
-    
-    setStats({
-      activeDevices,
-      totalPayloads,
-      totalAttacks: totalPayloads,
-      successRate
-    });
+  // Placeholder for fetching recent deployments
+  const fetchRecentDeployments = async () => {
+    // This would normally be a Redux RTK Query hook or MobX action
+    // For now, just simulate with empty data
+    setRecentDeployments([]);
   };
   
-  const fetchData = async () => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      const token = getToken();
-      if (!token) {
-        console.error('No authentication token found');
-        window.location.href = '/login';
-        return;
-      }
-      
-      const headers = {
-        Authorization: `Bearer ${token}`
-      };
-      
-      // Fetch devices
-      const devicesResponse = await axios.get(`${API_URL}/devices`, { headers });
-      
-      if (devicesResponse.data && devicesResponse.data.success) {
-        // Update test devices to always show as offline in the UI
-        const updatedDevices = devicesResponse.data.data.map((device: Device) => {
-          // If it's a test device and not explicitly set to online by a user, mark as offline
-          if (device.name.toLowerCase().includes('test') && !device.lastCheckIn) {
-            return { ...device, status: 'offline' };
-          }
-          return device;
-        });
-        setDevices(updatedDevices || []);
-      }
-      
-      // Fetch recent deployments
-      const deploymentsResponse = await axios.get(`${API_URL}/deployments`, { headers });
-      
-      if (deploymentsResponse.data && deploymentsResponse.data.success) {
-        setRecentDeployments(deploymentsResponse.data.data || []);
-      }
-      
-      // Calculate stats after data is fetched
-      setTimeout(() => calculateStats(), 0);
-      
-    } catch (error) {
-      console.error('Error fetching dashboard data:', error);
-      
-      // If we get a 401, redirect to login WITHOUT removing token
-      if (axios.isAxiosError(error) && error.response?.status === 401) {
-        console.log('Authentication error in Dashboard, redirecting to login without removing token');
-        // Use the login page with action parameter to handle logout properly
-        window.location.href = '/login?action=logout';
-      }
-      // Handle 500 errors gracefully - likely due to empty collections
-      else if (axios.isAxiosError(error) && error.response?.status === 500) {
-        console.log('No data available yet - setting empty values');
-        setDevices([]);
-        setRecentDeployments([]);
-        // Don't show error message for expected empty state
-        setError(null);
-      } 
-      else {
-        setError('Failed to load dashboard data. Please try again later.');
-      }
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Format date/time to be more readable
-  const formatDateTime = (dateString: string | null) => {
-    if (!dateString) return 'Never';
-    
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMins / 60);
-    const diffDays = Math.floor(diffHours / 24);
-    
-    if (diffMins < 1) return 'Just now';
-    if (diffMins < 60) return `${diffMins} minutes ago`;
-    if (diffHours < 24) return `${diffHours} hours ago`;
-    if (diffDays < 7) return `${diffDays} days ago`;
-    
-    return date.toLocaleDateString('en-US', { 
-      month: 'short', 
-      day: 'numeric',
-      year: 'numeric'
-    });
-  };
-
-  const handleViewDeviceDetails = (device: Device) => {
-    setSelectedDevice(device);
-  };
+  const isLoading = isLoadingDevices || isLoadingPayloads;
   
-  const handleCloseDeviceDetails = () => {
-    setSelectedDevice(null);
-  };
-
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-96">
+        <FiLoader className="animate-spin text-blue-500 mr-2" size={24} />
+        <span className="text-slate-300">Loading dashboard data...</span>
+      </div>
+    );
+  }
+  
   return (
-    <div className="p-6">
-      {/* Page Title */}
-      <div className="mb-6">
-        <h1 className="text-xl font-semibold text-white">Security Dashboard</h1>
-        <p className="text-sm text-slate-400">Monitor your penetration testing operations</p>
+    <div className="flex flex-col space-y-8 p-6">
+      <div>
+        <h1 className="text-2xl font-bold text-white mb-1">Dashboard</h1>
+        <p className="text-sm text-slate-400">Overview of your O.MG Cable devices and operations</p>
       </div>
-
-      {/* Error Message */}
-      {error && (
-        <div className="mb-6 p-3 bg-red-900/20 border border-red-500/30 rounded text-red-400 text-sm">
-          <div className="flex items-center">
-            <FiAlertCircle className="mr-2 flex-shrink-0" size={16} />
-            <p>{error}</p>
+      
+      {/* Stats Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="bg-slate-800 border border-slate-700 rounded-lg p-5">
+          <div className="flex items-center mb-3">
+            <FiCpu className="text-blue-500 mr-2" size={20} />
+            <h2 className="text-lg font-medium text-white">Devices</h2>
           </div>
-        </div>
-      )}
-
-      {/* Stats Overview */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <div className="bg-slate-800 border border-slate-700 rounded-md p-4 shadow-sm">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-slate-400 text-xs mb-1">Active Devices</p>
-              <h3 className="text-2xl font-semibold text-white">{stats.activeDevices}</h3>
-            </div>
-            <div className="p-2 bg-slate-700 rounded-md">
-              <FiServer className="text-green-500" size={18} />
+          <div className="flex items-end justify-between">
+            <div className="text-3xl font-bold text-white">{deviceStore.allDevices.length}</div>
+            <div className="text-sm text-slate-400">
+              <span className="text-green-500">{deviceStore.onlineDevices.length}</span> online
             </div>
           </div>
-        </div>
-
-        <div className="bg-slate-800 border border-slate-700 rounded-md p-4 shadow-sm">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-slate-400 text-xs mb-1">Total Payloads</p>
-              <h3 className="text-2xl font-semibold text-white">{stats.totalPayloads}</h3>
-            </div>
-            <div className="p-2 bg-slate-700 rounded-md">
-              <FiCode className="text-green-500" size={18} />
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-slate-800 border border-slate-700 rounded-md p-4 shadow-sm">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-slate-400 text-xs mb-1">Attack Attempts</p>
-              <h3 className="text-2xl font-semibold text-white">{stats.totalAttacks}</h3>
-            </div>
-            <div className="p-2 bg-slate-700 rounded-md">
-              <FiActivity className="text-green-500" size={18} />
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-slate-800 border border-slate-700 rounded-md p-4 shadow-sm">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-slate-400 text-xs mb-1">Success Rate</p>
-              <h3 className="text-2xl font-semibold text-white">{stats.successRate}%</h3>
-            </div>
-            <div className="p-2 bg-slate-700 rounded-md">
-              <FiCheckCircle className="text-green-500" size={18} />
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Device Status */}
-      <div className="bg-slate-800 border border-slate-700 rounded-md shadow-sm mb-6 overflow-hidden">
-        <div className="flex items-center justify-between border-b border-slate-700 px-4 py-3">
-          <h2 className="font-medium text-white flex items-center">
-            <FiServer className="mr-2 text-green-500" size={16} />
-            Device Status
-          </h2>
-          <span className="text-xs font-medium text-slate-400">
-            {devices.filter(d => d.status === 'online' && (!d.name.toLowerCase().includes('test') || d.lastCheckIn)).length} Online
-          </span>
         </div>
         
-        {devices.length === 0 ? (
-          <div className="p-6 text-center text-slate-400">
-            {isLoading ? (
-              <div className="flex justify-center items-center">
-                <div className="animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-green-500"></div>
-              </div>
-            ) : (
-              <>
-                <FiInfo className="mx-auto mb-2" size={20} />
-                <p className="text-sm">No devices found. Register O.MG Cables to get started.</p>
-              </>
-            )}
+        <div className="bg-slate-800 border border-slate-700 rounded-lg p-5">
+          <div className="flex items-center mb-3">
+            <FiList className="text-indigo-500 mr-2" size={20} />
+            <h2 className="text-lg font-medium text-white">Payloads</h2>
           </div>
-        ) : (
-          <div className="divide-y divide-slate-700/50">
-            {devices.map(device => (
-              <div 
-                key={device.id} 
-                className="flex items-center justify-between px-4 py-3 hover:bg-slate-700/10 cursor-pointer"
-                onClick={() => handleViewDeviceDetails(device)}
-              >
-                <div className="flex items-center">
-                  <div className={`w-2 h-2 rounded-full mr-3 ${
-                    (device.name.toLowerCase().includes('test') && !device.lastCheckIn) 
-                      ? 'bg-red-500' // Test devices without lastCheckIn are always offline
-                      : device.status === 'online' 
-                        ? 'bg-green-500' 
-                        : device.status === 'busy' 
-                          ? 'bg-orange-500' 
-                          : 'bg-red-500'
-                  }`}></div>
-                  <div>
-                    <div className="text-sm font-medium text-white">{device.name}</div>
-                    <div className="text-xs text-slate-400">Last active: {formatDateTime(device.lastCheckIn)}</div>
-                  </div>
-                </div>
-                <div>
-                  {(device.name.toLowerCase().includes('test') && !device.lastCheckIn) ? (
-                    <span className="px-2 py-1 text-xs bg-red-500/20 text-red-400 border border-red-500/30 rounded-full">Offline</span>
-                  ) : device.status === 'online' ? (
-                    <span className="px-2 py-1 text-xs bg-green-500/20 text-green-400 border border-green-500/30 rounded-full">Online</span>
-                  ) : device.status === 'busy' ? (
-                    <span className="px-2 py-1 text-xs bg-orange-500/20 text-orange-400 border border-orange-500/30 rounded-full">Busy</span>
-                  ) : (
-                    <span className="px-2 py-1 text-xs bg-red-500/20 text-red-400 border border-red-500/30 rounded-full">Offline</span>
-                  )}
-                </div>
-              </div>
-            ))}
+          <div className="flex items-end justify-between">
+            <div className="text-3xl font-bold text-white">{stats.totalPayloads}</div>
+            <div className="text-sm text-slate-400">Total created</div>
           </div>
-        )}
-      </div>
-
-      {/* Recent Activity */}
-      <div className="bg-slate-800 border border-slate-700 rounded-md shadow-sm mb-6 overflow-hidden">
-        <div className="flex items-center justify-between border-b border-slate-700 px-4 py-3">
-          <h2 className="font-medium text-white flex items-center">
-            <FiActivity className="mr-2 text-green-500" size={16} />
-            Recent Activity
-          </h2>
-          <button 
-            onClick={fetchData}
-            className="text-xs text-slate-400 hover:text-white flex items-center"
-            disabled={isLoading}
-          >
-            <FiRefreshCw className={`mr-1 ${isLoading ? 'animate-spin' : ''}`} size={12} />
-            Refresh
-          </button>
         </div>
         
-        {recentDeployments.length === 0 ? (
-          <div className="p-6 text-center text-slate-400">
-            {isLoading ? (
-              <div className="flex justify-center items-center">
-                <div className="animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-green-500"></div>
-              </div>
-            ) : (
-              <>
-                <FiInfo className="mx-auto mb-2" size={20} />
-                <p className="text-sm">No activity recorded yet. Deploy payloads to see activity here.</p>
-              </>
-            )}
+        <div className="bg-slate-800 border border-slate-700 rounded-lg p-5">
+          <div className="flex items-center mb-3">
+            <FiZap className="text-amber-500 mr-2" size={20} />
+            <h2 className="text-lg font-medium text-white">Deployments</h2>
           </div>
-        ) : (
-          <div className="divide-y divide-slate-700/50">
-            {recentDeployments.slice(0, 5).map((deployment) => (
-              <div key={deployment.id} className="px-4 py-3 hover:bg-slate-700/10">
-                <div className="flex items-start">
-                  <div className="flex-shrink-0 mt-0.5">
-                    {deployment.status === 'completed' ? (
-                      <div className="w-8 h-8 rounded-full bg-green-500/10 border border-green-500/30 flex items-center justify-center">
-                        <FiCheckCircle className="text-green-500" size={16} />
+          <div className="flex items-end justify-between">
+            <div className="text-3xl font-bold text-white">{stats.totalAttacks}</div>
+            <div className="text-sm text-slate-400">Last 30 days</div>
+          </div>
+        </div>
+        
+        <div className="bg-slate-800 border border-slate-700 rounded-lg p-5">
+          <div className="flex items-center mb-3">
+            <FiCheck className="text-green-500 mr-2" size={20} />
+            <h2 className="text-lg font-medium text-white">Success Rate</h2>
+          </div>
+          <div className="flex items-end justify-between">
+            <div className="text-3xl font-bold text-white">{stats.successRate}%</div>
+            <div className="text-sm text-slate-400">Avg. completion</div>
+          </div>
+        </div>
+      </div>
+      
+      {/* Device List */}
+      <div className="bg-slate-800 border border-slate-700 rounded-lg overflow-hidden">
+        <div className="border-b border-slate-700 px-6 py-4">
+          <h2 className="text-lg font-medium text-white">Your Devices</h2>
+        </div>
+        <div className="overflow-x-auto">
+          {deviceStore.allDevices.length > 0 ? (
+            <table className="w-full">
+              <thead className="bg-slate-900/50">
+                <tr>
+                  <th className="text-left px-6 py-3 text-xs font-medium text-slate-400 uppercase tracking-wider">Name</th>
+                  <th className="text-left px-6 py-3 text-xs font-medium text-slate-400 uppercase tracking-wider">Status</th>
+                  <th className="text-left px-6 py-3 text-xs font-medium text-slate-400 uppercase tracking-wider">Type</th>
+                  <th className="text-left px-6 py-3 text-xs font-medium text-slate-400 uppercase tracking-wider">Last Seen</th>
+                  <th className="text-left px-6 py-3 text-xs font-medium text-slate-400 uppercase tracking-wider">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-700">
+                {deviceStore.allDevices.map((device: Device) => (
+                  <tr key={device.id} className="hover:bg-slate-700/30">
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm font-medium text-white">{device.name}</div>
+                      <div className="text-xs text-slate-400">{device.ipAddress}</div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center">
+                        <div className={`h-2.5 w-2.5 rounded-full mr-2 ${
+                          device.status === 'online' ? 'bg-green-500' :
+                          device.status === 'busy' ? 'bg-amber-500' :
+                          'bg-red-500'
+                        }`}></div>
+                        <span className="text-sm text-slate-300 capitalize">{device.status}</span>
                       </div>
-                    ) : deployment.status === 'failed' ? (
-                      <div className="w-8 h-8 rounded-full bg-red-500/10 border border-red-500/30 flex items-center justify-center">
-                        <FiAlertCircle className="text-red-500" size={16} />
-                      </div>
-                    ) : (
-                      <div className="w-8 h-8 rounded-full bg-orange-500/10 border border-orange-500/30 flex items-center justify-center">
-                        <FiActivity className="text-orange-500" size={16} />
-                      </div>
-                    )}
-                  </div>
-                  <div className="ml-3 flex-1">
-                    <div className="flex items-center justify-between">
-                      <p className="text-sm font-medium text-white">
-                        {deployment.payload?.name || 'Unnamed Payload'}
-                      </p>
-                      <span className="text-xs text-slate-400">
-                        {formatDateTime(deployment.createdAt)}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className="px-2 py-1 text-xs rounded-full bg-slate-700 text-slate-300">
+                        {device.connectionType}
                       </span>
-                    </div>
-                    <p className="text-xs text-slate-400 mt-1">
-                      Deployed to {deployment.device?.name || 'Unknown Device'} by {deployment.initiator?.username || 'Unknown User'}
-                    </p>
-                    {deployment.status === 'completed' && (
-                      <p className="text-xs text-green-400 mt-1">Successfully executed</p>
-                    )}
-                    {deployment.status === 'failed' && (
-                      <p className="text-xs text-red-400 mt-1">Execution failed: {deployment.result || 'Unknown error'}</p>
-                    )}
-                    {deployment.status === 'pending' && (
-                      <p className="text-xs text-orange-400 mt-1">Pending execution</p>
-                    )}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Getting Started */}
-      <div className="bg-slate-800 border border-slate-700 rounded-md p-4 shadow-sm">
-        <h3 className="text-sm font-medium text-white flex items-center mb-2">
-          <FiInfo className="mr-2 text-green-500" size={16} />
-          Getting Started with GhostWire
-        </h3>
-        <p className="text-xs text-slate-400 mb-3">
-          Connect your O.MG cables via the Devices page and create custom payloads in the Payload Editor. View attack results and captured data in the Results section.
-        </p>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <div className="p-3 bg-slate-700/30 border border-slate-600/50 rounded">
-            <div className="flex items-center mb-2">
-              <FiServer className="text-green-500 mr-1" size={14} />
-              <p className="text-xs font-medium text-white">Connect Devices</p>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-300">
+                      {device.lastCheckIn ? new Date(device.lastCheckIn).toLocaleString() : 'Never'}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                      <Link
+                        to={`/devices/${device.id}`}
+                        className="text-blue-400 hover:text-blue-300"
+                      >
+                        Details
+                      </Link>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <div className="text-center py-8">
+              <FiServer className="mx-auto text-slate-500 mb-2" size={24} />
+              <h3 className="text-lg font-medium text-white">No devices found</h3>
+              <p className="text-slate-400 mt-1">Connect a device to get started</p>
+              <Link
+                to="/devices/new"
+                className="inline-flex items-center px-4 py-2 mt-4 bg-blue-500 rounded-md text-white hover:bg-blue-600"
+              >
+                Add Device
+              </Link>
             </div>
-            <p className="text-xs text-slate-400">Register your O.MG cables in the Device Management section.</p>
-          </div>
-          <div className="p-3 bg-slate-700/30 border border-slate-600/50 rounded">
-            <div className="flex items-center mb-2">
-              <FiCode className="text-green-500 mr-1" size={14} />
-              <p className="text-xs font-medium text-white">Create Payloads</p>
-            </div>
-            <p className="text-xs text-slate-400">Build and test your attack payloads in the Payload Editor.</p>
-          </div>
-          <div className="p-3 bg-slate-700/30 border border-slate-600/50 rounded">
-            <div className="flex items-center mb-2">
-              <FiActivity className="text-green-500 mr-1" size={14} />
-              <p className="text-xs font-medium text-white">Monitor Results</p>
-            </div>
-            <p className="text-xs text-slate-400">View captured data and attack logs in the Results section.</p>
-          </div>
+          )}
         </div>
       </div>
-
-      {/* Device Info Panel Modal */}
-      {selectedDevice && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="bg-slate-800 border border-slate-700 rounded-lg shadow-lg w-full max-w-4xl p-6 relative max-h-[90vh] overflow-y-auto">
-            <button 
-              onClick={handleCloseDeviceDetails}
-              className="absolute top-3 right-3 text-slate-400 hover:text-white"
-            >
-              <FiX size={18} />
-            </button>
-            <div className="mb-5">
-              <h2 className="text-lg font-medium text-white">{selectedDevice.name} Details</h2>
-              <p className="text-sm text-slate-400">View detailed information about this O.MG Cable</p>
-            </div>
-            
-            <DeviceInfoPanel 
-              deviceInfo={{
-                name: selectedDevice.name,
-                firmwareVersion: selectedDevice.firmwareVersion || undefined,
-                connectionStatus: selectedDevice.status === 'online' ? 'connected' : 'disconnected',
-                connectionType: selectedDevice.connectionType as 'usb' | 'wifi',
-                serialPortId: selectedDevice.serialPortId,
-                ipAddress: selectedDevice.ipAddress
-                // Additional properties from the device object can be added here as needed
-              }} 
-              onRefresh={() => fetchData()}
-            />
+      
+      {/* Quick Actions */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <Link
+          to="/payload-editor"
+          className="bg-slate-800 border border-slate-700 rounded-lg p-5 hover:bg-slate-700/30"
+        >
+          <div className="flex items-center mb-3">
+            <FiZap className="text-amber-500 mr-2" size={20} />
+            <h2 className="text-lg font-medium text-white">Create Payload</h2>
           </div>
-        </div>
-      )}
+          <p className="text-sm text-slate-400">
+            Create or edit DuckyScript payloads for your devices
+          </p>
+        </Link>
+        
+        <Link
+          to="/devices/new"
+          className="bg-slate-800 border border-slate-700 rounded-lg p-5 hover:bg-slate-700/30"
+        >
+          <div className="flex items-center mb-3">
+            <FiCpu className="text-blue-500 mr-2" size={20} />
+            <h2 className="text-lg font-medium text-white">Add Device</h2>
+          </div>
+          <p className="text-sm text-slate-400">
+            Connect and configure a new O.MG Cable device
+          </p>
+        </Link>
+        
+        <Link
+          to="/settings"
+          className="bg-slate-800 border border-slate-700 rounded-lg p-5 hover:bg-slate-700/30"
+        >
+          <div className="flex items-center mb-3">
+            <FiServer className="text-green-500 mr-2" size={20} />
+            <h2 className="text-lg font-medium text-white">View Settings</h2>
+          </div>
+          <p className="text-sm text-slate-400">
+            Configure your account and application settings
+          </p>
+        </Link>
+      </div>
     </div>
   );
-};
+});
 
 export default Dashboard; 

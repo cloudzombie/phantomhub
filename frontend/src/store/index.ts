@@ -1,6 +1,6 @@
 import { configureStore } from '@reduxjs/toolkit';
 import { setupListeners } from '@reduxjs/toolkit/query';
-import { api } from './api';
+import { apiSlice } from '../core/apiClient';
 import authReducer from './slices/authSlice';
 import deviceReducer from './slices/deviceSlice';
 import payloadReducer from './slices/payloadSlice';
@@ -9,7 +9,7 @@ import uiReducer from './slices/uiSlice';
 
 export const store = configureStore({
   reducer: {
-    [api.reducerPath]: api.reducer,
+    [apiSlice.reducerPath]: apiSlice.reducer,
     auth: authReducer,
     devices: deviceReducer,
     payloads: payloadReducer,
@@ -24,7 +24,7 @@ export const store = configureStore({
         // Ignore these field paths in all actions
         ignoredActionPaths: ['payload.timestamp', 'meta.arg.timestamp'],
       },
-    }).concat(api.middleware),
+    }).concat(apiSlice.middleware),
 });
 
 setupListeners(store.dispatch);

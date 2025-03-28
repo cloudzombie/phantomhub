@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import axios from 'axios';
 import { API_URL } from '../config';
 import { getToken, storeToken, storeUserData, getUserData, isAuthenticated as checkAuthStatus, clearAuthData, safeLogout } from '../utils/tokenManager';
-import { apiService } from '../services/ApiService';
+import { WebSocketManager } from '../core/WebSocketManager';
 
 // Define user interface
 interface User {
@@ -111,9 +111,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           // Ensure socket connection is initialized
           setTimeout(() => {
             console.log('AuthContext: Ensuring socket connection after auth check');
-            if (apiService.getWebSocketManager()) {
-              apiService.getWebSocketManager().connect();
-            }
+            const wsManager = WebSocketManager.getInstance();
+            wsManager.connect();
             
             if (userData && userData.id) {
               document.dispatchEvent(new CustomEvent('user-authenticated', { 
@@ -124,9 +123,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           }, 500);
           
           // Reconnect socket if disconnected
-          if (!apiService.getWebSocketManager().isConnected()) {
+          const wsManager = WebSocketManager.getInstance();
+          if (wsManager.getConnectionStatus() === 'disconnected') {
             console.log('AuthContext: Reconnecting socket after successful login');
-            apiService.getWebSocketManager().connect();
+            wsManager.connect();
           }
         } else {
           console.error('AuthContext: User validation failed', response.data);
@@ -288,9 +288,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         try {
           setTimeout(() => {
             console.log('AuthContext: Initializing socket connection after registration');
-            if (apiService.getWebSocketManager()) {
-              apiService.getWebSocketManager().connect();
-            }
+            const wsManager = WebSocketManager.getInstance();
+            wsManager.connect();
             
             // Always dispatch user-authenticated event
             document.dispatchEvent(new CustomEvent('user-authenticated', { 

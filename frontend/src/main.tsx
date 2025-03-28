@@ -1,19 +1,22 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
+import { BrowserRouter } from 'react-router-dom'
 import App from './App.tsx'
 import './index.css'
 import './App.css'
 import { AuthProvider } from './contexts/AuthContext'
+import { Provider } from 'react-redux'
+import { store } from './store'
+import { RootStoreProvider } from './contexts/RootStoreContext'
+import { WebSocketManager } from './core/WebSocketManager'
+import { SOCKET_ENDPOINT } from './config/api'
 
 // Import and initialize services
-import { apiService } from './services/ApiService'
 import NotificationService from './services/NotificationService'
 import ThemeService from './services/ThemeService'
 
 // Ensure services are initialized
 console.log('Initializing core services...')
-const apiConfig = apiService.getConfig()
-console.log(`API endpoint configured at: ${apiConfig.endpoint}`)
 
 // Initialize theme
 const themeConfig = ThemeService.getConfig()
@@ -26,10 +29,20 @@ document.documentElement.classList.add(
   : themeConfig.theme === 'dark' ? 'dark-theme' : 'light-theme'
 )
 
+// Initialize WebSocket Manager
+const wsManager = WebSocketManager.getInstance();
+wsManager.connect(SOCKET_ENDPOINT);
+
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <AuthProvider>
-      <App />
-    </AuthProvider>
+    <Provider store={store}>
+      <RootStoreProvider>
+        <BrowserRouter>
+          <AuthProvider>
+            <App />
+          </AuthProvider>
+        </BrowserRouter>
+      </RootStoreProvider>
+    </Provider>
   </React.StrictMode>,
 )

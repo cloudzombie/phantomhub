@@ -1,6 +1,7 @@
 import { makeAutoObservable, runInAction } from 'mobx';
-import { apiService } from '../services/ApiService';
+import { api } from '../services/api';
 import { WebSocketManager } from '../core/WebSocketManager';
+import axios from 'axios';
 
 export interface Device {
   id: string;
@@ -72,12 +73,15 @@ export class DeviceStore {
     this.error = null;
 
     try {
-      const response = await apiService.get<Device[]>('/devices');
+      const response = await api.get<Device[]>('/devices');
       runInAction(() => {
         this.devices.clear();
-        response.forEach(device => {
-          this.devices.set(device.id, device);
-        });
+        if (response.data?.success) {
+          const devices = response.data.data || [];
+          devices.forEach(device => {
+            this.devices.set(device.id, device);
+          });
+        }
       });
     } catch (error) {
       runInAction(() => {
@@ -92,10 +96,12 @@ export class DeviceStore {
 
   public async fetchDeviceStatus(deviceId: string): Promise<void> {
     try {
-      const response = await apiService.get<DeviceStatus>(`/devices/${deviceId}/status`);
-      runInAction(() => {
-        this.deviceStatuses.set(deviceId, response);
-      });
+      const response = await api.get<DeviceStatus>(`/devices/${deviceId}/status`);
+      if (response.data?.success) {
+        runInAction(() => {
+          this.deviceStatuses.set(deviceId, response.data.data);
+        });
+      }
     } catch (error) {
       console.error(`Failed to fetch status for device ${deviceId}:`, error);
     }
@@ -106,10 +112,12 @@ export class DeviceStore {
     this.error = null;
 
     try {
-      const response = await apiService.post<Device>('/devices', deviceData);
-      runInAction(() => {
-        this.devices.set(response.id, response);
-      });
+      const response = await api.post<Device>('/devices', deviceData);
+      if (response.data?.success) {
+        runInAction(() => {
+          this.devices.set(response.data.data.id, response.data.data);
+        });
+      }
     } catch (error) {
       runInAction(() => {
         this.error = error instanceof Error ? error.message : 'Failed to register device';
@@ -124,10 +132,13 @@ export class DeviceStore {
 
   public async updateDevice(deviceId: string, updates: Partial<Device>): Promise<void> {
     try {
-      const response = await apiService.patch<Device>(`/devices/${deviceId}`, updates);
-      runInAction(() => {
-        this.devices.set(deviceId, response);
-      });
+      const response = await api.put<Device>(`/devices/${deviceId}`, updates);
+      if (response.data?.success) {
+        runInAction(() => {
+          const updatedDevice = response.data.data;
+          this.devices.set(deviceId, updatedDevice);
+        });
+      }
     } catch (error) {
       console.error(`Failed to update device ${deviceId}:`, error);
       throw error;
@@ -136,15 +147,32 @@ export class DeviceStore {
 
   public async deleteDevice(deviceId: string): Promise<void> {
     try {
-      await apiService.delete(`/devices/${deviceId}`);
-      runInAction(() => {
-        this.devices.delete(deviceId);
-        this.deviceStatuses.delete(deviceId);
-      });
+      const response = await api.delete(`/devices/${deviceId}`);
+      if (response.data?.success) {
+        runInAction(() => {
+          this.devices.delete(deviceId);
+          this.deviceStatuses.delete(deviceId);
+        });
+      }
     } catch (error) {
       console.error(`Failed to delete device ${deviceId}:`, error);
       throw error;
     }
+  }
+
+  // Setters for testing and initialization
+  public setDevices(devices: Device[]): void {
+    runInAction(() => {
+      this.devices.clear();
+      devices.forEach(device => {
+        this.devices.set(device.id, device);
+      });
+    });
+  }
+
+  // Get WebSocketManager instance for RootStore
+  public getWebSocketManager(): WebSocketManager {
+    return this.wsManager;
   }
 
   // Computed properties
