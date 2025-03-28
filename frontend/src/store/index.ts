@@ -1,7 +1,7 @@
 import { configureStore } from '@reduxjs/toolkit';
 import { setupListeners } from '@reduxjs/toolkit/query';
 import { apiSlice } from '../core/apiClient';
-import authReducer from './slices/authSlice';
+import authReducer, { initializeAuthAsync } from './slices/authSlice';
 import deviceReducer from './slices/deviceSlice';
 import payloadReducer from './slices/payloadSlice';
 import scriptReducer from './slices/scriptSlice';
@@ -28,6 +28,9 @@ export const store = configureStore({
 });
 
 setupListeners(store.dispatch);
+
+// Initialize auth state
+store.dispatch(initializeAuthAsync());
 
 export type RootState = ReturnType<typeof store.getState>;
 export type AppDispatch = typeof store.dispatch; 

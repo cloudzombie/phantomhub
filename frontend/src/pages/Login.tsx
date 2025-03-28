@@ -55,6 +55,8 @@ const Login = () => {
       const response = await axios.post(`${API_URL}/auth/login`, {
         email,
         password
+      }, {
+        withCredentials: true // Important for cookies to be received
       });
 
       if (response.data.success) {

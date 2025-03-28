@@ -1,5 +1,5 @@
-import { createSlice, PayloadAction } from '@reduxjs/toolkit';
-import { getToken, getUserData, clearAuthData } from '../../utils/tokenManager';
+import { createSlice, PayloadAction, createAsyncThunk } from '@reduxjs/toolkit';
+import { getToken, getUserData, clearAuthData, isAuthenticated } from '../../utils/tokenManager';
 
 interface User {
   id: string;
@@ -25,6 +25,36 @@ const initialState: AuthState = {
   error: null,
   lastUpdated: null,
 };
+
+// Async thunk for initializing auth state
+export const initializeAuthAsync = createAsyncThunk(
+  'auth/initialize',
+  async (_, { rejectWithValue }) => {
+    try {
+      const token = getToken();
+      const userData = getUserData();
+      
+      if (!token || !userData) {
+        return { isAuthenticated: false };
+      }
+      
+      // Verify token is still valid
+      const isValid = await isAuthenticated();
+      if (!isValid) {
+        clearAuthData();
+        return { isAuthenticated: false };
+      }
+      
+      return {
+        token,
+        user: userData,
+        isAuthenticated: true
+      };
+    } catch (error) {
+      return rejectWithValue('Failed to initialize authentication');
+    }
+  }
+);
 
 const authSlice = createSlice({
   name: 'auth',
@@ -53,23 +83,6 @@ const authSlice = createSlice({
       state.error = action.payload;
       state.lastUpdated = Date.now();
     },
-    initializeAuth: (state) => {
-      const token = getToken();
-      const userData = getUserData();
-      
-      if (token && userData) {
-        state.token = token;
-        state.user = userData;
-        state.isAuthenticated = true;
-      } else {
-        state.token = null;
-        state.user = null;
-        state.isAuthenticated = false;
-      }
-      
-      state.isLoading = false;
-      state.lastUpdated = Date.now();
-    },
     logout: (state) => {
       clearAuthData();
       state.user = null;
@@ -79,6 +92,28 @@ const authSlice = createSlice({
       state.lastUpdated = Date.now();
     },
   },
+  extraReducers: (builder) => {
+    builder
+      .addCase(initializeAuthAsync.pending, (state) => {
+        state.isLoading = true;
+      })
+      .addCase(initializeAuthAsync.fulfilled, (state, action) => {
+        state.isLoading = false;
+        state.isAuthenticated = action.payload.isAuthenticated;
+        if (action.payload.isAuthenticated) {
+          state.token = action.payload.token;
+          state.user = action.payload.user;
+        }
+        state.lastUpdated = Date.now();
+      })
+      .addCase(initializeAuthAsync.rejected, (state, action) => {
+        state.isLoading = false;
+        state.error = (action.payload as string) || null;
+        state.isAuthenticated = false;
+        state.token = null;
+        state.user = null;
+      });
+  },
 });
 
 export const {
@@ -87,7 +122,6 @@ export const {
   clearUser,
   setLoading,
   setError,
-  initializeAuth,
   logout,
 } = authSlice.actions;
 

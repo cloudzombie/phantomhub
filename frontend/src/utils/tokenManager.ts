@@ -85,28 +85,8 @@ export const storeToken = (token: string): void => {
     
     // Ensure cookies are sent with all requests
     axios.defaults.withCredentials = true;
-    
-    // Sync the token with the server to ensure HTTP-only cookie is set
-    syncTokenWithServer(token).catch(err => {
-      console.error('TokenManager: Error syncing token with server:', err);
-    });
   } catch (err) {
     console.error('TokenManager: Error storing token:', err);
-  }
-};
-
-/**
- * Sync token with server to ensure HTTP-only cookie is set
- */
-const syncTokenWithServer = async (token: string): Promise<void> => {
-  try {
-    await axios.post(`${API_URL}/auth/sync-token`, { token }, {
-      withCredentials: true // Important for cookies to be received
-    });
-    console.log('TokenManager: Token synced with server successfully');
-  } catch (err) {
-    console.error('TokenManager: Failed to sync token with server:', err);
-    throw err;
   }
 };
 
@@ -114,102 +94,60 @@ const syncTokenWithServer = async (token: string): Promise<void> => {
  * Store user data
  */
 export const storeUserData = (userData: any): void => {
-  if (!userData || typeof userData !== 'object') {
-    console.warn('TokenManager: Invalid user data provided, not storing');
-    return;
-  }
-  
   try {
-    // Store only in localStorage to prevent sync loops
-    const userString = JSON.stringify(userData);
-    localStorage.setItem('user', userString);
+    localStorage.setItem('userData', JSON.stringify(userData));
+    sessionStorage.setItem('userData', JSON.stringify(userData));
+    console.log('TokenManager: User data stored');
   } catch (err) {
-    console.error('TokenManager: Failed to store user data:', err);
+    console.error('TokenManager: Error storing user data:', err);
   }
 };
 
 /**
- * Get user data from storage
+ * Get user data
  */
 export const getUserData = (): any => {
   try {
-    // Only use localStorage to prevent sync loops
-    const userDataString = localStorage.getItem('user');
-    
-    if (!userDataString) {
-      return null;
-    }
-    
-    try {
-      const userData = JSON.parse(userDataString);
-      
-      if (!userData || typeof userData !== 'object') {
-        return null;
-      }
-      
-      return userData;
-    } catch (parseError) {
-      console.error('TokenManager: Error parsing user data', parseError);
-      return null;
-    }
-  } catch (error) {
-    console.error('TokenManager: Error retrieving user data', error);
+    const userData = localStorage.getItem('userData') || sessionStorage.getItem('userData');
+    return userData ? JSON.parse(userData) : null;
+  } catch (err) {
+    console.error('TokenManager: Error retrieving user data:', err);
     return null;
   }
 };
 
 /**
- * Handle authentication errors without removing tokens
- * This redirects to login with a special parameter that will handle logout properly
+ * Handle authentication errors
  */
-export const handleAuthError = (error: any, message = 'Authentication error'): void => {
-  console.log(`TokenManager: ${message}`, error);
-  
-  // Instead of removing tokens directly, redirect to login with action parameter
-  // The login page will handle the logout action properly
-  window.location.href = '/login?action=logout';
+export const handleAuthError = (error: any): void => {
+  if (error.response?.status === 401) {
+    clearAuthData();
+    window.location.href = '/login';
+  }
 };
 
 /**
- * Check if an error is an authentication error (401)
+ * Check if an error is an authentication error
  */
 export const isAuthError = (error: any): boolean => {
-  if (axios.isAxiosError(error) && error.response?.status === 401) {
-    return true;
-  }
-  
-  if (error instanceof Error && error.message.includes('401')) {
-    return true;
-  }
-  
-  return false;
+  return error.response?.status === 401;
 };
 
 /**
  * Clear all authentication data
- * This now clears both localStorage and HTTP-only cookies
  */
-export const clearAuthData = async (): Promise<void> => {
+export const clearAuthData = (): void => {
   try {
-    // Remove token and user data from localStorage and sessionStorage
     localStorage.removeItem('token');
-    localStorage.removeItem('user');
+    localStorage.removeItem('userData');
     sessionStorage.removeItem('token');
-    sessionStorage.removeItem('user');
+    sessionStorage.removeItem('userData');
     
-    // Clear Authorization header
+    // Clear axios headers
     delete axios.defaults.headers.common['Authorization'];
+    axios.defaults.withCredentials = false;
     
-    // Clear HTTP-only cookies by calling the logout endpoint
-    try {
-      await axios.post(`${API_URL}/auth/logout`, {}, {
-        withCredentials: true // Important for cookies to be cleared
-      });
-      console.log('TokenManager: HTTP-only cookies cleared successfully');
-    } catch (logoutErr) {
-      console.error('TokenManager: Error clearing HTTP-only cookies:', logoutErr);
-      // Continue even if this fails, as we've already cleared localStorage
-    }
+    console.log('TokenManager: All auth data cleared');
   } catch (err) {
     console.error('TokenManager: Error clearing auth data:', err);
   }
