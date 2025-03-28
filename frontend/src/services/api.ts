@@ -1,5 +1,4 @@
 import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios';
-import { getToken } from '../utils/tokenManager';
 
 /**
  * This module serves as the central API client that replaces the old ApiService.
@@ -29,25 +28,13 @@ class Api {
     this.axiosInstance = axios.create({
       baseURL: API_BASE_URL,
       timeout: 30000,
-      withCredentials: true
+      withCredentials: true // Enable sending cookies with requests
     });
 
     this.setupInterceptors();
   }
 
   private setupInterceptors(): void {
-    // Request interceptor - adds auth token to every request
-    this.axiosInstance.interceptors.request.use(
-      (config) => {
-        const token = getToken();
-        if (token) {
-          config.headers.Authorization = `Bearer ${token}`;
-        }
-        return config;
-      },
-      (error) => Promise.reject(error)
-    );
-
     // Response interceptor - standardizes error handling
     this.axiosInstance.interceptors.response.use(
       (response) => response,

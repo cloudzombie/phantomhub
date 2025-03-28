@@ -7,8 +7,8 @@ import { api } from '../services/api';
 import ThemeService from '../services/ThemeService';
 import NotificationService from '../services/NotificationService';
 import { API_URL } from '../config';
-import { storeToken, storeUserData } from '../utils/tokenManager';
-import { setUser, setToken, logout } from '../store/slices/authSlice';
+import { storeUserData } from '../utils/tokenManager';
+import { setUser, logout } from '../store/slices/authSlice';
 import { RootState } from '../store';
 
 const Login = () => {
