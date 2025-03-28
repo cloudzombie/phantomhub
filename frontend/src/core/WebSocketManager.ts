@@ -120,4 +120,8 @@ export class WebSocketManager {
   public isConnected(): boolean {
     return this.socket?.connected || false;
   }
+
+  public getSocket(): Socket | null {
+    return this.socket;
+  }
 } 

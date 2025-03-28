@@ -3,6 +3,7 @@ import axios from 'axios';
 import { WebSocketManager } from '../core/WebSocketManager';
 import { getToken, getUserData } from '../utils/tokenManager';
 import { API_CONFIG } from '../config/api';
+import { Socket } from 'socket.io-client';
 
 export interface DeviceStatus {
   deviceId: string;
@@ -181,6 +182,10 @@ export class ApiService {
 
   public getWebSocketManager(): WebSocketManager {
     return this.wsManager;
+  }
+
+  public getSocket(): Socket | null {
+    return this.wsManager.getSocket();
   }
 
   public getConfig(): ApiConfig {

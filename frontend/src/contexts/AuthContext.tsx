@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import axios from 'axios';
 import { API_URL } from '../config';
 import { getToken, storeToken, storeUserData, getUserData, isAuthenticated as checkAuthStatus, clearAuthData, safeLogout } from '../utils/tokenManager';
+import { apiService } from '../services/ApiService';
 
 // Define user interface
 interface User {
@@ -107,22 +108,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
           }
           
-          // Import ApiService and ensure socket connection is initialized
-          const { ApiService } = await import('../services/ApiService');
+          // Ensure socket connection is initialized
           setTimeout(() => {
             console.log('AuthContext: Ensuring socket connection after auth check');
-            ApiService.reconnectSocket();
+            if (apiService.getWebSocketManager()) {
+              apiService.getWebSocketManager().connect();
+            }
             
-            // Dispatch user-authenticated event for other services to listen to
             if (userData && userData.id) {
               document.dispatchEvent(new CustomEvent('user-authenticated', { 
                 detail: { userId: userData.id, role: userData.role || 'user' } 
               }));
               console.log('AuthContext: Dispatched user-authenticated event');
-            } else {
-              console.warn('AuthContext: User data missing ID, cannot dispatch event');
             }
-          }, 500); // Small delay to ensure everything is ready
+          }, 500);
+          
+          // Reconnect socket if disconnected
+          if (!apiService.getWebSocketManager().isConnected()) {
+            console.log('AuthContext: Reconnecting socket after successful login');
+            apiService.getWebSocketManager().connect();
+          }
         } else {
           console.error('AuthContext: User validation failed', response.data);
           // Only clear user state if explicitly told by server to logout
@@ -281,10 +286,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         
         // Import ApiService and initialize socket connection after successful registration
         try {
-          const { ApiService } = await import('../services/ApiService');
           setTimeout(() => {
             console.log('AuthContext: Initializing socket connection after registration');
-            ApiService.reconnectSocket();
+            if (apiService.getWebSocketManager()) {
+              apiService.getWebSocketManager().connect();
+            }
             
             // Always dispatch user-authenticated event
             document.dispatchEvent(new CustomEvent('user-authenticated', { 
@@ -324,67 +330,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Check if user is authenticated - more robust implementation that works with HTTP-only cookies
   const isAuthenticated = async (): Promise<boolean> => {
-    // First check if we have a user in state
-    if (user) {
-      console.log('AuthContext: User already in state, authenticated');
-      // Ensure credentials are sent with requests
-      axios.defaults.withCredentials = true;
-      
-      // Also set Authorization header if token exists (for backward compatibility)
-      const token = getToken();
-      if (token) {
-        axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-      }
-      return true;
-    }
-    
-    // If no user in state, check with the server using tokenManager's isAuthenticated
     try {
-      // This will check both HTTP-only cookies and localStorage token
-      const isAuth = await checkAuthStatus();
-      
-      if (isAuth) {
-        console.log('AuthContext: Server confirmed authentication');
-        
-        // Try to get user data if available
-        const userData = getUserData();
-        
-        // If we have valid user data but no user state, set the user state
-        if (userData && userData.id && !user) {
-          console.log('AuthContext: Setting user state from storage in isAuthenticated');
-          setUser(userData);
-          
-          // Dispatch authentication event
-          setTimeout(() => {
-            document.dispatchEvent(new CustomEvent('user-authenticated', { 
-              detail: { userId: userData.id, role: userData.role || 'user' } 
-            }));
-            console.log('AuthContext: Dispatched user-authenticated event from isAuthenticated');
-          }, 100);
-        } else {
-          // If we don't have user data but we're authenticated, fetch it
-          try {
-            const response = await axios.get(`${API_URL}/auth/me`, {
-              withCredentials: true
-            });
-            
-            if (response.data && response.data.success) {
-              const newUserData = response.data.user;
-              setUser(newUserData);
-              storeUserData(newUserData);
-            }
-          } catch (err) {
-            console.error('AuthContext: Error fetching user data in isAuthenticated', err);
-          }
-        }
-        return true;
+      const token = getToken();
+      if (!token) {
+        return false;
       }
-    } catch (err) {
-      console.error('AuthContext: Error checking authentication status', err);
+
+      // Set axios headers for the check
+      axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+      axios.defaults.withCredentials = true;
+
+      // Make a request to verify the token
+      const response = await axios.get(`${API_URL}/auth/check`, {
+        withCredentials: true,
+        timeout: 5000
+      });
+
+      return response.data.success;
+    } catch (error) {
+      console.error('AuthContext: Error checking authentication:', error);
+      return false;
     }
-    
-    console.log('AuthContext: Not authenticated according to server');
-    return false;
   };
 
   return (
