@@ -6,13 +6,13 @@ import './App.css'
 import { AuthProvider } from './contexts/AuthContext'
 
 // Import and initialize services
-import ApiService from './services/ApiService'
+import { apiService } from './services/ApiService'
 import NotificationService from './services/NotificationService'
 import ThemeService from './services/ThemeService'
 
 // Ensure services are initialized
 console.log('Initializing core services...')
-const apiConfig = ApiService.getConfig()
+const apiConfig = apiService.getConfig()
 console.log(`API endpoint configured at: ${apiConfig.endpoint}`)
 
 // Initialize theme

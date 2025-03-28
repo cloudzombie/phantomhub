@@ -4,7 +4,7 @@ import { API_URL } from '../config.ts';
 import { useAuth } from '../contexts/AuthContext.tsx';
 import { getToken } from '../utils/tokenManager';
 import debounce from 'lodash/debounce';
-import ApiService from '../services/ApiService';
+import { apiService } from '../services/ApiService';
 
 // Component imports
 import { Card } from '../components/ui/Card';
@@ -70,7 +70,7 @@ const AdminUserManagement: React.FC = () => {
       setError(null);
       
       // Use ApiService instead of direct axios calls
-      const response = await ApiService.get('/admin/users', {
+      const response = await apiService.get('/admin/users', {
         params: {
           page,
           limit: 10,
@@ -133,7 +133,7 @@ const AdminUserManagement: React.FC = () => {
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const response = await ApiService.post('/admin/users', formData);
+      const response = await apiService.post('/admin/users', formData);
       
       if (response.success) {
         // Reset form and refresh user list
@@ -168,7 +168,7 @@ const AdminUserManagement: React.FC = () => {
     }
     
     try {
-      const response = await ApiService.delete(`/admin/users/${userId}`);
+      const response = await apiService.delete(`/admin/users/${userId}`);
       
       if (response.success) {
         // Remove user from list
@@ -189,7 +189,7 @@ const AdminUserManagement: React.FC = () => {
     }
 
     try {
-      const response = await ApiService.put(`/admin/users/${userId}/role`, { role: newRole });
+      const response = await apiService.put(`/admin/users/${userId}/role`, { role: newRole });
       
       if (response.success) {
         // Update user in list
@@ -209,7 +209,7 @@ const AdminUserManagement: React.FC = () => {
     if (!newPassword) return;
     
     try {
-      const response = await ApiService.put(`/admin/users/${userId}/reset-password`, { 
+      const response = await apiService.put(`/admin/users/${userId}/reset-password`, { 
         password: newPassword 
       });
       

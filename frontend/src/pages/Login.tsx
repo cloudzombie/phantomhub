@@ -1,8 +1,8 @@
-import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { FiLogIn, FiShield, FiAlertCircle, FiCheckCircle } from 'react-icons/fi';
 import axios from 'axios';
-import ApiService from '../services/ApiService';
+import { apiService } from '../services/ApiService';
 import ThemeService from '../services/ThemeService';
 import NotificationService from '../services/NotificationService';
 import { useAuth } from '../contexts/AuthContext';
@@ -55,7 +55,7 @@ const Login = () => {
 
     try {
       // Clear any previous user's settings to ensure fresh start
-      ApiService.clearUserSettings();
+      apiService.clearUserSettings();
       
       const response = await axios.post(`${API_URL}/auth/login`, {
         email,
@@ -95,7 +95,7 @@ const Login = () => {
         }
         
         // Reload all service settings
-        ApiService.reloadSettings();
+        apiService.reloadSettings();
         ThemeService.reloadSettings();
         NotificationService.reloadSettings();
         

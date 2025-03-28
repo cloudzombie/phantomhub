@@ -16,7 +16,7 @@ import {
   FiXCircle
 } from 'react-icons/fi';
 import { Socket, io } from 'socket.io-client';
-import ApiService from '../services/ApiService';
+import { apiService } from '../services/ApiService';
 import logger from '../utils/logger';
 
 // Helper functions

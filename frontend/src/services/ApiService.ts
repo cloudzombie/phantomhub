@@ -17,6 +17,7 @@ export interface ApiConfig {
   baseURL: string;
   timeout: number;
   pollingInterval: number;
+  endpoint: string;
 }
 
 class ApiService {
@@ -53,7 +54,8 @@ class ApiService {
     this.config = {
       baseURL: 'https://ghostwire-backend-e0380bcf4e0e.herokuapp.com/api',
       timeout: 30,
-      pollingInterval: 30 // 30 seconds default polling interval
+      pollingInterval: 30, // 30 seconds default polling interval
+      endpoint: 'https://ghostwire-backend-e0380bcf4e0e.herokuapp.com/api'
     };
 
     this.axiosInstance = axios.create({
@@ -202,7 +204,8 @@ class ApiService {
     return {
       baseURL: 'https://ghostwire-backend-e0380bcf4e0e.herokuapp.com/api',
       timeout: 30,
-      pollingInterval: 30 // 30 seconds default polling interval
+      pollingInterval: 30, // 30 seconds default polling interval
+      endpoint: 'https://ghostwire-backend-e0380bcf4e0e.herokuapp.com/api'
     };
   }
 

@@ -15,7 +15,7 @@ import {
   FiShield
 } from 'react-icons/fi';
 import ThemeService from '../services/ThemeService';
-import ApiService from '../services/ApiService';
+import { apiService } from '../services/ApiService';
 import NotificationService from '../services/NotificationService';
 import { safeLogout } from '../utils/tokenManager';
 
@@ -52,7 +52,7 @@ interface SettingsState {
 const Settings = () => {
   // Initialize settings state from services
   const themeConfig = ThemeService.getConfig();
-  const apiConfig = ApiService.getConfig();
+  const apiConfig = apiService.getConfig();
   const notificationConfig = NotificationService.getSettings();
 
   // Ensure all settings have default values to prevent undefined errors
@@ -111,7 +111,7 @@ const Settings = () => {
       try {
         console.log('Trying to load settings from API...');
         // Try to get settings from API first
-        const response = await ApiService.get('/users/settings');
+        const response = await apiService.get('/users/settings');
         console.log('API settings response:', response);
         
         if (response && response.success && response.data) {
@@ -264,7 +264,7 @@ const Settings = () => {
       // First, try to save settings to the API
       try {
         console.log('Saving settings to API:', settings);
-        const response = await ApiService.post('/users/settings', settings);
+        const response = await apiService.post('/users/settings', settings);
         console.log('API response:', response);
         
         if (!response.success) {

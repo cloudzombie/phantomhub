@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { FiArrowLeft, FiRefreshCw, FiServer, FiAlertTriangle } from 'react-icons/fi';
-import ApiService from '../services/ApiService';
+import { apiService } from '../services/ApiService';
 import DeviceInfoPanel from '../components/DeviceInfoPanel';
 import DeviceActivityLog from '../components/DeviceActivityLog';
 import AlertSystem from '../components/AlertSystem';
@@ -39,7 +39,7 @@ const DeviceDetails: React.FC = () => {
     
     try {
       setLoading(true);
-      const response = await ApiService.get(`/devices/${id}`);
+      const response = await apiService.get(`/devices/${id}`);
       
       if (response.success) {
         setDevice(response.data);
