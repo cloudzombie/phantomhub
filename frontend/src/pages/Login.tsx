@@ -52,22 +52,33 @@ const Login = () => {
     setSuccessMessage('');
 
     try {
+      console.log('Attempting login with:', { email });
       const response = await axios.post(`${API_URL}/auth/login`, {
         email,
         password
       }, {
-        withCredentials: true // Important for cookies to be received
+        withCredentials: true, // Important for cookies to be received
+        headers: {
+          'Content-Type': 'application/json'
+        }
       });
 
-      if (response.data.success) {
-        const { token, user } = response.data.data;
+      console.log('Login response:', response.data);
+
+      if (response.data && response.data.success) {
+        const { user } = response.data;
         
-        // Store token and user data
-        storeToken(token);
+        if (!user) {
+          console.error('Invalid response format:', response.data);
+          setErrorMessage('Invalid response format from server');
+          return;
+        }
+
+        console.log('Storing user data');
+        // Store user data only, token is handled by HTTP-only cookie
         storeUserData(user);
         
         // Update Redux state
-        dispatch(setToken(token));
         dispatch(setUser(user));
         
         // Reload theme settings for the user
@@ -83,13 +94,25 @@ const Login = () => {
           navigate('/');
         }, 1000);
       } else {
-        setErrorMessage('Invalid response from server');
+        console.error('Login failed:', response.data);
+        setErrorMessage(response.data?.message || 'Invalid response from server');
       }
     } catch (error) {
+      console.error('Login error:', error);
       if (axios.isAxiosError(error)) {
-        setErrorMessage(error.response?.data?.message || 'Invalid email or password');
+        const errorMessage = error.response?.data?.message || 
+                           error.response?.data?.error || 
+                           error.message || 
+                           'Invalid email or password';
+        console.error('Axios error details:', {
+          status: error.response?.status,
+          data: error.response?.data,
+          message: errorMessage
+        });
+        setErrorMessage(errorMessage);
       } else {
-        setErrorMessage('An unexpected error occurred');
+        console.error('Non-axios error:', error);
+        setErrorMessage('An unexpected error occurred. Please try again.');
       }
     } finally {
       setIsLoading(false);

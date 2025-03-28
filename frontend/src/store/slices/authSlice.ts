@@ -1,5 +1,5 @@
 import { createSlice, PayloadAction, createAsyncThunk } from '@reduxjs/toolkit';
-import { getToken, getUserData, clearAuthData, isAuthenticated } from '../../utils/tokenManager';
+import { getUserData, clearAuthData, isAuthenticated } from '../../utils/tokenManager';
 
 interface User {
   id: string;
@@ -10,7 +10,6 @@ interface User {
 
 interface AuthState {
   user: User | null;
-  token: string | null;
   isAuthenticated: boolean;
   isLoading: boolean;
   error: string | null;
@@ -19,7 +18,6 @@ interface AuthState {
 
 const initialState: AuthState = {
   user: null,
-  token: null,
   isAuthenticated: false,
   isLoading: true,
   error: null,
@@ -31,14 +29,13 @@ export const initializeAuthAsync = createAsyncThunk(
   'auth/initialize',
   async (_, { rejectWithValue }) => {
     try {
-      const token = getToken();
       const userData = getUserData();
       
-      if (!token || !userData) {
+      if (!userData) {
         return { isAuthenticated: false };
       }
       
-      // Verify token is still valid
+      // Verify authentication with HTTP-only cookie
       const isValid = await isAuthenticated();
       if (!isValid) {
         clearAuthData();
@@ -46,7 +43,6 @@ export const initializeAuthAsync = createAsyncThunk(
       }
       
       return {
-        token,
         user: userData,
         isAuthenticated: true
       };
@@ -66,12 +62,8 @@ const authSlice = createSlice({
       state.error = null;
       state.lastUpdated = Date.now();
     },
-    setToken: (state, action: PayloadAction<string>) => {
-      state.token = action.payload;
-    },
     clearUser: (state) => {
       state.user = null;
-      state.token = null;
       state.isAuthenticated = false;
       state.error = null;
       state.lastUpdated = Date.now();
@@ -86,7 +78,6 @@ const authSlice = createSlice({
     logout: (state) => {
       clearAuthData();
       state.user = null;
-      state.token = null;
       state.isAuthenticated = false;
       state.error = null;
       state.lastUpdated = Date.now();
@@ -101,7 +92,6 @@ const authSlice = createSlice({
         state.isLoading = false;
         state.isAuthenticated = action.payload.isAuthenticated;
         if (action.payload.isAuthenticated) {
-          state.token = action.payload.token;
           state.user = action.payload.user;
         }
         state.lastUpdated = Date.now();
@@ -110,7 +100,6 @@ const authSlice = createSlice({
         state.isLoading = false;
         state.error = (action.payload as string) || null;
         state.isAuthenticated = false;
-        state.token = null;
         state.user = null;
       });
   },
@@ -118,7 +107,6 @@ const authSlice = createSlice({
 
 export const {
   setUser,
-  setToken,
   clearUser,
   setLoading,
   setError,
