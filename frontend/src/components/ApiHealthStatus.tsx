@@ -20,7 +20,7 @@ import {
   FiRefreshCw,
   FiWifi
 } from 'react-icons/fi';
-import ApiService from '../services/ApiService';
+import { apiService } from '../services/ApiService';
 import { getSocket } from '../utils/socketUtils';
 import NotificationService from '../services/NotificationService';
 
@@ -164,7 +164,7 @@ const ApiHealthStatus: React.FC<ApiHealthStatusProps> = ({ onStatusChange }) => 
   useEffect(() => {
     checkApiHealth();
     
-    const { pollingInterval } = ApiService.getConfig();
+    const { pollingInterval } = apiService.getConfig();
     const interval = pollingInterval * 1000;
     const timer = setInterval(checkApiHealth, interval);
     

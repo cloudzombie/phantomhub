@@ -16,6 +16,7 @@ export interface DeviceStatus {
 export interface ApiConfig {
   baseURL: string;
   timeout: number;
+  pollingInterval: number;
 }
 
 class ApiService {
@@ -51,7 +52,8 @@ class ApiService {
   private constructor() {
     this.config = {
       baseURL: 'https://ghostwire-backend-e0380bcf4e0e.herokuapp.com/api',
-      timeout: 30
+      timeout: 30,
+      pollingInterval: 30 // 30 seconds default polling interval
     };
 
     this.axiosInstance = axios.create({
@@ -199,7 +201,8 @@ class ApiService {
     // Always return the hardcoded config to prevent any overrides
     return {
       baseURL: 'https://ghostwire-backend-e0380bcf4e0e.herokuapp.com/api',
-      timeout: 30
+      timeout: 30,
+      pollingInterval: 30 // 30 seconds default polling interval
     };
   }
 
