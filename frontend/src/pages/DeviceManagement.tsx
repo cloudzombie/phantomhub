@@ -16,7 +16,7 @@ import {
   FiTrash2,
   FiEdit2
 } from 'react-icons/fi';
-import { apiService, DeviceStatus } from '../services/ApiService';
+import { apiService, DeviceStatus, ApiResponse } from '../services/ApiService';
 import { handleAuthError, isAuthError } from '../utils/tokenManager';
 import { 
   isWebSerialSupported, 
@@ -108,6 +108,19 @@ interface DeviceInfo {
   [key: string]: any;
 }
 
+// Update the response interfaces to match the actual API response structure
+interface DeviceResponse {
+  device: Device;
+}
+
+interface DevicesResponse {
+  devices: Device[];
+}
+
+interface DeployResponse {
+  estimatedDuration: number;
+}
+
 const DeviceManagement: React.FC = () => {
   const navigate = useNavigate();
   const [devices, setDevices] = useState<Device[]>([]);
@@ -181,12 +194,12 @@ const DeviceManagement: React.FC = () => {
     try {
       setError(null);
       setIsLoading(true);
-      const response = await apiService.get<Device[]>('/devices');
+      const response = await apiService.get<DevicesResponse>('/devices');
       
-      if (componentMounted.current) {
-        setDevices(response);
+      if (componentMounted.current && response.success && response.data.devices) {
+        setDevices(response.data.devices);
         // Subscribe to updates for each device
-        response.forEach(device => {
+        response.data.devices.forEach((device: Device) => {
           apiService.subscribeToDevice(device.id, 'DeviceManagement');
         });
       }
@@ -353,19 +366,18 @@ const DeviceManagement: React.FC = () => {
     setErrorMessage(null);
 
     try {
-      // Validate form data
       if (!validateForm()) {
         return;
       }
 
-      const response = await apiService.post('/devices', {
+      const response = await apiService.post<DeviceResponse>('/devices', {
         name: formData.name,
         ipAddress: formData.ipAddress,
         firmwareVersion: formData.firmwareVersion || '1.0.0',
         connectionType: 'network'
       });
       
-      if (response.data?.success) {
+      if (response.success && response.data.device) {
         setSuccessMessage('Device registered successfully!');
         setFormData({
           name: '',
@@ -374,8 +386,11 @@ const DeviceManagement: React.FC = () => {
           firmwareVersion: ''
         });
         setIsModalOpen(false);
+        
+        // Update devices list
+        setDevices(prev => [...prev, response.data.device]);
       } else {
-        setErrorMessage(response.data?.message || 'Failed to register device');
+        setErrorMessage(response.message || 'Failed to register device');
       }
     } catch (error) {
       console.error('Error registering device:', error);
@@ -389,7 +404,7 @@ const DeviceManagement: React.FC = () => {
     }
   };
   
-  // Register USB device with better error handling
+  // Register USB device
   const registerUsbDevice = async () => {
     if (!isMountedRef.current) return;
     
@@ -428,7 +443,7 @@ const DeviceManagement: React.FC = () => {
       }
 
       // Register the device
-      const response = await apiService.post('/devices', {
+      const response = await apiService.post<DeviceResponse>('/devices', {
         name: deviceInfo.info?.name || 'USB Device',
         serialPortId: deviceInfo.info?.deviceId,
         connectionType: 'usb',
@@ -437,17 +452,15 @@ const DeviceManagement: React.FC = () => {
 
       if (!isMountedRef.current) return;
 
-      if (response.data?.success) {
+      if (response.success && response.data.device) {
         setSuccessMessage('USB device registered successfully!');
         setIsUsbModalOpen(false);
         refreshAttemptsRef.current = 0;
         
-        // Update devices list without full refresh
-        if (response.data.device) {
-          setDevices(prev => [...prev, response.data.device]);
-        }
+        // Update devices list
+        setDevices(prev => [...prev, response.data.device]);
       } else {
-        setErrorMessage(response.data?.message || 'Failed to register USB device');
+        setErrorMessage(response.message || 'Failed to register USB device');
       }
     } catch (error) {
       if (!isMountedRef.current) return;
@@ -468,16 +481,16 @@ const DeviceManagement: React.FC = () => {
     setErrorMessage(null);
     
     try {
-      const response = await apiService.patch(`/devices/${deviceId}`, { status });
+      const response = await apiService.patch<DeviceResponse>(`/devices/${deviceId}`, { status });
       
       if (!isMountedRef.current) return;
 
-      if (response.data?.success) {
+      if (response.success) {
         setSuccessMessage(`Device status updated to ${status}`);
         setDevices(prev => prev.map(device => device.id === deviceId ? { ...device, status } : device));
         refreshAttemptsRef.current = 0;
       } else {
-        setErrorMessage('Failed to update device status');
+        setErrorMessage(response.message || 'Failed to update device status');
       }
     } catch (error) {
       if (!isMountedRef.current) return;
@@ -491,12 +504,12 @@ const DeviceManagement: React.FC = () => {
     }
   };
   
-  // Deploy payload without triggering a refresh
+  // Deploy payload
   const deployPayload = async (deviceId: string, payloadId: string) => {
     if (!isMountedRef.current) return;
 
     try {
-      const response = await apiService.post(`/devices/${deviceId}/deploy`, {
+      const response = await apiService.post<DeployResponse>(`/devices/${deviceId}/deploy`, {
         payloadId,
         config: {
           ...attackConfig,
@@ -504,7 +517,8 @@ const DeviceManagement: React.FC = () => {
         }
       });
 
-      if (response.data && response.data.success) {
+      if (response.success && response.data) {
+        const { estimatedDuration } = response.data;
         setSuccessMessage('Payload deployment initiated');
         // Update device status without triggering a refresh
         setDevices(prev => prev.map(device => 
@@ -517,7 +531,7 @@ const DeviceManagement: React.FC = () => {
               targetSystem: attackConfig.targetSystem,
               progress: 0,
               startTime: new Date().toISOString(),
-              estimatedDuration: response.data.estimatedDuration
+              estimatedDuration
             }
           } : device
         ));

@@ -82,38 +82,57 @@ const DeviceStatusMonitor: React.FC<DeviceStatusMonitorProps> = ({
   };
 
   useEffect(() => {
-    // Initialize Socket.IO connection
-    const token = localStorage.getItem('token');
-    if (!token) {
-      logger.error('No authentication token found');
+    // Initialize WebSocket connection through ApiService
+    const wsManager = apiService.getWebSocketManager();
+    if (!wsManager) {
+      logger.error('WebSocket manager not available');
+      setError('WebSocket manager not available');
+      setIsConnected(false);
       return;
     }
 
-    const newSocket = io(
-      'https://ghostwire-backend-e0380bcf4e0e.herokuapp.com',
-      {
-        auth: { token },
-        transports: ['websocket'],
-        reconnection: true,
-        reconnectionAttempts: 5,
-        reconnectionDelay: 1000
+    // Update connection status and fetch initial data
+    const fetchInitialStatus = () => {
+      setIsConnected(true);
+      setError(null);
+      // Fetch initial device status
+      apiService.get(`/devices/${deviceId}/status`)
+        .then(response => {
+          if (response.success && response.data) {
+            setStatus(response.data as DeviceStatus);
+          }
+        })
+        .catch(err => {
+          logger.error('Failed to fetch initial device status:', err);
+        })
+        .finally(() => {
+          setIsLoading(false);
+        });
+    };
+
+    // Subscribe to connection events
+    const handleConnectionChange = (data: { connected: boolean; error?: string }) => {
+      setIsConnected(data.connected);
+      if (data.error) {
+        setError(data.error);
+      } else if (data.connected) {
+        fetchInitialStatus();
       }
-    );
+    };
 
-    newSocket.on('connect', () => {
-      logger.info('Connected to Socket.IO server');
-      
-      // Subscribe to device updates
-      newSocket.emit('subscribe:device', deviceId);
-    });
+    wsManager.subscribe('connection_status', handleConnectionChange);
 
-    newSocket.on('disconnect', () => {
-      logger.warn('Disconnected from Socket.IO server');
-    });
+    // Connect if not already connected
+    if (!wsManager.isConnected()) {
+      wsManager.connect();
+    } else {
+      fetchInitialStatus();
+    }
 
-    // Listen for device status updates
-    newSocket.on(`device:${deviceId}:status`, (newStatus: DeviceStatus) => {
+    // Subscribe to device updates
+    const handleDeviceStatus = (newStatus: DeviceStatus) => {
       setStatus(newStatus);
+      setError(null);
       
       // Add to activity log
       const activity: DeviceActivity = {
@@ -123,12 +142,12 @@ const DeviceStatusMonitor: React.FC<DeviceStatusMonitorProps> = ({
         message: `Device status changed to ${newStatus.status}`,
         details: newStatus
       };
-      setActivities(prev => [activity, ...prev].slice(0, 50)); // Keep last 50 activities
-    });
+      setActivities(prev => [activity, ...prev].slice(0, 50));
+    };
 
-    // Listen for device errors
-    newSocket.on(`device:${deviceId}:error`, (error: { message: string; details?: unknown }) => {
+    const handleDeviceError = (error: { message: string; details?: unknown }) => {
       logger.error('Device error received:', error);
+      setError(error.message);
       
       // Add to activity log
       const activity: DeviceActivity = {
@@ -139,19 +158,22 @@ const DeviceStatusMonitor: React.FC<DeviceStatusMonitorProps> = ({
         details: error
       };
       setActivities(prev => [activity, ...prev].slice(0, 50));
-    });
+    };
 
-    // Listen for device activities
-    newSocket.on(`device:${deviceId}:activity`, (activity: DeviceActivity) => {
+    const handleDeviceActivity = (activity: DeviceActivity) => {
       setActivities(prev => [activity, ...prev].slice(0, 50));
-    });
+    };
+
+    wsManager.subscribe(`device:${deviceId}:status`, handleDeviceStatus);
+    wsManager.subscribe(`device:${deviceId}:error`, handleDeviceError);
+    wsManager.subscribe(`device:${deviceId}:activity`, handleDeviceActivity);
 
     // Cleanup on unmount
     return () => {
-      if (newSocket) {
-        newSocket.emit('unsubscribe:device', deviceId);
-        newSocket.disconnect();
-      }
+      wsManager.unsubscribe('connection_status', handleConnectionChange);
+      wsManager.unsubscribe(`device:${deviceId}:status`, handleDeviceStatus);
+      wsManager.unsubscribe(`device:${deviceId}:error`, handleDeviceError);
+      wsManager.unsubscribe(`device:${deviceId}:activity`, handleDeviceActivity);
     };
   }, [deviceId]);
 
@@ -208,6 +230,15 @@ const DeviceStatusMonitor: React.FC<DeviceStatusMonitorProps> = ({
       </div>
     );
   };
+
+  // Update loading state display
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-8">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-500"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">

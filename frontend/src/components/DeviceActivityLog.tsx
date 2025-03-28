@@ -102,7 +102,7 @@ const DeviceActivityLog: React.FC<DeviceActivityLogProps> = ({
       const response = await apiService.get(`/devices/${deviceId}/activities?${queryParams.toString()}`);
       
       if (response.success) {
-        setActivities(response.data);
+        setActivities(response.data as DeviceActivity[]);
       } else {
         console.error('Error fetching device activities:', response.message);
       }
