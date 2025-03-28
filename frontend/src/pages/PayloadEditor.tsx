@@ -67,6 +67,13 @@ interface Script {
   updatedAt: string;
 }
 
+// Add these near the top with other interfaces
+interface FetchState {
+  isLoading: boolean;
+  error: string | null;
+  lastUpdated: number | null;
+}
+
 // Configure Monaco Editor workers
 self.MonacoEnvironment = {
   getWorkerUrl: function (moduleId, label) {
@@ -145,6 +152,25 @@ const PayloadEditor = () => {
   // Add this state near other state declarations
   const [userRole, setUserRole] = useState<string>('user');
   
+  // Add these state declarations in the component
+  const [devicesFetchState, setDevicesFetchState] = useState<FetchState>({
+    isLoading: false,
+    error: null,
+    lastUpdated: null
+  });
+
+  const [payloadsFetchState, setPayloadsFetchState] = useState<FetchState>({
+    isLoading: false,
+    error: null,
+    lastUpdated: null
+  });
+
+  const [scriptsFetchState, setScriptsFetchState] = useState<FetchState>({
+    isLoading: false,
+    error: null,
+    lastUpdated: null
+  });
+
   useEffect(() => {
     // Check if WebSerial is supported
     setWebSerialSupported(isWebSerialSupported());
@@ -265,107 +291,205 @@ const PayloadEditor = () => {
   
   const fetchDevices = async () => {
     try {
+      setDevicesFetchState(prev => ({ ...prev, isLoading: true, error: null }));
+      
       const token = getToken();
       if (!token) {
-        handleAuthError(new Error('No token'), 'Please log in to continue');
+        // Don't redirect, just update state
+        setDevicesFetchState(prev => ({
+          ...prev,
+          isLoading: false,
+          error: 'Authentication required'
+        }));
         return;
       }
       
-      // Use apiService with proper type annotation
       const response = await apiService.get<ApiResponse<Device[]>>('/devices');
       
       if (response.data?.success) {
         const fetchedDevices = response.data.data || [];
         setDevices(fetchedDevices);
         
-        // Select first device if available and none selected
+        // Only select first device if we don't have one selected
         if (fetchedDevices.length > 0 && !selectedDevice) {
           const onlineDevice = fetchedDevices.find((d: Device) => d.status === 'online');
           if (onlineDevice) {
             setSelectedDevice(onlineDevice.id.toString());
           }
         }
+        
+        setDevicesFetchState({
+          isLoading: false,
+          error: null,
+          lastUpdated: Date.now()
+        });
       }
     } catch (error) {
       console.error('Error fetching devices:', error);
       
-      // If we get a 401, handle auth error without forcing redirect
       if (isAuthError(error)) {
-        handleAuthError(error, 'Session expired. Please log in again.');
-      }
-      // Handle 500 errors gracefully - likely due to empty collections
-      else if (axios.isAxiosError(error) && error.response?.status === 500) {
-        console.log('No devices available yet - setting empty array');
-        setDevices([]);
-        // Don't show error message for expected empty state
-      } 
-      else {
-        setMessage({
-          type: 'error',
-          text: 'Failed to fetch devices. Please try again.'
-        });
+        // Handle auth errors without disrupting the UI
+        setDevicesFetchState(prev => ({
+          ...prev,
+          isLoading: false,
+          error: 'Session expired. Please refresh your authentication.'
+        }));
+        
+        // Let the auth handler deal with the token
+        handleAuthError(error, 'Authentication error');
+      } else if (axios.isAxiosError(error)) {
+        // Handle different HTTP errors appropriately
+        switch (error.response?.status) {
+          case 500:
+            setDevices([]);
+            setDevicesFetchState(prev => ({
+              ...prev,
+              isLoading: false,
+              error: null // Don't show error for empty state
+            }));
+            break;
+          case 403:
+            setDevicesFetchState(prev => ({
+              ...prev,
+              isLoading: false,
+              error: 'You do not have permission to view devices'
+            }));
+            break;
+          default:
+            setDevicesFetchState(prev => ({
+              ...prev,
+              isLoading: false,
+              error: 'Failed to fetch devices. Please try again.'
+            }));
+        }
       }
     }
   };
   
   const fetchPayloads = async () => {
     try {
+      setPayloadsFetchState(prev => ({ ...prev, isLoading: true, error: null }));
+      
       const token = getToken();
       if (!token) {
-        handleAuthError(new Error('No token'), 'Please log in to continue');
+        setPayloadsFetchState(prev => ({
+          ...prev,
+          isLoading: false,
+          error: 'Authentication required'
+        }));
         return;
       }
       
-      // Use apiService with proper type annotation
       const response = await apiService.get<ApiResponse<Payload[]>>('/payloads');
       
       if (response.data?.success) {
         const fetchedPayloads = response.data.data || [];
         setPayloads(fetchedPayloads);
+        
+        setPayloadsFetchState({
+          isLoading: false,
+          error: null,
+          lastUpdated: Date.now()
+        });
       }
     } catch (error) {
       console.error('Error fetching payloads:', error);
       
-      // If we get a 401, handle auth error without forcing redirect
       if (isAuthError(error)) {
-        handleAuthError(error, 'Session expired. Please log in again.');
-      }
-      // Handle 500 errors gracefully - likely due to empty collections
-      else if (axios.isAxiosError(error) && error.response?.status === 500) {
-        console.log('No payloads available yet - setting empty array');
-        setPayloads([]);
+        setPayloadsFetchState(prev => ({
+          ...prev,
+          isLoading: false,
+          error: 'Session expired. Please refresh your authentication.'
+        }));
+        handleAuthError(error, 'Authentication error');
+      } else if (axios.isAxiosError(error)) {
+        switch (error.response?.status) {
+          case 500:
+            setPayloads([]);
+            setPayloadsFetchState(prev => ({
+              ...prev,
+              isLoading: false,
+              error: null
+            }));
+            break;
+          case 403:
+            setPayloadsFetchState(prev => ({
+              ...prev,
+              isLoading: false,
+              error: 'You do not have permission to view payloads'
+            }));
+            break;
+          default:
+            setPayloadsFetchState(prev => ({
+              ...prev,
+              isLoading: false,
+              error: 'Failed to fetch payloads. Please try again.'
+            }));
+        }
       }
     }
   };
   
   const fetchScripts = async () => {
     try {
+      setScriptsFetchState(prev => ({ ...prev, isLoading: true, error: null }));
+      
       const token = getToken();
       if (!token) {
-        handleAuthError(new Error('No token'), 'Please log in to continue');
+        setScriptsFetchState(prev => ({
+          ...prev,
+          isLoading: false,
+          error: 'Authentication required'
+        }));
         return;
       }
       
-      const response = await axios.get<ApiResponse<Script[]>>(`${API_URL}/scripts`, {
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
-      });
+      // Use apiService consistently instead of direct axios calls
+      const response = await apiService.get<ApiResponse<Script[]>>('/scripts');
       
       if (response.data?.success) {
         setScripts(response.data.data || []);
+        
+        setScriptsFetchState({
+          isLoading: false,
+          error: null,
+          lastUpdated: Date.now()
+        });
       }
     } catch (error) {
       console.error('Error fetching scripts:', error);
       
-      // If we get a 401, handle auth error without forcing redirect
       if (isAuthError(error)) {
-        handleAuthError(error, 'Session expired. Please log in again.');
-      }
-      // Handle 500 errors gracefully - likely due to empty collections
-      else if (axios.isAxiosError(error) && error.response?.status === 500) {
-        console.log('No scripts available yet - setting empty array');
-        setScripts([]);
+        setScriptsFetchState(prev => ({
+          ...prev,
+          isLoading: false,
+          error: 'Session expired. Please refresh your authentication.'
+        }));
+        handleAuthError(error, 'Authentication error');
+      } else if (axios.isAxiosError(error)) {
+        switch (error.response?.status) {
+          case 500:
+            setScripts([]);
+            setScriptsFetchState(prev => ({
+              ...prev,
+              isLoading: false,
+              error: null
+            }));
+            break;
+          case 403:
+            setScriptsFetchState(prev => ({
+              ...prev,
+              isLoading: false,
+              error: 'You do not have permission to view scripts'
+            }));
+            break;
+          default:
+            setScriptsFetchState(prev => ({
+              ...prev,
+              isLoading: false,
+              error: 'Failed to fetch scripts. Please try again.'
+            }));
+        }
       }
     }
   };
