@@ -26,6 +26,12 @@ DELAY 1000
 STRING Your payload commands here
 ENTER`;
 
+interface ApiResponse<T> {
+  success: boolean;
+  data: T;
+  message?: string;
+}
+
 interface Device {
   id: number;
   name: string;
@@ -185,7 +191,7 @@ const PayloadEditor = () => {
       
       try {
         // Fetch devices first - this is essential for device selection
-        const devicesResponse = await apiService.get('/devices');
+        const devicesResponse = await apiService.get<ApiResponse<Device[]>>('/devices');
         if (devicesResponse.data?.success && isMounted) {
           const fetchedDevices = devicesResponse.data.data || [];
           setDevices(fetchedDevices);
@@ -199,7 +205,7 @@ const PayloadEditor = () => {
 
         // Fetch payloads - not critical for initial setup
         try {
-          const payloadsResponse = await apiService.get('/payloads');
+          const payloadsResponse = await apiService.get<ApiResponse<Payload[]>>('/payloads');
           if (payloadsResponse.data?.success && isMounted) {
             setPayloads(payloadsResponse.data.data || []);
           }
@@ -214,7 +220,7 @@ const PayloadEditor = () => {
 
         // Fetch scripts - not critical for initial setup
         try {
-          const scriptsResponse = await apiService.get('/scripts');
+          const scriptsResponse = await apiService.get<ApiResponse<Script[]>>('/scripts');
           if (scriptsResponse.data?.success && isMounted) {
             setScripts(scriptsResponse.data.data || []);
           }
@@ -266,10 +272,10 @@ const PayloadEditor = () => {
         return;
       }
       
-      // Use apiService instead of direct axios call
-      const response = await apiService.get('/devices');
+      // Use apiService with proper type annotation
+      const response = await apiService.get<ApiResponse<Device[]>>('/devices');
       
-      if (response.data && response.data.success) {
+      if (response.data?.success) {
         const fetchedDevices = response.data.data || [];
         setDevices(fetchedDevices);
         
@@ -312,10 +318,10 @@ const PayloadEditor = () => {
         return;
       }
       
-      // Use apiService instead of direct axios call
-      const response = await apiService.get('/payloads');
+      // Use apiService with proper type annotation
+      const response = await apiService.get<ApiResponse<Payload[]>>('/payloads');
       
-      if (response.data && response.data.success) {
+      if (response.data?.success) {
         const fetchedPayloads = response.data.data || [];
         setPayloads(fetchedPayloads);
       }
