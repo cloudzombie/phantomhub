@@ -119,6 +119,7 @@ const PayloadEditor = () => {
   const [showPayloadList, setShowPayloadList] = useState(false);
   const [devices, setDevices] = useState<Device[]>([]);
   const [selectedDevice, setSelectedDevice] = useState('');
+  // Combined loading state based on all fetch states
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState<{type: 'success' | 'error', text: string} | null>(null);
   const [webSerialSupported, setWebSerialSupported] = useState(false);
@@ -152,7 +153,7 @@ const PayloadEditor = () => {
   // Add this state near other state declarations
   const [userRole, setUserRole] = useState<string>('user');
   
-  // Add these state declarations in the component
+  // Fetch state declarations with proper initial values
   const [devicesFetchState, setDevicesFetchState] = useState<FetchState>({
     isLoading: false,
     error: null,
@@ -171,6 +172,7 @@ const PayloadEditor = () => {
     lastUpdated: null
   });
 
+  // Combined effect for editor initialization and WebSocket setup
   useEffect(() => {
     // Check if WebSerial is supported
     setWebSerialSupported(isWebSerialSupported());
@@ -207,11 +209,86 @@ const PayloadEditor = () => {
       }
     };
   }, []); // Only run once on mount
+  
+  // Separate effect for WebSocket setup and event handling
+  useEffect(() => {
+    // Get socket from apiService
+    const socket = apiService.getSocket();
+    if (!socket) {
+      console.log('No socket available');
+      return;
+    }
+    
+    // Define debounced update functions
+    let deviceUpdateTimeout: NodeJS.Timeout | null = null;
+    let payloadUpdateTimeout: NodeJS.Timeout | null = null;
+    
+    // Handle device status changes
+    const handleDeviceStatusChange = (data: any) => {
+      console.log('WebSocket: device_status_changed event received', data);
+      
+      // Clear any existing timeout to prevent multiple rapid updates
+      if (deviceUpdateTimeout) {
+        clearTimeout(deviceUpdateTimeout);
+      }
+      
+      // Set a timeout to debounce updates
+      deviceUpdateTimeout = setTimeout(() => {
+        // Only fetch if we haven't updated in the last 5 seconds
+        const now = Date.now();
+        if (!devicesFetchState.lastUpdated || now - devicesFetchState.lastUpdated > 5000) {
+          fetchDevices();
+        }
+      }, 500);
+    };
+    
+    // Handle payload status updates
+    const handlePayloadUpdate = (data: any) => {
+      console.log('WebSocket: payload_status_update event received', data);
+      
+      // Clear any existing timeout to prevent multiple rapid updates
+      if (payloadUpdateTimeout) {
+        clearTimeout(payloadUpdateTimeout);
+      }
+      
+      // Set a timeout to debounce updates
+      payloadUpdateTimeout = setTimeout(() => {
+        // Only fetch if we haven't updated in the last 5 seconds
+        const now = Date.now();
+        if (!payloadsFetchState.lastUpdated || now - payloadsFetchState.lastUpdated > 5000) {
+          fetchPayloads();
+        }
+      }, 500);
+    };
+    
+    // Register WebSocket event handlers
+    socket.on('device_status_changed', handleDeviceStatusChange);
+    socket.on('payload_status_update', handlePayloadUpdate);
+    
+    // Cleanup function to remove event listeners and clear timeouts
+    return () => {
+      socket.off('device_status_changed', handleDeviceStatusChange);
+      socket.off('payload_status_update', handlePayloadUpdate);
+      
+      if (deviceUpdateTimeout) {
+        clearTimeout(deviceUpdateTimeout);
+      }
+      
+      if (payloadUpdateTimeout) {
+        clearTimeout(payloadUpdateTimeout);
+      }
+    };
+  }, [devicesFetchState.lastUpdated, payloadsFetchState.lastUpdated]); // Only re-run if lastUpdated changes
 
-  // Separate effect for data fetching
+  // Separate effect for data fetching with proper loading states
   useEffect(() => {
     let isMounted = true;
 
+    // Set all loading states at once to prevent multiple re-renders
+    setDevicesFetchState(prev => ({ ...prev, isLoading: true, error: null }));
+    setPayloadsFetchState(prev => ({ ...prev, isLoading: true, error: null }));
+    setScriptsFetchState(prev => ({ ...prev, isLoading: true, error: null }));
+    
     const fetchInitialData = async () => {
       if (!isMounted) return;
       
@@ -227,6 +304,12 @@ const PayloadEditor = () => {
           if (onlineDevice) {
             setSelectedDevice(onlineDevice.id.toString());
           }
+          
+          setDevicesFetchState({
+            isLoading: false,
+            error: null,
+            lastUpdated: Date.now()
+          });
         }
 
         // Fetch payloads - not critical for initial setup
@@ -234,13 +317,29 @@ const PayloadEditor = () => {
           const payloadsResponse = await apiService.get<ApiResponse<Payload[]>>('/payloads');
           if (payloadsResponse.data?.success && isMounted) {
             setPayloads(payloadsResponse.data.data || []);
+            
+            setPayloadsFetchState({
+              isLoading: false,
+              error: null,
+              lastUpdated: Date.now()
+            });
           }
         } catch (error) {
           // Handle 404 or empty payloads gracefully - this is expected for new users
           if (axios.isAxiosError(error) && error.response?.status === 404) {
             setPayloads([]);
+            setPayloadsFetchState({
+              isLoading: false,
+              error: null,
+              lastUpdated: Date.now()
+            });
           } else {
             console.error('Error fetching payloads:', error);
+            setPayloadsFetchState({
+              isLoading: false,
+              error: 'Failed to fetch payloads',
+              lastUpdated: null
+            });
           }
         }
 
@@ -249,13 +348,29 @@ const PayloadEditor = () => {
           const scriptsResponse = await apiService.get<ApiResponse<Script[]>>('/scripts');
           if (scriptsResponse.data?.success && isMounted) {
             setScripts(scriptsResponse.data.data || []);
+            
+            setScriptsFetchState({
+              isLoading: false,
+              error: null,
+              lastUpdated: Date.now()
+            });
           }
         } catch (error) {
           // Handle 404 or empty scripts gracefully - this is expected for new users
           if (axios.isAxiosError(error) && error.response?.status === 404) {
             setScripts([]);
+            setScriptsFetchState({
+              isLoading: false,
+              error: null,
+              lastUpdated: Date.now()
+            });
           } else {
             console.error('Error fetching scripts:', error);
+            setScriptsFetchState({
+              isLoading: false,
+              error: 'Failed to fetch scripts',
+              lastUpdated: null
+            });
           }
         }
       } catch (error) {
@@ -266,10 +381,29 @@ const PayloadEditor = () => {
           handleAuthError(error, 'Authentication error while fetching data');
         }
         
-        // For other errors, ensure we have empty arrays to allow manual creation
-        setDevices([]);
-        setPayloads([]);
-        setScripts([]);
+        // Update all fetch states at once to prevent multiple re-renders
+        if (isMounted) {
+          setDevicesFetchState({
+            isLoading: false,
+            error: 'Failed to fetch data',
+            lastUpdated: null
+          });
+          setPayloadsFetchState({
+            isLoading: false,
+            error: 'Failed to fetch data',
+            lastUpdated: null
+          });
+          setScriptsFetchState({
+            isLoading: false,
+            error: 'Failed to fetch data',
+            lastUpdated: null
+          });
+          
+          // For other errors, ensure we have empty arrays to allow manual creation
+          setDevices([]);
+          setPayloads([]);
+          setScripts([]);
+        }
       }
     };
 
@@ -289,7 +423,15 @@ const PayloadEditor = () => {
     }
   };
   
+  // Improved fetchDevices with debouncing to prevent multiple calls
   const fetchDevices = async () => {
+    // Prevent fetching if we've fetched in the last 2 seconds
+    const now = Date.now();
+    if (devicesFetchState.lastUpdated && now - devicesFetchState.lastUpdated < 2000) {
+      console.log('Skipping device fetch - too soon since last update');
+      return;
+    }
+    
     try {
       setDevicesFetchState(prev => ({ ...prev, isLoading: true, error: null }));
       
@@ -308,13 +450,20 @@ const PayloadEditor = () => {
       
       if (response.data?.success) {
         const fetchedDevices = response.data.data || [];
-        setDevices(fetchedDevices);
         
-        // Only select first device if we don't have one selected
-        if (fetchedDevices.length > 0 && !selectedDevice) {
-          const onlineDevice = fetchedDevices.find((d: Device) => d.status === 'online');
-          if (onlineDevice) {
-            setSelectedDevice(onlineDevice.id.toString());
+        // Only update state if the data has actually changed
+        // This prevents unnecessary re-renders
+        const hasChanged = JSON.stringify(devices) !== JSON.stringify(fetchedDevices);
+        
+        if (hasChanged) {
+          setDevices(fetchedDevices);
+          
+          // Only select first device if we don't have one selected
+          if (fetchedDevices.length > 0 && !selectedDevice) {
+            const onlineDevice = fetchedDevices.find((d: Device) => d.status === 'online');
+            if (onlineDevice) {
+              setSelectedDevice(onlineDevice.id.toString());
+            }
           }
         }
         
@@ -366,7 +515,15 @@ const PayloadEditor = () => {
     }
   };
   
+  // Improved fetchPayloads with debouncing to prevent multiple calls
   const fetchPayloads = async () => {
+    // Prevent fetching if we've fetched in the last 2 seconds
+    const now = Date.now();
+    if (payloadsFetchState.lastUpdated && now - payloadsFetchState.lastUpdated < 2000) {
+      console.log('Skipping payload fetch - too soon since last update');
+      return;
+    }
+    
     try {
       setPayloadsFetchState(prev => ({ ...prev, isLoading: true, error: null }));
       
@@ -384,7 +541,14 @@ const PayloadEditor = () => {
       
       if (response.data?.success) {
         const fetchedPayloads = response.data.data || [];
-        setPayloads(fetchedPayloads);
+        
+        // Only update state if the data has actually changed
+        // This prevents unnecessary re-renders
+        const hasChanged = JSON.stringify(payloads) !== JSON.stringify(fetchedPayloads);
+        
+        if (hasChanged) {
+          setPayloads(fetchedPayloads);
+        }
         
         setPayloadsFetchState({
           isLoading: false,
@@ -430,7 +594,15 @@ const PayloadEditor = () => {
     }
   };
   
+  // Improved fetchScripts with debouncing to prevent multiple calls
   const fetchScripts = async () => {
+    // Prevent fetching if we've fetched in the last 2 seconds
+    const now = Date.now();
+    if (scriptsFetchState.lastUpdated && now - scriptsFetchState.lastUpdated < 2000) {
+      console.log('Skipping script fetch - too soon since last update');
+      return;
+    }
+    
     try {
       setScriptsFetchState(prev => ({ ...prev, isLoading: true, error: null }));
       
@@ -448,7 +620,15 @@ const PayloadEditor = () => {
       const response = await apiService.get<ApiResponse<Script[]>>('/scripts');
       
       if (response.data?.success) {
-        setScripts(response.data.data || []);
+        const fetchedScripts = response.data.data || [];
+        
+        // Only update state if the data has actually changed
+        // This prevents unnecessary re-renders
+        const hasChanged = JSON.stringify(scripts) !== JSON.stringify(fetchedScripts);
+        
+        if (hasChanged) {
+          setScripts(fetchedScripts);
+        }
         
         setScriptsFetchState({
           isLoading: false,
@@ -1469,6 +1649,11 @@ const PayloadEditor = () => {
   };
   
 
+  
+  // Update loading state based on RTK Query
+  useEffect(() => {
+    setIsLoading(devicesFetchState.isLoading || payloadsFetchState.isLoading || scriptsFetchState.isLoading);
+  }, [devicesFetchState.isLoading, payloadsFetchState.isLoading, scriptsFetchState.isLoading]);
   
   return (
     <div className="flex flex-col h-full p-6">
