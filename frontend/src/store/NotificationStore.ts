@@ -31,6 +31,11 @@ export class NotificationStore {
     this.setupWebSocketListeners();
   }
 
+  public initialize(): void {
+    // Ensure WebSocket connection is established
+    this.wsManager.connect();
+  }
+
   private setupWebSocketListeners(): void {
     this.wsManager.subscribe('notification', this.handleNotification.bind(this));
   }

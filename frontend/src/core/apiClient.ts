@@ -14,13 +14,34 @@ export interface ApiResponse<T> {
 export interface Device {
   id: string; 
   name: string;
-  status: 'online' | 'offline' | 'busy' | 'error';
+  status: 'online' | 'offline' | 'busy' | 'attacking' | 'error';
   connectionType: 'network' | 'usb';
   ipAddress?: string;
   serialPortId?: string;
   firmwareVersion?: string;
   lastCheckIn?: string;
   userId: string;
+  owner?: {
+    id: string;
+    name: string;
+    username: string;
+  };
+  lastSeen?: string;
+  batteryLevel?: number;
+  signalStrength?: number;
+  errors?: string[];
+  capabilities?: {
+    storage: string;
+    availableSlots: number;
+    supportedFeatures: string[];
+  };
+  attackState?: {
+    currentPayload: string;
+    targetSystem: string;
+    progress: number;
+    startTime: string;
+    estimatedDuration: number;
+  };
 }
 
 export interface Payload {

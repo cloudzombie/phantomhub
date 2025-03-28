@@ -1,5 +1,5 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
-import { getToken, getUserData, clearToken } from '../../utils/tokenManager';
+import { getToken, getUserData, clearAuthData } from '../../utils/tokenManager';
 
 interface User {
   id: string;
@@ -71,7 +71,7 @@ const authSlice = createSlice({
       state.lastUpdated = Date.now();
     },
     logout: (state) => {
-      clearToken();
+      clearAuthData();
       state.user = null;
       state.token = null;
       state.isAuthenticated = false;

@@ -50,20 +50,27 @@ export class DeviceStore {
     this.setupWebSocketListeners();
   }
 
+  public initialize(): void {
+    // Ensure WebSocket connection is established
+    this.wsManager.connect();
+    // Fetch initial devices
+    this.fetchDevices();
+  }
+
   private setupWebSocketListeners(): void {
-    this.wsManager.subscribe('deviceUpdate', this.handleDeviceUpdate.bind(this));
+    this.wsManager.subscribe('device_status', this.handleDeviceUpdate.bind(this));
   }
 
   private handleDeviceUpdate(data: DeviceStatus): void {
     runInAction(() => {
       this.deviceStatuses.set(data.deviceId, data);
-      
-      // Update device status if device exists
       const device = this.devices.get(data.deviceId);
       if (device) {
-        device.status = data.status;
-        device.lastCheckIn = data.lastSeen;
-        device.errors = data.errors;
+        this.devices.set(data.deviceId, {
+          ...device,
+          status: data.status,
+          lastCheckIn: data.lastSeen
+        });
       }
     });
   }

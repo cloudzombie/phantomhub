@@ -197,4 +197,9 @@ export class PayloadStore {
   public get errorMessage(): string | null {
     return this.error;
   }
+
+  public initialize(): void {
+    this.fetchPayloads();
+    this.wsManager.connect();
+  }
 } 

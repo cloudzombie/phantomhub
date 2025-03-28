@@ -1,6 +1,6 @@
 import { io, Socket } from 'socket.io-client';
 import { getToken } from '../utils/tokenManager';
-import { API_CONFIG } from '../config/api';
+import { SOCKET_ENDPOINT, WEBSOCKET_CONFIG } from '../config/api';
 
 type EventCallback = (data: any) => void;
 
@@ -9,8 +9,8 @@ export class WebSocketManager {
   private socket: Socket | null = null;
   private listeners: Map<string, Set<EventCallback>> = new Map();
   private reconnectionAttempts: number = 0;
-  private maxReconnectionAttempts: number = API_CONFIG.maxReconnectAttempts;
-  private reconnectionDelay: number = API_CONFIG.reconnectDelay;
+  private maxReconnectionAttempts: number = WEBSOCKET_CONFIG.reconnectionAttempts;
+  private reconnectionDelay: number = WEBSOCKET_CONFIG.reconnectionDelay;
   private connectionStatus: 'disconnected' | 'connecting' | 'connected' = 'disconnected';
 
   private constructor() {}
@@ -22,7 +22,7 @@ export class WebSocketManager {
     return WebSocketManager.instance;
   }
 
-  public connect(url: string = import.meta.env.VITE_API_URL): void {
+  public connect(url: string = SOCKET_ENDPOINT): void {
     if (this.socket) {
       return;
     }

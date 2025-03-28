@@ -1,18 +1,28 @@
-import { useContext } from 'react';
-import { RootStoreContext } from '../contexts/RootStoreContext';
-import { RootStore } from '../store/RootStore';
+import { useContext, createContext } from 'react';
+import { DeviceStore } from '../store/DeviceStore';
+import { PayloadStore } from '../store/PayloadStore';
+import { ScriptStore } from '../store/ScriptStore';
 
-export const useStores = () => {
-  const rootStore = useContext(RootStoreContext);
-  
-  if (!rootStore) {
-    throw new Error('useStores must be used within a RootStoreProvider');
-  }
-  
-  return {
-    deviceStore: rootStore.deviceStore,
-    payloadStore: rootStore.payloadStore,
-    scriptStore: rootStore.scriptStore,
-    notificationStore: rootStore.notificationStore,
-  };
-}; 
+interface RootStore {
+  deviceStore: DeviceStore;
+  payloadStore: PayloadStore;
+  scriptStore: ScriptStore;
+}
+
+// Create the stores
+const deviceStore = new DeviceStore();
+const payloadStore = new PayloadStore();
+const scriptStore = new ScriptStore();
+
+// Create the root store
+const rootStore: RootStore = {
+  deviceStore,
+  payloadStore,
+  scriptStore
+};
+
+// Create context
+const StoreContext = createContext<RootStore>(rootStore);
+
+// Hook to use the store
+export const useStores = () => useContext(StoreContext); 

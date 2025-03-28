@@ -4,7 +4,8 @@ import { API_URL } from '../config.ts';
 import { useAuth } from '../contexts/AuthContext.tsx';
 import { getToken } from '../utils/tokenManager';
 import debounce from 'lodash/debounce';
-import { apiService } from '../services/ApiService';
+import { api } from '../services/api';
+import type { ApiResponse } from '../core/apiClient';
 
 // Component imports
 import { Card } from '../components/ui/Card';
@@ -17,6 +18,7 @@ interface User {
   email: string;
   role: string;
   createdAt: string;
+  updatedAt: string;
   lastLogin?: string;
 }
 
@@ -25,6 +27,13 @@ interface UserFormData {
   email: string;
   password: string;
   role: string;
+}
+
+interface UsersResponse {
+  users: User[];
+  totalCount: number;
+  page: number;
+  totalPages: number;
 }
 
 const AdminUserManagement: React.FC = () => {
@@ -69,8 +78,7 @@ const AdminUserManagement: React.FC = () => {
       setLoading(true);
       setError(null);
       
-      // Use ApiService instead of direct axios calls
-      const response = await apiService.get('/admin/users', {
+      const response = await api.get('/admin/users', {
         params: {
           page,
           limit: 10,
@@ -79,16 +87,27 @@ const AdminUserManagement: React.FC = () => {
         }
       });
       
-      if (response.success) {
-        const userData = response.data.users || [];
-        // Ensure the current admin user is always included
-        if (user && !userData.find(u => u.id === user.id)) {
-          userData.unshift(user);
+      const responseData = response.data as ApiResponse<UsersResponse>;
+      
+      if (responseData.success && responseData.data) {
+        const usersData = responseData.data;
+        const userData = usersData.users || [];
+        // Ensure the current admin user is always included if they're not already in the list
+        if (user && !userData.find((u: User) => u.id === user.id)) {
+          const now = new Date().toISOString();
+          userData.unshift({
+            id: user.id,
+            name: user.name || '',
+            email: user.email || '',
+            role: user.role || 'admin',
+            createdAt: now,
+            updatedAt: now
+          });
         }
         setUsers(userData);
-        setTotalPages(response.data.totalPages || 1);
+        setTotalPages(usersData.totalPages || 1);
       } else {
-        setError('Failed to fetch users: ' + (response.message || 'Unknown error'));
+        setError('Failed to fetch users: ' + (responseData.message || 'Unknown error'));
       }
     } catch (err: any) {
       if (err.response?.status === 429) {
@@ -133,9 +152,9 @@ const AdminUserManagement: React.FC = () => {
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const response = await apiService.post('/admin/users', formData);
+      const response = await api.post<ApiResponse<User>>('/admin/users', formData);
       
-      if (response.success) {
+      if (response.data?.success) {
         // Reset form and refresh user list
         setFormData({
           name: '',
@@ -168,9 +187,9 @@ const AdminUserManagement: React.FC = () => {
     }
     
     try {
-      const response = await apiService.delete(`/admin/users/${userId}`);
+      const response = await api.delete<ApiResponse<void>>(`/admin/users/${userId}`);
       
-      if (response.success) {
+      if (response.data?.success) {
         // Remove user from list
         setUsers(users.filter(u => u.id !== userId));
       }
@@ -189,9 +208,9 @@ const AdminUserManagement: React.FC = () => {
     }
 
     try {
-      const response = await apiService.put(`/admin/users/${userId}/role`, { role: newRole });
+      const response = await api.put<ApiResponse<User>>(`/admin/users/${userId}/role`, { role: newRole });
       
-      if (response.success) {
+      if (response.data?.success) {
         // Update user in list
         setUsers(users.map(u => 
           u.id === userId ? { ...u, role: newRole } : u
@@ -209,11 +228,11 @@ const AdminUserManagement: React.FC = () => {
     if (!newPassword) return;
     
     try {
-      const response = await apiService.put(`/admin/users/${userId}/reset-password`, { 
+      const response = await api.put<ApiResponse<void>>(`/admin/users/${userId}/reset-password`, { 
         password: newPassword 
       });
       
-      if (response.success) {
+      if (response.data?.success) {
         alert('Password reset successfully');
       }
     } catch (err: any) {

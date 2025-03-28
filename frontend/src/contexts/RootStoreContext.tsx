@@ -1,5 +1,5 @@
 import React, { createContext, ReactNode } from 'react';
-import { RootStore } from '../store/RootStore';
+import { RootStore, RootStoreImpl, rootStore } from '../store/RootStore';
 
 export const RootStoreContext = createContext<RootStore | null>(null);
 
@@ -7,14 +7,11 @@ interface RootStoreProviderProps {
   children: ReactNode;
 }
 
-let rootStore: RootStore;
-
 export const RootStoreProvider: React.FC<RootStoreProviderProps> = ({ children }) => {
-  if (!rootStore) {
-    rootStore = new RootStore();
+  React.useEffect(() => {
     // Initialize all stores
     rootStore.initializeStores();
-  }
+  }, []);
 
   return (
     <RootStoreContext.Provider value={rootStore}>

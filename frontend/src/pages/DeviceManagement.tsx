@@ -17,7 +17,8 @@ import {
   FiEdit2,
   FiZap
 } from 'react-icons/fi';
-import { apiService, DeviceStatus, ApiResponse } from '../services/ApiService';
+import { api } from '../services/api';
+import type { AxiosResponse } from 'axios';
 import { handleAuthError, isAuthError } from '../utils/tokenManager';
 import { 
   isWebSerialSupported, 
@@ -28,6 +29,14 @@ import {
   OMGDeviceInfo
 } from '../utils/webSerialUtils';
 import DeviceInfoPanel from '../components/DeviceInfoPanel';
+import { 
+  useGetDevicesQuery,
+  useUpdateDeviceMutation,
+  useCreateDeviceMutation,
+  useDeployPayloadMutation,
+  type Device
+} from '../core/apiClient';
+import { WebSocketManager } from '../core/WebSocketManager';
 
 // We need to define SerialPort interface here since we're using it only for type casting
 interface SerialPortInfo {
@@ -43,54 +52,24 @@ interface SerialPort {
   writable: WritableStream<Uint8Array> | null;
 }
 
-interface Device {
-  id: string;
-  name: string;
-  status: string;
-  connectionType: string;
-  ipAddress?: string;
-  serialPortId?: string;
-  firmwareVersion?: string;
-  lastCheckIn?: string;
-  userId: string;
-  owner?: {
-    id: string;
-    name: string;
-    username: string;
-  };
-  lastSeen?: string;
-  batteryLevel?: number;
-  signalStrength?: number;
-  errors?: string[];
-  capabilities?: {
-    storage: string;
-    availableSlots: number;
-    supportedFeatures: string[];
-  };
-  attackState?: {
-    currentPayload: string;
-    targetSystem: string;
-    progress: number;
-    startTime: string;
-    estimatedDuration: number;
-  };
-}
-
 interface DeviceFormData {
   name: string;
   ipAddress: string;
-  firmwareVersion: string;
+  firmwareVersion?: string;
+  connectionType: 'network' | 'usb';
 }
 
 interface UsbDeviceFormData {
   name: string;
-  firmwareVersion: string;
+  firmwareVersion?: string;
 }
 
 interface DeviceStatusUpdate {
-  deviceId: number;
-  status: 'online' | 'offline' | 'busy';
-  lastCheckIn?: string;
+  status: 'online' | 'offline' | 'busy' | 'attacking';
+  lastSeen?: string;
+  batteryLevel?: number;
+  signalStrength?: number;
+  errors?: string[];
 }
 
 interface DeviceRegistration {
@@ -111,16 +90,62 @@ interface DeviceInfo {
 }
 
 // Update the response interfaces to match the actual API response structure
+interface ApiResponse<T> {
+  success: boolean;
+  data: T;
+  message?: string;
+}
+
 interface DeviceResponse {
-  device: Device;
+  success: boolean;
+  data: {
+    device: Device;
+  };
+  message?: string;
 }
 
 interface DevicesResponse {
-  devices: Device[];
+  success: boolean;
+  data: {
+    devices: Device[];
+    totalCount: number;
+    page: number;
+    totalPages: number;
+  };
+  message?: string;
 }
 
 interface DeployResponse {
-  estimatedDuration: number;
+  success: boolean;
+  data: {
+    id: string;
+    estimatedDuration: number;
+  };
+  message?: string;
+}
+
+// Also define DeviceStatus if needed
+interface DeviceStatus {
+  online: 'online';
+  offline: 'offline';
+  busy: 'busy';
+  error: 'error';
+}
+
+interface CreateDeviceRequest {
+  name: string;
+  connectionType: 'network' | 'usb';
+  ipAddress?: string;
+  serialPortId?: string;
+  firmwareVersion?: string;
+  status?: Device['status'];
+}
+
+interface UpdateDeviceRequest {
+  id: string;
+  device: {
+    status: Device['status'];
+  };
 }
 
 const DeviceManagement: React.FC = () => {
@@ -170,7 +195,12 @@ const DeviceManagement: React.FC = () => {
   const MAX_REFRESH_ATTEMPTS = 3;
   const refreshAttemptsRef = useRef(0);
 
-  const handleDeviceUpdate = useCallback((event: CustomEvent<{ deviceId: string; status: DeviceStatus }>) => {
+  const { data: devicesData, isLoading: isLoadingDevices, error: devicesError, refetch: refetchDevices } = useGetDevicesQuery();
+  const [updateDevice] = useUpdateDeviceMutation();
+  const [createDevice] = useCreateDeviceMutation();
+  const [deployPayload] = useDeployPayloadMutation();
+
+  const handleDeviceUpdate = useCallback((event: CustomEvent<{ deviceId: string; status: Partial<Device> }>) => {
     const { deviceId, status } = event.detail;
     
     setDevices(prevDevices => {
@@ -180,111 +210,24 @@ const DeviceManagement: React.FC = () => {
       const updatedDevices = [...prevDevices];
       updatedDevices[deviceIndex] = {
         ...updatedDevices[deviceIndex],
-        status: status.status,
-        lastSeen: status.lastSeen,
-        batteryLevel: status.batteryLevel,
-        signalStrength: status.signalStrength,
-        errors: status.errors
+        ...status
       };
       return updatedDevices;
     });
   }, []);
 
-  const fetchDevices = useCallback(async () => {
-    if (!componentMounted.current) return;
-    
-    try {
-      setError(null);
-      setIsLoading(true);
-      const response = await apiService.get<DevicesResponse>('/devices');
-      
-      if (componentMounted.current && response.success && response.data.devices) {
-        setDevices(response.data.devices);
-        // Subscribe to updates for each device
-        response.data.devices.forEach((device: Device) => {
-          apiService.subscribeToDevice(device.id, 'DeviceManagement');
-        });
-      }
-    } catch (err) {
-      if (componentMounted.current) {
-        setError('Failed to fetch devices');
-        console.error('Error fetching devices:', err);
-      }
-    } finally {
-      if (componentMounted.current) {
-        setIsLoading(false);
-      }
-    }
-  }, []);
-
-  const handleRefresh = useCallback(async () => {
-    const now = Date.now();
-    if (now - lastRefreshTimeRef.current < REFRESH_COOLDOWN) {
-      console.log('Refresh cooldown in effect');
-      return;
-    }
-
-    if (isRefreshing) {
-      console.log('Already refreshing');
-      return;
-    }
-
-    lastRefreshTimeRef.current = now;
-    setIsRefreshing(true);
-
-    try {
-      await Promise.all(devices.map(device => 
-        apiService.refreshDeviceStatus(device.id)
-      ));
-    } catch (err) {
-      console.error('Error refreshing devices:', err);
-      setError('Failed to refresh devices');
-    } finally {
-      setIsRefreshing(false);
-    }
-  }, [devices, isRefreshing]);
-
-  const handleRegisterUSBDevice = useCallback(async () => {
-    try {
-      setError(null);
-      const port = await requestSerialPort();
-      if (!port) {
-        setError('No serial port selected');
-        return;
-      }
-
-      const deviceInfo = await connectToDevice(port);
-      if (!deviceInfo) {
-        setError('Failed to connect to device');
-        return;
-      }
-
-      // Register the device with the backend
-      await apiService.post('/devices', deviceInfo);
-      await fetchDevices(); // Refresh the device list
-    } catch (err) {
-      console.error('Error registering USB device:', err);
-      setError('Failed to register USB device');
-    }
-  }, [fetchDevices]);
-
   useEffect(() => {
-    // Initial fetch
-    fetchDevices();
-
-    // Set up device update listener
-    window.addEventListener('device:update', handleDeviceUpdate as EventListener);
-
-    return () => {
-      componentMounted.current = false;
-      // Clean up subscriptions
-      devices.forEach(device => {
-        apiService.unsubscribeFromDevice(device.id, 'DeviceManagement');
+    if (devicesData?.success) {
+      setDevices(devicesData.data);
+      // Subscribe to updates for each device
+      devicesData.data.forEach((device: Device) => {
+        if (device.id) {
+          // Use WebSocketManager directly instead of through api
+          WebSocketManager.getInstance().subscribe(`device:${device.id}:status`, handleDeviceUpdate);
+        }
       });
-      // Remove event listener
-      window.removeEventListener('device:update', handleDeviceUpdate as EventListener);
-    };
-  }, [fetchDevices, handleDeviceUpdate, devices]);
+    }
+  }, [devicesData]);
 
   // Handle form input changes
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -346,7 +289,7 @@ const DeviceManagement: React.FC = () => {
       name: '',
       ipAddress: '',
       connectionType: 'network',
-      firmwareVersion: ''
+      firmwareVersion: undefined
     });
   };
   
@@ -357,12 +300,12 @@ const DeviceManagement: React.FC = () => {
     setFormData({
       name: '',
       connectionType: 'usb',
-      firmwareVersion: ''
+      firmwareVersion: undefined
     });
   };
   
   // Register network device
-  const registerDevice = async (e: React.FormEvent) => {
+  const handleRegisterDevice = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     setErrorMessage(null);
@@ -372,34 +315,32 @@ const DeviceManagement: React.FC = () => {
         return;
       }
 
-      const response = await apiService.post<DeviceResponse>('/devices', {
+      const result = await createDevice({
         name: formData.name,
         ipAddress: formData.ipAddress,
-        firmwareVersion: formData.firmwareVersion || '1.0.0',
-        connectionType: 'network'
-      });
+        firmwareVersion: formData.firmwareVersion,
+        connectionType: 'network',
+        status: 'offline'
+      }).unwrap();
       
-      if (response.success && response.data.device) {
+      if (result.success) {
         setSuccessMessage('Device registered successfully!');
         setFormData({
           name: '',
           ipAddress: '',
           connectionType: 'network',
-          firmwareVersion: ''
+          firmwareVersion: undefined
         });
         setIsModalOpen(false);
-        
-        // Update devices list
-        setDevices(prev => [...prev, response.data.device]);
       } else {
-        setErrorMessage(response.message || 'Failed to register device');
+        setErrorMessage(result.message || 'Failed to register device');
       }
     } catch (error) {
       console.error('Error registering device:', error);
       if (isAuthError(error)) {
         handleAuthError(error, 'Authentication error in DeviceManagement');
       } else {
-        setErrorMessage((error as any)?.response?.data?.message || 'Error registering device');
+        setErrorMessage(error instanceof Error ? error.message : 'Error registering device');
       }
     } finally {
       setIsLoading(false);
@@ -407,101 +348,54 @@ const DeviceManagement: React.FC = () => {
   };
   
   // Register USB device
-  const registerUsbDevice = async () => {
-    if (!isMountedRef.current) return;
-    
-    setIsLoading(true);
-    setErrorMessage(null);
-
+  const handleRegisterUSBDevice = useCallback(async () => {
     try {
-      // Request serial port access
+      setError(null);
       const port = await requestSerialPort();
       if (!port) {
-        setErrorMessage('No USB device selected or selection was cancelled');
+        setError('No serial port selected');
         return;
       }
 
-      // Show connecting message
-      setSuccessMessage('Connecting to device...');
-
-      // Connect to the device with timeout
-      const connectPromise = connectToDevice(port, {
-        baudRate: 115200,
-        dataBits: 8,
-        stopBits: 1,
-        parity: 'none',
-        flowControl: 'none'
-      });
-      
-      // Add timeout to prevent hanging
-      const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('Connection timeout - please try again')), 15000);
-      });
-      
-      const deviceInfo = await Promise.race([connectPromise, timeoutPromise]) as OMGDeviceInfo;
-
-      if (!isMountedRef.current) return;
-
-      if (deviceInfo.connectionStatus !== 'connected') {
-        setErrorMessage('Failed to establish connection with the device');
+      const deviceInfo = await connectToDevice(port);
+      if (!deviceInfo) {
+        setError('Failed to connect to device');
         return;
       }
 
-      // Show device info message
-      setSuccessMessage(`Connected to ${deviceInfo.info.name || formData.name || 'O.MG Cable'}...`);
-
-      // Register the device
-      const response = await apiService.post<DeviceResponse>('/devices', {
-        name: deviceInfo.info.name || formData.name || 'O.MG Cable',
-        serialPortId: deviceInfo.info.deviceId,
+      // Register the device with the backend
+      await createDevice({
+        name: deviceInfo.info.name || 'O.MG Cable',
         connectionType: 'usb',
-        firmwareVersion: deviceInfo.info.firmwareVersion || formData.firmwareVersion || null
-      });
-
-      if (!isMountedRef.current) return;
-
-      if (response.success && response.data.device) {
-        setSuccessMessage('USB device registered successfully!');
-        setIsUsbModalOpen(false);
-        refreshAttemptsRef.current = 0;
-        
-        // Update devices list
-        setDevices(prev => [...prev, response.data.device]);
-
-        // Clear form data
-        resetUsbForm();
-      } else {
-        setErrorMessage(response.message || 'Failed to register USB device');
-      }
-    } catch (error) {
-      if (!isMountedRef.current) return;
-      
-      console.error('Error registering USB device:', error);
-      setErrorMessage(error instanceof Error ? error.message : 'Error registering USB device');
-    } finally {
-      if (isMountedRef.current) {
-        setIsLoading(false);
-      }
+        serialPortId: deviceInfo.info.deviceId === null ? undefined : deviceInfo.info.deviceId,
+        status: 'offline'
+      }).unwrap();
+      await refetchDevices();
+    } catch (err) {
+      console.error('Error registering USB device:', err);
+      setError('Failed to register USB device');
     }
-  };
+  }, [createDevice, refetchDevices]);
   
   // Update device status without triggering a refresh
-  const updateDeviceStatus = async (deviceId: string, status: string) => {
+  const handleUpdateDeviceStatus = async (deviceId: string, newStatus: Device['status']) => {
     if (!isMountedRef.current) return;
     
     setErrorMessage(null);
     
     try {
-      const response = await apiService.patch<DeviceResponse>(`/devices/${deviceId}`, { status });
-      
+      const result = await updateDevice({
+        id: deviceId,
+        device: { status: newStatus }
+      }).unwrap();
+
       if (!isMountedRef.current) return;
 
-      if (response.success) {
-        setSuccessMessage(`Device status updated to ${status}`);
-        setDevices(prev => prev.map(device => device.id === deviceId ? { ...device, status } : device));
+      if (result.success) {
+        setSuccessMessage(`Device status updated to ${newStatus}`);
         refreshAttemptsRef.current = 0;
       } else {
-        setErrorMessage(response.message || 'Failed to update device status');
+        setErrorMessage(result.message || 'Failed to update device status');
       }
     } catch (error) {
       if (!isMountedRef.current) return;
@@ -516,36 +410,19 @@ const DeviceManagement: React.FC = () => {
   };
   
   // Deploy payload
-  const deployPayload = async (deviceId: string, payloadId: string) => {
+  const handleDeployPayload = async (deviceId: string, payloadId: string) => {
     if (!isMountedRef.current) return;
 
     try {
-      const response = await apiService.post<DeployResponse>(`/devices/${deviceId}/deploy`, {
+      const result = await deployPayload({
         payloadId,
-        config: {
-          ...attackConfig,
-          timestamp: new Date().toISOString()
-        }
-      });
+        deviceId,
+        connectionType: 'network'
+      }).unwrap();
 
-      if (response.success && response.data) {
-        const { estimatedDuration } = response.data;
+      if (result.success) {
         setSuccessMessage('Payload deployment initiated');
-        // Update device status without triggering a refresh
-        setDevices(prev => prev.map(device => 
-          device.id === deviceId ? 
-          { 
-            ...device, 
-            status: 'attacking',
-            attackState: {
-              currentPayload: payloadId,
-              targetSystem: attackConfig.targetSystem,
-              progress: 0,
-              startTime: new Date().toISOString(),
-              estimatedDuration
-            }
-          } : device
-        ));
+        // Device status will be updated through WebSocket
       }
     } catch (error) {
       console.error('Error deploying payload:', error);
@@ -605,8 +482,8 @@ const DeviceManagement: React.FC = () => {
     );
   };
   
-  // Format date/time to be more readable
-  const formatDateTime = (dateString: string | undefined | null) => {
+  // Update the formatDateTime function
+  const formatDateTime = (dateString: string | null | undefined) => {
     if (!dateString) return 'Never';
     
     const date = new Date(dateString);
@@ -657,7 +534,7 @@ const DeviceManagement: React.FC = () => {
           <div className="bg-slate-700/30 p-3 rounded-md col-span-2">
             <h5 className="text-xs font-medium text-slate-300 mb-2">Features</h5>
             <div className="flex flex-wrap gap-2">
-              {device.capabilities.supportedFeatures.map(feature => (
+              {device.capabilities.supportedFeatures.map((feature) => (
                 <span key={feature} className="px-2 py-1 text-xs bg-slate-600/50 text-slate-300 rounded-md">
                   {feature}
                 </span>
@@ -674,7 +551,7 @@ const DeviceManagement: React.FC = () => {
                 Target: {device.attackState.targetSystem}
               </p>
               <p className="text-sm text-red-300">
-                Started: {formatDateTime(device.attackState.startTime || '')}
+                Started: {formatDateTime(device.attackState.startTime)}
               </p>
               <div className="w-full bg-red-900/30 rounded-full h-2 mt-2">
                 <div 
@@ -689,6 +566,16 @@ const DeviceManagement: React.FC = () => {
     );
   };
   
+  // Replace handleRefresh with refetchDevices
+  const handleRefresh = () => {
+    if (Date.now() - lastRefreshTimeRef.current < REFRESH_COOLDOWN) {
+      console.log('Refresh cooldown in effect');
+      return;
+    }
+    lastRefreshTimeRef.current = Date.now();
+    refetchDevices();
+  };
+
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="flex justify-between items-center mb-6">
@@ -816,7 +703,7 @@ const DeviceManagement: React.FC = () => {
                   <FiX size={20} />
                 </button>
               </div>
-              <form onSubmit={registerDevice}>
+              <form onSubmit={handleRegisterDevice}>
                 <div className="space-y-4">
                   <div>
                     <label htmlFor="name" className="block text-sm font-medium text-slate-300 mb-1">Device Name</label>
@@ -910,7 +797,7 @@ const DeviceManagement: React.FC = () => {
                   <FiX size={20} />
                 </button>
               </div>
-              <form onSubmit={registerUsbDevice}>
+              <form onSubmit={handleRegisterUSBDevice}>
                 <div className="space-y-4">
                   <div className="p-3 bg-blue-900/20 border border-blue-500/30 rounded text-blue-400 text-sm">
                     <div className="flex items-center">
@@ -998,21 +885,24 @@ const DeviceManagement: React.FC = () => {
                 <DeviceInfoPanel 
                   deviceInfo={{
                     name: selectedDevice.name,
-                    port: {} as SerialPort,
-                    reader: null,
-                    writer: null,
+                    type: selectedDevice.connectionType,
+                    status: selectedDevice.status === 'attacking' || selectedDevice.status === 'busy' ? 'online' : selectedDevice.status,
+                    connectionType: selectedDevice.connectionType === 'network' ? 'wifi' : 'usb',
+                    serialPortId: selectedDevice.serialPortId,
                     connectionStatus: selectedDevice.status === 'attacking' ? 'connected' : 
                                     selectedDevice.status === 'online' ? 'connected' : 
                                     selectedDevice.status === 'busy' ? 'connecting' : 'disconnected',
+                    ipAddress: selectedDevice.ipAddress,
+                    firmwareVersion: selectedDevice.firmwareVersion,
                     info: {
                       name: selectedDevice.name,
                       firmwareVersion: selectedDevice.firmwareVersion || null,
-                      deviceId: selectedDevice.id.toString(),
+                      deviceId: selectedDevice.id || null,
                       capabilities: {
                         usbHid: true,
                         wifi: selectedDevice.connectionType === 'network',
                         bluetooth: false,
-                        storage: selectedDevice.capabilities?.storage || '4MB',
+                        storage: selectedDevice.capabilities?.storage || null,
                         supportedFeatures: selectedDevice.capabilities?.supportedFeatures || [
                           'DuckyScript',
                           'Payloads',
@@ -1025,7 +915,7 @@ const DeviceManagement: React.FC = () => {
                       }
                     }
                   }}
-                  onRefresh={() => handleRefresh()}
+                  onRefresh={handleRefresh}
                 />
                 {renderDeviceCapabilities(selectedDevice)}
                 
@@ -1096,7 +986,7 @@ const DeviceManagement: React.FC = () => {
                     <div className="mt-4">
                       <button
                         className="px-4 py-2 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 rounded-md text-red-500 text-sm font-medium transition-colors disabled:opacity-50"
-                        onClick={() => selectedPayload && deployPayload(selectedDevice.id, selectedPayload)}
+                        onClick={() => selectedPayload && handleDeployPayload(selectedDevice.id, selectedPayload)}
                         disabled={!selectedPayload || isLoading}
                       >
                         Deploy Payload

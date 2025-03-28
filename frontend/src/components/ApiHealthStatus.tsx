@@ -20,9 +20,11 @@ import {
   FiRefreshCw,
   FiWifi
 } from 'react-icons/fi';
-import { apiService } from '../services/ApiService';
-import { getSocket } from '../utils/socketUtils';
-import NotificationService from '../services/NotificationService';
+import { api } from '../services/api';
+import { WebSocketManager } from '../core/WebSocketManager';
+import { observer } from 'mobx-react-lite';
+import { useStore } from '../contexts/StoreContext';
+import type { ApiResponse } from '../core/apiClient';
 
 interface ApiHealthStatusProps {
   onStatusChange?: (status: 'healthy' | 'degraded' | 'down') => void;
@@ -68,7 +70,47 @@ interface ApiHealth {
   lastChecked: Date;
 }
 
-const ApiHealthStatus: React.FC<ApiHealthStatusProps> = ({ onStatusChange }) => {
+interface ServerStatusUpdate {
+  status: 'online' | 'offline' | 'degraded';
+  version: string;
+  uptime: number;
+  hostname?: string;
+  platform?: string;
+  cpuInfo?: string;
+  loadAvg?: string[];
+  memory: {
+    used: number;
+    total: number;
+    percentage?: number;
+  };
+  database?: {
+    status: 'online' | 'offline' | 'error';
+    responseTime: number;
+    dialect: string;
+    host: string;
+  };
+  redis?: {
+    status: 'online' | 'offline' | 'error';
+    host?: string;
+    port?: number;
+  };
+  activeConnections: number;
+  responseTime: number;
+  cpuLoad: number;
+  processes?: {
+    pid: number;
+    memoryUsage: number;
+  };
+}
+
+interface ServerLoadUpdate {
+  cpuLoad: number;
+  memoryUsed: number;
+  memoryPercentage: number;
+}
+
+const ApiHealthStatus: React.FC<ApiHealthStatusProps> = observer(({ onStatusChange }) => {
+  const { systemStore } = useStore();
   const [apiHealth, setApiHealth] = useState<ApiHealth>({
     status: 'offline',
     version: 'v1.0.0',
@@ -121,7 +163,7 @@ const ApiHealthStatus: React.FC<ApiHealthStatusProps> = ({ onStatusChange }) => 
       delete cleanAxios.defaults.headers.common['Authorization'];
       
       // Make a direct request without authentication headers
-      const response = await cleanAxios.get(healthEndpoint);
+      const response = await cleanAxios.get<ApiResponse<ServerStatusUpdate>>(healthEndpoint);
       
       // Calculate response time
       const responseTime = Date.now() - startTime;
@@ -138,6 +180,9 @@ const ApiHealthStatus: React.FC<ApiHealthStatusProps> = ({ onStatusChange }) => 
           responseTime,
           lastChecked: new Date()
         });
+
+        // Update system store
+        systemStore.updateSystemStatus(healthData);
       } else {
         // Handle unsuccessful API response
         setErrorMessage('API returned an error response');
@@ -164,65 +209,46 @@ const ApiHealthStatus: React.FC<ApiHealthStatusProps> = ({ onStatusChange }) => 
   useEffect(() => {
     checkApiHealth();
     
-    const { pollingInterval } = apiService.getConfig();
-    const interval = pollingInterval * 1000;
+    // Use a fixed polling interval for health checks
+    const interval = 30000; // 30 seconds
     const timer = setInterval(checkApiHealth, interval);
     
-    const handleConfigChange = (event: CustomEvent<any>) => {
-      if (event.detail && event.detail.pollingInterval) {
-        clearInterval(timer);
-        const newInterval = event.detail.pollingInterval * 1000;
-        setInterval(checkApiHealth, newInterval);
-      }
+    // Set up WebSocket event listeners for real-time updates
+    const wsManager = WebSocketManager.getInstance();
+    
+    // Listen for server status updates
+    const handleServerStatus = (data: ServerStatusUpdate) => {
+      console.log('ApiHealthStatus: Received real-time server status update', data);
+      setApiHealth(prev => ({
+        ...prev,
+        ...data,
+        lastChecked: new Date()
+      }));
+      systemStore.updateSystemStatus(data);
     };
     
-    document.addEventListener('api-config-changed', handleConfigChange as EventListener);
+    // Listen for server load updates
+    const handleServerLoad = (data: ServerLoadUpdate) => {
+      console.log('ApiHealthStatus: Received real-time server load update', data);
+      setApiHealth(prev => ({
+        ...prev,
+        cpuLoad: data.cpuLoad,
+        memory: {
+          ...prev.memory,
+          used: data.memoryUsed,
+          percentage: data.memoryPercentage
+        },
+        lastChecked: new Date()
+      }));
+    };
     
-    // Set up socket event listeners for real-time updates
-    const socket = getSocket();
-    if (socket) {
-      console.log('ApiHealthStatus: Setting up socket event listeners');
-      
-      // Listen for server status updates
-      socket.on('server_status', (data) => {
-        console.log('ApiHealthStatus: Received real-time server status update', data);
-        if (data && typeof data === 'object') {
-          setApiHealth(prev => ({
-            ...prev,
-            ...data,
-            lastChecked: new Date()
-          }));
-        }
-      });
-      
-      // Listen for server load updates
-      socket.on('server_load', (data) => {
-        console.log('ApiHealthStatus: Received real-time server load update', data);
-        if (data && typeof data === 'object') {
-          setApiHealth(prev => ({
-            ...prev,
-            cpuLoad: data.cpuLoad || prev.cpuLoad,
-            memory: {
-              ...prev.memory,
-              used: data.memoryUsed || prev.memory.used,
-              percentage: data.memoryPercentage || prev.memory.percentage
-            },
-            lastChecked: new Date()
-          }));
-        }
-      });
-    }
+    wsManager.subscribe('server_status', handleServerStatus);
+    wsManager.subscribe('server_load', handleServerLoad);
     
     return () => {
       clearInterval(timer);
-      document.removeEventListener('api-config-changed', handleConfigChange as EventListener);
-      
-      // Clean up socket event listeners
-      const socket = getSocket();
-      if (socket) {
-        socket.off('server_status');
-        socket.off('server_load');
-      }
+      wsManager.unsubscribe('server_status', handleServerStatus);
+      wsManager.unsubscribe('server_load', handleServerLoad);
     };
   }, []);
 
@@ -288,6 +314,8 @@ const ApiHealthStatus: React.FC<ApiHealthStatusProps> = ({ onStatusChange }) => 
     setSocketTestResult(null);
     
     try {
+      const wsManager = WebSocketManager.getInstance();
+      
       // Subscribe to system updates to get test results
       const handleSocketTestResult = (data: any) => {
         console.log('ApiHealthStatus: Received socket test result:', data);
@@ -295,27 +323,26 @@ const ApiHealthStatus: React.FC<ApiHealthStatusProps> = ({ onStatusChange }) => 
           setSocketStatus(data.success ? 'connected' : 'failed');
           setSocketTestResult(JSON.stringify(data.data || data.message, null, 2));
           // Unsubscribe after receiving the result
-          NotificationService.unsubscribe('system_update', handleSocketTestResult);
+          wsManager.unsubscribe('system_update', handleSocketTestResult);
         }
       };
       
       // Subscribe for the test result
-      NotificationService.subscribe('system_update', handleSocketTestResult);
+      wsManager.subscribe('system_update', handleSocketTestResult);
       
       // Perform the test
-      await NotificationService.testSocketConnection();
+      await wsManager.emit('test_socket_connection');
       
-      // Set a timeout for the test response (additional safeguard)
+      // Set a timeout for the test response
       const timeoutId = setTimeout(() => {
         if (socketStatus === 'testing') {
           console.log('ApiHealthStatus: Socket test timed out');
           setSocketStatus('failed');
           setSocketTestResult('Socket test timed out after 6 seconds (no response from server)');
-          NotificationService.unsubscribe('system_update', handleSocketTestResult);
+          wsManager.unsubscribe('system_update', handleSocketTestResult);
         }
       }, 6000);
       
-      // Clean up timeout on component unmount
       return () => clearTimeout(timeoutId);
       
     } catch (error) {
@@ -604,6 +631,6 @@ const ApiHealthStatus: React.FC<ApiHealthStatusProps> = ({ onStatusChange }) => 
       )}
     </div>
   );
-};
+});
 
 export default ApiHealthStatus; 

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { FiLogIn, FiShield, FiAlertCircle, FiCheckCircle } from 'react-icons/fi';
 import axios from 'axios';
-import { apiService } from '../services/ApiService';
+import { api } from '../services/api';
 import ThemeService from '../services/ThemeService';
 import NotificationService from '../services/NotificationService';
 import { useAuth } from '../contexts/AuthContext';
@@ -55,8 +55,7 @@ const Login = () => {
     setSuccessMessage('');
 
     try {
-      // Clear any previous user's settings to ensure fresh start
-      apiService.clearUserSettings();
+      // We don't need to clear user settings here as the new api service handles this
       
       const response = await axios.post(`${API_URL}/auth/login`, {
         email,
@@ -96,7 +95,6 @@ const Login = () => {
         }
         
         // Reload all service settings
-        apiService.reloadSettings();
         ThemeService.reloadSettings();
         NotificationService.reloadSettings();
         

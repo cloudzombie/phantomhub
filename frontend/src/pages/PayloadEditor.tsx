@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, ChangeEvent } from 'react';
 import { FiSave, FiCode, FiZap, FiInfo, FiAlertCircle, FiCheckCircle, FiRefreshCw, FiHardDrive, FiWifi, FiUpload, FiLink, FiList, FiFile, FiTrash2, FiPlusCircle, FiX, FiEdit2, FiEdit, FiCheck } from 'react-icons/fi';
 import axios from 'axios';
-import { apiService } from '../services/ApiService';
+import { api } from '../services/api';
 import { handleAuthError, isAuthError, getToken, getUserData } from '../utils/tokenManager';
 import * as monaco from 'monaco-editor';
 import { registerDuckyScriptLanguage } from '../utils/duckyScriptLanguage';
@@ -136,7 +136,7 @@ const PayloadEditor = observer(() => {
   const [showPayloadList, setShowPayloadList] = useState(false);
   const [devices, setDevices] = useState<Device[]>([]);
   const [selectedDevice, setSelectedDevice] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoadingState, setIsLoading] = useState(false);
   const [message, setMessage] = useState<{type: 'success' | 'error', text: string} | null>(null);
   const [webSerialSupported, setWebSerialSupported] = useState(false);
   const [usbDevices, setUsbDevices] = useState<OMGDeviceInfo[]>([]);
@@ -199,14 +199,14 @@ const PayloadEditor = observer(() => {
   const { data: scriptsData, isLoading: scriptsLoading } = useGetScriptsQuery();
   
   // Mutations
-  const [createPayload, { isLoading: isCreatingPayload }] = useCreatePayloadMutation();
-  const [updatePayload, { isLoading: isUpdatingPayload }] = useUpdatePayloadMutation();
-  const [deletePayload, { isLoading: isDeletingPayload }] = useDeletePayloadMutation();
-  const [deployPayload, { isLoading: isDeployingPayload }] = useDeployPayloadMutation();
+  const [createPayloadMutation, { isLoading: isCreatingPayload }] = useCreatePayloadMutation();
+  const [updatePayloadMutation, { isLoading: isUpdatingPayload }] = useUpdatePayloadMutation();
+  const [deletePayloadMutation, { isLoading: isDeletingPayload }] = useDeletePayloadMutation();
+  const [deployPayloadMutation, { isLoading: isDeployingPayload }] = useDeployPayloadMutation();
   
-  const [createScript, { isLoading: isCreatingScript }] = useCreateScriptMutation();
-  const [updateScript, { isLoading: isUpdatingScript }] = useUpdateScriptMutation();
-  const [deleteScript, { isLoading: isDeletingScript }] = useDeleteScriptMutation();
+  const [createScriptMutation, { isLoading: isCreatingScript }] = useCreateScriptMutation();
+  const [updateScriptMutation, { isLoading: isUpdatingScript }] = useUpdateScriptMutation();
+  const [deleteScriptMutation, { isLoading: isDeletingScript }] = useDeleteScriptMutation();
 
   // Calculate overall loading state
   const isLoading = 
@@ -321,11 +321,11 @@ const PayloadEditor = observer(() => {
         return;
       }
       
-      const response = await apiService.get<ApiResponse<Device[]>>('/devices');
+      const response = await api.get<ApiResponse<Device[]>>('/devices');
       
       if (response.data?.success) {
         const fetchedDevices = response.data.data || [];
-        setDevices(fetchedDevices);
+        setDevices(fetchedDevices as Device[]);
         
         // Only select first device if we don't have one selected
         if (fetchedDevices.length > 0 && !selectedDevice) {
@@ -397,11 +397,11 @@ const PayloadEditor = observer(() => {
         return;
       }
       
-      const response = await apiService.get<ApiResponse<Payload[]>>('/payloads');
+      const response = await api.get<ApiResponse<Payload[]>>('/payloads');
       
       if (response.data?.success) {
         const fetchedPayloads = response.data.data || [];
-        setPayloads(fetchedPayloads);
+        setPayloads(fetchedPayloads as Payload[]);
         
         setPayloadsFetchState({
           isLoading: false,
@@ -461,11 +461,11 @@ const PayloadEditor = observer(() => {
         return;
       }
       
-      // Use apiService consistently instead of direct axios calls
-      const response = await apiService.get<ApiResponse<Script[]>>('/scripts');
+      const response = await api.get<ApiResponse<Script[]>>('/scripts');
       
       if (response.data?.success) {
-        setScripts(response.data.data || []);
+        const fetchedScripts = response.data.data || [];
+        setScripts(fetchedScripts as Script[]);
         
         setScriptsFetchState({
           isLoading: false,
@@ -557,177 +557,84 @@ const PayloadEditor = observer(() => {
     }
   };
   
-  const deletePayload = async (payloadId: string) => {
+  const handleDeletePayload = async (payloadId: string) => {
     try {
       setIsLoading(true);
-      
-      const token = getToken();
-      if (!token) {
-        console.error('No authentication token found');
-        window.location.href = '/login';
-        return;
-      }
-      
-      console.log(`Deleting payload with ID: ${payloadId}`);
-      
-      // Get user data to check role
-      const userData = getUserData();
-      let userRole = 'user';
-      if (userData) {
-        // userData is already parsed by getUserData, no need to parse again
-        userRole = userData.role || 'user';
-        console.log('User role from tokenManager:', userRole);
-      }
-      
-      // Check if user has permission to delete
-      const currentUser = getCurrentUserFromStorage();
-      const payload = payloads.find(p => p.id === payloadId);
-      
-      if (!payload) {
-        setMessage({
-          type: 'error',
-          text: 'Payload not found'
-        });
-        return;
-      }
-      
-      const isOwner = currentUser?.id === payload.userId;
-      const isAdmin = userRole === 'admin';
-      const isOperator = userRole === 'operator';
-      
-      if (!isOwner && !isAdmin && !isOperator) {
-        setMessage({
-          type: 'error',
-          text: 'You do not have permission to delete this payload'
-        });
-        return;
-      }
-      
-      try {
-        const response = await axios.delete(`${API_URL}/payloads/${payloadId}`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        });
+      const result = await deletePayloadMutation(payloadId).unwrap();
+
+      if (result.success) {
+        setMessage({ type: 'success', text: 'Payload deleted successfully' });
         
-        console.log('Delete payload response:', response.data);
-        
-        if (response.data && response.data.success) {
-          setMessage({
-            type: 'success',
-            text: 'Payload deleted successfully'
-          });
+        // If the deleted payload was selected, clear the selection
+        if (selectedPayload && selectedPayload.id === payloadId) {
+          setSelectedPayload(null);
+          setPayloadName('New Payload');
           
-          // Remove the deleted payload from the state
-          setPayloads(prevPayloads => prevPayloads.filter(payload => payload.id !== payloadId));
-          
-          // If the deleted payload was selected, clear the selection
-          if (selectedPayload && selectedPayload.id === payloadId) {
-            setSelectedPayload(null);
-            setPayloadName('New Payload');
-            if (editorRef.current) {
-              editorRef.current.setValue(DEFAULT_DUCKY_SCRIPT);
-            }
+          // Reset the editor content
+          if (editorRef.current) {
+            editorRef.current.setValue(DEFAULT_DUCKY_SCRIPT);
           }
-        } else {
-          setMessage({
-            type: 'error',
-            text: response.data?.message || 'Failed to delete payload'
-          });
         }
-      } catch (error) {
-        console.error('Error deleting payload:', error);
         
-        // Enhanced error logging
-        if (axios.isAxiosError(error)) {
-          console.error('API Error Status:', error.response?.status);
-          console.error('API Error Data:', error.response?.data);
-          
-          // Give more specific error messages based on status code
-          if (error.response?.status === 403) {
-            setMessage({
-              type: 'error',
-              text: 'You do not have permission to delete this payload. Only operators and admins can delete payloads.'
-            });
-          } else if (error.response?.status === 401) {
-            setMessage({
-              type: 'error',
-              text: 'Authentication failed. Please log in again.'
-            });
-            handleAuthError(error, 'Authentication error while deleting payload');
-          } else {
-            setMessage({
-              type: 'error',
-              text: error.response?.data?.message || 'Failed to delete payload. Please try again.'
-            });
-          }
-        } else {
-          setMessage({
-            type: 'error',
-            text: 'Failed to delete payload. Please try again.'
-          });
-        }
+        // Refetch payloads
+        setIsLoading(true);
+        await fetchPayloads();
+      } else {
+        setMessage({ type: 'error', text: result.message || 'Failed to delete payload' });
+      }
+    } catch (error) {
+      console.error('Error deleting payload:', error);
+      
+      if (axios.isAxiosError(error) && error.response?.status === 401) {
+        handleAuthError('Your session has expired. Please log in again.');
+      } else {
+        setMessage({ 
+          type: 'error', 
+          text: error instanceof Error ? error.message : 'An unknown error occurred while deleting the payload'
+        });
       }
     } finally {
       setIsLoading(false);
     }
   };
   
-  const handleDeleteClick = (payload: Payload, e: React.MouseEvent<HTMLButtonElement>) => {
-    e.stopPropagation(); // Prevent triggering the payload selection
-    
-    if (window.confirm(`Are you sure you want to delete "${payload.name}"? This action cannot be undone.`)) {
-      deletePayload(payload.id);
-    }
-  };
-  
   const savePayload = async () => {
     try {
       if (!editorRef.current) {
-        setMessage({
-          type: 'error',
-          text: 'Editor not ready'
-        });
+        setMessage({ type: 'error', text: 'Editor not initialized' });
+        return null;
+      }
+      
+      const script = editorRef.current.getValue();
+      if (!script || script.trim() === '') {
+        setMessage({ type: 'error', text: 'Payload content cannot be empty' });
+        return null;
+      }
+      
+      if (!payloadName || payloadName.trim() === '') {
+        setMessage({ type: 'error', text: 'Payload name cannot be empty' });
         return null;
       }
       
       setIsLoading(true);
       
-      const payloadScript = editorRef.current.getValue();
-      
-      if (!payloadScript.trim()) {
-        setMessage({
-          type: 'error',
-          text: 'Payload cannot be empty'
-        });
-        setIsLoading(false);
-        return null;
-      }
-      
-      const token = getToken();
-      if (!token) {
-        console.error('No authentication token found');
-        window.location.href = '/login';
-        return null;
-      }
-      
+      // Create the payload object
       const payloadData = {
         name: payloadName,
-        script: payloadScript,
-        type: 'duckyscript'
+        script: script,
+        description: '', // Can be updated to use an actual description field
       };
       
       let response;
       
       // If we have a selected payload, update it, otherwise create a new one
       if (selectedPayload) {
-        response = await updatePayload({ 
+        response = await updatePayloadMutation({ 
           id: selectedPayload.id, 
           payload: payloadData 
         }).unwrap();
       } else {
-        response = await createPayload(payloadData).unwrap();
+        response = await createPayloadMutation(payloadData).unwrap();
       }
       
       if (response.success) {
@@ -770,180 +677,107 @@ const PayloadEditor = observer(() => {
     }
   };
   
-  const deployPayload = async () => {
+  const handleDeployPayload = async () => {
     try {
       if (!editorRef.current) {
-        setMessage({
-          type: 'error',
-          text: 'Editor not ready'
-        });
+        setMessage({ type: 'error', text: 'Editor not initialized' });
         return;
       }
-      
+
       if (!selectedDevice) {
-        setMessage({
-          type: 'error',
-          text: 'Please select a device first'
-        });
+        setMessage({ type: 'error', text: 'Please select a device to deploy to' });
         return;
       }
+
+      const deviceObj = devices.find(d => d.id.toString() === selectedDevice);
+      if (!deviceObj) {
+        setMessage({ type: 'error', text: 'Selected device not found' });
+        return;
+      }
+
+      const currentPayloadContent = editorRef.current.getValue();
       
+      if (!currentPayloadContent || currentPayloadContent.trim() === '') {
+        setMessage({ type: 'error', text: 'Payload content cannot be empty' });
+        return;
+      }
+
       setIsLoading(true);
       
-      // First save the payload to get its ID
-      const savedPayload = await savePayload();
-      if (!savedPayload) {
-        return;
+      // Save the payload first if it's a new payload or has changes
+      let payloadToUse = selectedPayload;
+      
+      if (
+        !payloadToUse || 
+        payloadToUse.script !== currentPayloadContent ||
+        payloadToUse.name !== payloadName
+      ) {
+        const savedPayload = await savePayload();
+        if (!savedPayload) {
+          return; // Error would have been set in savePayload
+        }
+        payloadToUse = savedPayload;
       }
-      
-      // Find the device to determine if it's USB or network connected
-      const device = devices.find(d => d.id.toString() === selectedDevice);
-      
-      if (device?.connectionType === 'usb') {
-        // For USB devices, use WebSerial
-        const payloadScript = editorRef.current.getValue();
-        
-        // Find the connected USB device that matches this device
-        const usbDevice = usbDevices.find((d: OMGDeviceInfo) => d.info.deviceId === device.serialPortId);
-        
-        if (!usbDevice) {
-          setMessage({
-            type: 'error',
-            text: 'USB device is no longer connected. Please reconnect it.'
-          });
-          return;
-        }
-        
-        // First, create a deployment record on the backend
-        const token = getToken();
-        if (!token) {
-          console.error('No authentication token found');
-          window.location.href = '/login';
-          return;
-        }
-        
-        // Initialize the deployment
-        const deploymentData = {
-          payloadId: savedPayload.id,
-          deviceId: parseInt(selectedDevice),
-          connectionType: 'usb'
-        };
-        
-        // Create the deployment record
-        const deployResponse = await axios.post(`${API_URL}/payloads/deploy`, deploymentData, {
-          headers: {
-            Authorization: `Bearer ${token}`
-          }
-        });
-        
-        if (!deployResponse.data || !deployResponse.data.success) {
-          setMessage({
-            type: 'error',
-            text: deployResponse.data?.message || 'Failed to initialize deployment'
-          });
-          return;
-        }
-        
-        const deploymentId = deployResponse.data.data.id;
-        
+
+      // Handle different deployment methods based on device connection type
+      if (deviceObj.connectionType === 'usb') {
+        // Deploy to USB device using WebSerial API
         try {
-          // Deploy directly via WebSerial - this is the actual physical connection
-          const startTime = Date.now();
-          const result = await deployPayloadToUsbDevice(usbDevice, payloadScript);
-          const executionTime = Date.now() - startTime;
-          
-          // Now update the backend with the actual result
-          const updateData = {
-            status: result.success ? 'completed' : 'failed',
-            result: {
-              success: result.success,
-              executionTime,
-              output: result.message,
-              timestamp: new Date().toISOString()
-            }
-          };
-          
-          // Report the actual result back to the backend
-          await axios.patch(`${API_URL}/deployments/${deploymentId}`, updateData, {
-            headers: {
-              Authorization: `Bearer ${token}`
-            }
-          });
-          
-          // Show message to user
-          setMessage({
-            type: result.success ? 'success' : 'error',
-            text: result.success 
-              ? 'Payload deployed to USB device successfully!' 
-              : `Failed to deploy to USB device: ${result.message}`
-          });
+          await deployToUsbSerialDevice();
         } catch (error) {
-          console.error('Error in USB deployment:', error);
-          
-          // Report failure to backend
-          await axios.patch(`${API_URL}/deployments/${deploymentId}`, {
-            status: 'failed',
-            result: {
-              success: false,
-              error: error instanceof Error ? error.message : 'Unknown error during USB deployment',
-              timestamp: new Date().toISOString()
-            }
-          }, {
-            headers: {
-              Authorization: `Bearer ${token}`
-            }
-          });
-          
-          setMessage({
-            type: 'error',
-            text: `USB deployment error: ${error instanceof Error ? error.message : 'Unknown error'}`
+          console.error('Error deploying to USB device:', error);
+          setMessage({ 
+            type: 'error', 
+            text: error instanceof Error 
+              ? `USB deployment error: ${error.message}` 
+              : 'Failed to deploy to USB device'
           });
         }
       } else {
-        // For network devices, use the API
-        const token = getToken();
-        if (!token) {
-          console.error('No authentication token found');
-          window.location.href = '/login';
-          return;
-        }
-        
-        // Deploy the payload to the selected device
+        // Deploy to network device using API
         const deploymentData = {
-          payloadId: savedPayload.id,
-          deviceId: parseInt(selectedDevice),
-          connectionType: 'network'
+          payloadId: payloadToUse.id,
+          deviceId: deviceObj.id.toString(),
+          connectionType: deviceObj.connectionType || 'network'
         };
         
-        const response = await axios.post(`${API_URL}/payloads/deploy`, deploymentData, {
-          headers: {
-            Authorization: `Bearer ${token}`
-          }
-        });
+        const result = await deployPayloadMutation(deploymentData).unwrap();
         
-        if (response.data && response.data.success) {
-          setMessage({
-            type: 'success',
-            text: `Payload deployed to device successfully!`
+        if (result.success) {
+          setMessage({ 
+            type: 'success', 
+            text: `Deployment initiated! ID: ${result.data.id}` 
+          });
+        } else {
+          setMessage({ 
+            type: 'error', 
+            text: result.message || 'Failed to deploy payload' 
           });
         }
       }
     } catch (error) {
-      console.error('Error deploying payload:', error);
-      setMessage({
-        type: 'error',
-        text: 'Failed to deploy payload. Please try again.'
-      });
+      console.error('Error in deployPayload:', error);
       
-      // If we get a 401, handle auth error without removing token
-      if (isAuthError(error)) {
-        handleAuthError(error, 'Authentication error while fetching devices');
+      if (axios.isAxiosError(error)) {
+        if (error.response?.status === 401) {
+          handleAuthError('Your session has expired. Please log in again.');
+        } else {
+          setMessage({ 
+            type: 'error', 
+            text: error.response?.data?.message || 'Failed to deploy payload' 
+          });
+        }
+      } else {
+        setMessage({ 
+          type: 'error', 
+          text: error instanceof Error ? error.message : 'An unknown error occurred during deployment'
+        });
       }
     } finally {
       setIsLoading(false);
     }
   };
-  
+
   const getDeviceConnectionIcon = (device: Device) => {
     if (device.connectionType === 'usb') {
       return <FiHardDrive className="ml-1" size={12} />;
@@ -959,193 +793,7 @@ const PayloadEditor = observer(() => {
     return `${device.name} (WiFi)`;
   };
 
-  // Create a new script
-  const createScript = async () => {
-    try {
-      setIsLoading(true);
-      
-      const token = getToken();
-      if (!token) {
-        console.error('No authentication token found');
-        window.location.href = '/login';
-        return;
-      }
-      
-      // If file was uploaded, use its content instead of the form content
-      const finalContent = fileContent || scriptFormData.content;
-      
-      if (!scriptFormData.name || !finalContent) {
-        setMessage({
-          type: 'error',
-          text: 'Script name and content are required'
-        });
-        setIsLoading(false);
-        return;
-      }
-      
-      const scriptData = {
-        name: scriptFormData.name,
-        content: finalContent,
-        type: scriptFormData.type,
-        description: scriptFormData.description || null,
-        isPublic: scriptFormData.isPublic,
-        callbackUrl: scriptFormData.callbackUrl || null
-      };
-      
-      const result = await createScript(scriptData).unwrap();
-      
-      if (result.success) {
-        setMessage({
-          type: 'success',
-          text: `Script "${scriptFormData.name}" created successfully!`
-        });
-        
-        // Reset the form
-        setScriptFormData({
-          name: '',
-          type: 'callback',
-          description: '',
-          content: '',
-          isPublic: false,
-          callbackUrl: ''
-        });
-        setFileContent(null);
-        if (fileInputRef.current) {
-          fileInputRef.current.value = '';
-        }
-        
-        // Close the modal
-        setShowScriptModal(false);
-      } else {
-        setMessage({
-          type: 'error',
-          text: result.message || 'Failed to create script'
-        });
-      }
-    } catch (error) {
-      console.error('Error creating script:', error);
-      setMessage({
-        type: 'error',
-        text: 'Failed to create script. Please try again.'
-      });
-      
-      // If we get a 401, handle auth error without removing token
-      if (isAuthError(error)) {
-        handleAuthError(error, 'Authentication error while fetching devices');
-      }
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Handle file upload
-  const handleFileUpload = (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const content = e.target?.result as string;
-      setFileContent(content);
-    };
-    reader.readAsText(file);
-  };
-
-  // Handle script form input changes
-  const handleScriptInputChange = (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
-    const { name, value } = e.target;
-    setScriptFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
-  };
-
-  // Handle checkbox changes
-  const handleCheckboxChange = (e: ChangeEvent<HTMLInputElement>) => {
-    const { name, checked } = e.target;
-    setScriptFormData(prev => ({
-      ...prev,
-      [name]: checked
-    }));
-  };
-
-  // Toggle script selection
-  const toggleScriptSelection = (scriptId: string) => {
-    setSelectedScripts(prev => {
-      if (prev.includes(scriptId)) {
-        return prev.filter(id => id !== scriptId);
-      } else {
-        return [...prev, scriptId];
-      }
-    });
-  };
-
-  // Associate selected scripts with the current payload
-  const associateScriptsWithPayload = async () => {
-    try {
-      if (!selectedPayload) {
-        setMessage({
-          type: 'error',
-          text: 'Please save a payload first before associating scripts'
-        });
-        return;
-      }
-      
-      setIsLoading(true);
-      
-      const token = getToken();
-      if (!token) {
-        console.error('No authentication token found');
-        window.location.href = '/login';
-        return;
-      }
-      
-      // Get current scripts associated with the payload
-      const currentScriptIds = selectedPayloadScripts?.success 
-        ? selectedPayloadScripts.data.map(script => script.id) 
-        : [];
-      
-      // Scripts to add (selected but not in current)
-      const scriptsToAdd = selectedScripts.filter(id => !currentScriptIds.includes(id));
-      
-      // Scripts to remove (current but not in selected)
-      const scriptsToRemove = currentScriptIds.filter(id => !selectedScripts.includes(id));
-      
-      // Add new associations
-      for (const scriptId of scriptsToAdd) {
-        await associateScript({
-          scriptId,
-          payloadId: selectedPayload.id,
-          executionOrder: 0 // Default execution order
-        }).unwrap();
-      }
-      
-      // Remove old associations
-      for (const scriptId of scriptsToRemove) {
-        await disassociateScript({
-          scriptId,
-          payloadId: selectedPayload.id
-        }).unwrap();
-      }
-      
-      setMessage({
-        type: 'success',
-        text: 'Scripts associated with payload successfully!'
-      });
-      
-      // Close the script list
-      setShowScriptList(false);
-    } catch (error) {
-      console.error('Error associating scripts with payload:', error);
-      setMessage({
-        type: 'error',
-        text: 'Failed to associate scripts with payload'
-      });
-    }
-  };
-  
-  // Deploy payload to connected O.MG Cable
-  const deployToDevice = async () => {
+  const deployToUsbSerialDevice = async () => {
     try {
       setIsLoading(true);
       setMessage(null);
@@ -1229,48 +877,224 @@ const PayloadEditor = observer(() => {
       setIsLoading(false);
     }
   };
-  
-  // Add a new function to delete a script
-  const deleteScript = async (scriptId: string) => {
+
+  // Create a new script
+  const handleCreateScript = async () => {
     try {
+      setIsLoading(true);
+      
+      // Validate required fields
+      if (!scriptFormData.name.trim()) {
+        setMessage({ type: 'error', text: 'Script name is required' });
+        return;
+      }
+      
+      if (!scriptFormData.content && !fileContent) {
+        setMessage({ type: 'error', text: 'Script content is required' });
+        return;
+      }
+      
+      // If script type is callback, validate callback URL
+      if (scriptFormData.type === 'callback' && !scriptFormData.callbackUrl) {
+        setMessage({ type: 'error', text: 'Callback URL is required for callback scripts' });
+        return;
+      }
+      
+      // Prepare the script data
+      const scriptData = {
+        name: scriptFormData.name,
+        type: scriptFormData.type as 'callback' | 'exfiltration' | 'command' | 'custom',
+        description: scriptFormData.description || null,
+        content: fileContent || scriptFormData.content,
+        isPublic: scriptFormData.isPublic,
+        callbackUrl: scriptFormData.type === 'callback' ? scriptFormData.callbackUrl : null
+      };
+      
+      // Create the script
+      const result = await createScriptMutation(scriptData).unwrap();
+      
+      if (result.success) {
+        setMessage({ type: 'success', text: 'Script created successfully!' });
+        
+        // Reset the form
+        setScriptFormData({
+          name: '',
+          type: 'callback',
+          description: '',
+          content: '',
+          isPublic: false,
+          callbackUrl: ''
+        });
+        setFileContent(null);
+        
+        // Close the modal
+        setShowScriptModal(false);
+        
+        // Refresh scripts
+        setIsLoading(true);
+        await fetchScripts();
+      } else {
+        setMessage({ type: 'error', text: result.message || 'Failed to create script' });
+      }
+    } catch (error) {
+      console.error('Error creating script:', error);
+      
+      if (axios.isAxiosError(error) && error.response?.status === 401) {
+        handleAuthError('Your session has expired. Please log in again.');
+      } else {
+        setMessage({ 
+          type: 'error', 
+          text: error instanceof Error ? error.message : 'An unknown error occurred while creating the script'
+        });
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Handle file upload
+  const handleFileUpload = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const content = e.target?.result as string;
+      setFileContent(content);
+    };
+    reader.readAsText(file);
+  };
+
+  // Handle script form input changes
+  const handleScriptInputChange = (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+    const { name, value } = e.target;
+    setScriptFormData(prev => ({
+      ...prev,
+      [name]: value
+    }));
+  };
+
+  // Handle checkbox changes
+  const handleCheckboxChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const { name, checked } = e.target;
+    setScriptFormData(prev => ({
+      ...prev,
+      [name]: checked
+    }));
+  };
+
+  // Toggle script selection
+  const toggleScriptSelection = (scriptId: string) => {
+    setSelectedScripts(prev => {
+      if (prev.includes(scriptId)) {
+        return prev.filter(id => id !== scriptId);
+      } else {
+        return [...prev, scriptId];
+      }
+    });
+  };
+
+  // Associate selected scripts with the current payload
+  const associateScriptsWithPayload = async () => {
+    try {
+      if (!selectedPayload) {
+        setMessage({
+          type: 'error',
+          text: 'Please save a payload first before associating scripts'
+        });
+        return;
+      }
+      
       setIsLoading(true);
       
       const token = getToken();
       if (!token) {
         console.error('No authentication token found');
+        window.location.href = '/login';
         return;
       }
       
-      console.log(`Deleting script with ID: ${scriptId}`);
+      // Get current scripts associated with the payload
+      const currentScriptIds = selectedPayloadScripts?.success 
+        ? selectedPayloadScripts.data.map(script => script.id) 
+        : [];
       
-      const response = await axios.delete(`${API_URL}/scripts/${scriptId}`, {
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
+      // Scripts to add (selected but not in current)
+      const scriptsToAdd = selectedScripts.filter(id => !currentScriptIds.includes(id));
+      
+      // Scripts to remove (current but not in selected)
+      const scriptsToRemove = currentScriptIds.filter(id => !selectedScripts.includes(id));
+      
+      // Add new associations
+      for (const scriptId of scriptsToAdd) {
+        await associateScriptMutation({
+          scriptId,
+          payloadId: selectedPayload.id,
+        });
+      }
+      
+      // Remove old associations
+      for (const scriptId of scriptsToRemove) {
+        await disassociateScriptMutation({
+          scriptId,
+          payloadId: selectedPayload.id
+        });
+      }
+      
+      setMessage({
+        type: 'success',
+        text: 'Scripts associated with payload successfully!'
       });
       
-      console.log('Delete script response:', response.data);
-      
-      if (response.data && response.data.success) {
-        // Remove the deleted script from state
-        setScripts(scripts.filter(script => script.id !== scriptId));
+      // Close the script list
+      setShowScriptList(false);
+    } catch (error) {
+      console.error('Error associating scripts with payload:', error);
+      setMessage({
+        type: 'error',
+        text: 'Failed to associate scripts with payload'
+      });
+    }
+  };
+  
+  // Update the mutations for scripts
+  const [associateScriptMutation] = useAssociateScriptMutation();
+  const [disassociateScriptMutation] = useDisassociateScriptMutation();
+
+  // Add a new function to delete a script
+  const handleDeleteScript = async (scriptId: string) => {
+    try {
+      setIsLoading(true);
+      const result = await deleteScriptMutation(scriptId).unwrap();
+
+      if (result.success) {
+        setMessage({ type: 'success', text: 'Script deleted successfully' });
         
-        // Also remove from selected scripts if it was selected
-        if (selectedScripts.includes(scriptId)) {
-          setSelectedScripts(selectedScripts.filter(id => id !== scriptId));
+        // If this script was selected, remove it from the selection
+        setSelectedScripts(prev => prev.filter(id => id !== scriptId));
+        
+        // Refetch scripts
+        setIsLoading(true);
+        await fetchScripts();
+        
+        // If a payload is selected, also refetch its associated scripts
+        if (selectedPayload) {
+          await fetchScriptsForPayload(selectedPayload.id);
         }
-        
-        setMessage({
-          type: 'success',
-          text: 'Script deleted successfully'
-        });
+      } else {
+        setMessage({ type: 'error', text: result.message || 'Failed to delete script' });
       }
     } catch (error) {
       console.error('Error deleting script:', error);
-      setMessage({
-        type: 'error',
-        text: 'Failed to delete script'
-      });
+      
+      if (axios.isAxiosError(error) && error.response?.status === 401) {
+        handleAuthError('Your session has expired. Please log in again.');
+      } else {
+        setMessage({ 
+          type: 'error', 
+          text: error instanceof Error ? error.message : 'An unknown error occurred while deleting the script'
+        });
+      }
     } finally {
       setIsLoading(false);
     }
@@ -1282,7 +1106,7 @@ const PayloadEditor = observer(() => {
     
     // Show confirmation dialog
     if (window.confirm('Are you sure you want to delete this script? This action cannot be undone.')) {
-      deleteScript(scriptId);
+      handleDeleteScript(scriptId);
     }
   };
   
@@ -1341,14 +1165,18 @@ const PayloadEditor = observer(() => {
       }
       
       const scriptData = {
-        ...editingScript,
-        content: scriptEditorContent
+        id: editingScript.id,
+        script: {
+          name: editingScript.name,
+          content: scriptEditorContent,
+          type: editingScript.type,
+          description: editingScript.description,
+          isPublic: editingScript.isPublic,
+          callbackUrl: editingScript.callbackUrl
+        }
       };
       
-      const result = await updateScript({
-        id: editingScript.id,
-        script: scriptData
-      }).unwrap();
+      const result = await updateScriptMutation(scriptData).unwrap();
       
       if (result.success) {
         setMessage({
@@ -1504,25 +1332,7 @@ const PayloadEditor = observer(() => {
           
           <div className="flex items-center space-x-2">
             <button
-              onClick={savePayload}
-              disabled={isLoading}
-              className="flex items-center px-3 py-2 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/30 rounded-md text-blue-500 text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {isLoading ? <FiRefreshCw className="mr-2 animate-spin" size={16} /> : <FiSave className="mr-2" size={16} />}
-              Save
-            </button>
-            
-            <button
-              onClick={() => setShowPayloadList(!showPayloadList)}
-              disabled={isLoading}
-              className="flex items-center px-3 py-2 bg-slate-700 hover:bg-slate-600 border border-slate-600 rounded-md text-white text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <FiCode className="mr-2" size={16} />
-              Payloads
-            </button>
-            
-            <button
-              onClick={deployToDevice}
+              onClick={handleDeployPayload}
               disabled={isLoading || !selectedDevice}
               className="flex items-center px-3 py-2 bg-green-500/10 hover:bg-green-500/20 border border-green-500/30 rounded-md text-green-500 text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
@@ -1631,7 +1441,7 @@ const PayloadEditor = observer(() => {
                             </button>
                             {(payload.userId === (getCurrentUserFromStorage()?.id) || userRole === 'admin' || userRole === 'operator') && (
                               <button
-                                onClick={(e) => handleDeleteClick(payload, e)}
+                                onClick={(e) => handleDeletePayload(payload.id)}
                                 className="p-2 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded"
                                 title="Delete Payload"
                               >
@@ -1915,11 +1725,11 @@ const PayloadEditor = observer(() => {
                   </button>
                   <button
                     type="button"
-                    onClick={createScript}
+                    onClick={handleCreateScript}
                     disabled={isLoading || (!scriptFormData.content && !fileContent)}
                     className="px-4 py-2 bg-green-500/10 border border-green-500/30 rounded-md text-sm text-green-500 hover:bg-green-500/20 flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    {isLoading ? <FiRefreshCw className="mr-2 animate-spin" size={14} /> : <FiSave className="mr-2" size={14} />}
+                    {isLoading ? <FiRefreshCw className="mr-2 animate-spin" size={16} /> : <FiPlusCircle className="mr-2" size={16} />}
                     Create Script
                   </button>
                 </div>
