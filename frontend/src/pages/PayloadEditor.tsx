@@ -267,8 +267,7 @@ const PayloadEditor = () => {
     try {
       const token = getToken();
       if (!token) {
-        console.error('No authentication token found');
-        window.location.href = '/login';
+        handleAuthError(new Error('No token'), 'Please log in to continue');
         return;
       }
       
@@ -290,9 +289,9 @@ const PayloadEditor = () => {
     } catch (error) {
       console.error('Error fetching devices:', error);
       
-      // If we get a 401, handle auth error without removing token
+      // If we get a 401, handle auth error without forcing redirect
       if (isAuthError(error)) {
-        handleAuthError(error, 'Authentication error while fetching devices');
+        handleAuthError(error, 'Session expired. Please log in again.');
       }
       // Handle 500 errors gracefully - likely due to empty collections
       else if (axios.isAxiosError(error) && error.response?.status === 500) {
@@ -313,8 +312,7 @@ const PayloadEditor = () => {
     try {
       const token = getToken();
       if (!token) {
-        console.error('No authentication token found');
-        window.location.href = '/login';
+        handleAuthError(new Error('No token'), 'Please log in to continue');
         return;
       }
       
@@ -328,9 +326,9 @@ const PayloadEditor = () => {
     } catch (error) {
       console.error('Error fetching payloads:', error);
       
-      // If we get a 401, handle auth error without removing token
+      // If we get a 401, handle auth error without forcing redirect
       if (isAuthError(error)) {
-        handleAuthError(error, 'Authentication error while fetching devices');
+        handleAuthError(error, 'Session expired. Please log in again.');
       }
       // Handle 500 errors gracefully - likely due to empty collections
       else if (axios.isAxiosError(error) && error.response?.status === 500) {
@@ -344,26 +342,25 @@ const PayloadEditor = () => {
     try {
       const token = getToken();
       if (!token) {
-        console.error('No authentication token found');
-        window.location.href = '/login';
+        handleAuthError(new Error('No token'), 'Please log in to continue');
         return;
       }
       
-      const response = await axios.get(`${API_URL}/scripts`, {
+      const response = await axios.get<ApiResponse<Script[]>>(`${API_URL}/scripts`, {
         headers: {
           Authorization: `Bearer ${token}`
         }
       });
       
-      if (response.data && response.data.success) {
+      if (response.data?.success) {
         setScripts(response.data.data || []);
       }
     } catch (error) {
       console.error('Error fetching scripts:', error);
       
-      // If we get a 401, handle auth error without removing token
+      // If we get a 401, handle auth error without forcing redirect
       if (isAuthError(error)) {
-        handleAuthError(error, 'Authentication error while fetching devices');
+        handleAuthError(error, 'Session expired. Please log in again.');
       }
       // Handle 500 errors gracefully - likely due to empty collections
       else if (axios.isAxiosError(error) && error.response?.status === 500) {
