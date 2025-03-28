@@ -8,7 +8,7 @@
 import React, { useState, useEffect } from 'react';
 import { FiActivity, FiAlertCircle, FiCheckCircle, FiFilter, FiX, FiDownload, FiChevronDown, FiClock } from 'react-icons/fi';
 import { format } from 'date-fns';
-import ApiService from '../services/ApiService';
+import { apiService } from '../services/ApiService';
 import { getSocket } from '../utils/socketUtils';
 
 export interface DeviceActivity {
@@ -99,7 +99,7 @@ const DeviceActivityLog: React.FC<DeviceActivityLogProps> = ({
         queryParams.append('dateTo', filters.dateTo.toISOString());
       }
       
-      const response = await ApiService.get(`/devices/${deviceId}/activities?${queryParams.toString()}`);
+      const response = await apiService.get(`/devices/${deviceId}/activities?${queryParams.toString()}`);
       
       if (response.success) {
         setActivities(response.data);

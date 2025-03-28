@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { 
   FiRefreshCw, 
   FiInfo, 
@@ -10,7 +10,7 @@ import {
   FiWifi,
   FiEye
 } from 'react-icons/fi';
-import apiServiceInstance, { ApiService } from '../services/ApiService';
+import apiServiceInstance, { ApiService, DeviceStatus } from '../services/ApiService';
 import { handleAuthError, isAuthError } from '../utils/tokenManager';
 import { 
   isWebSerialSupported, 
@@ -36,39 +36,13 @@ interface SerialPort {
 }
 
 interface Device {
-  id: number;
+  id: string;
   name: string;
-  ipAddress: string;
-  firmwareVersion: string | null;
-  status: 'online' | 'offline' | 'busy' | 'attacking';
-  lastCheckIn: string | null;
-  createdAt: string;
-  updatedAt: string;
-  connectionType?: 'network' | 'usb';
-  serialPortId?: string;
-  userId: number;
-  owner?: {
-    id: number;
-    username: string;
-    email: string;
-  };
-  capabilities?: {
-    usbHid: boolean;
-    wifi: boolean;
-    bluetooth: boolean;
-    storage: string;
-    supportedFeatures: string[];
-    maxPayloadSize: number;
-    availableSlots: number;
-    currentSlot?: number;
-  };
-  attackState?: {
-    currentPayload?: string;
-    targetSystem?: string;
-    progress?: number;
-    startTime?: string;
-    estimatedDuration?: number;
-  };
+  status: string;
+  lastSeen?: string;
+  batteryLevel?: number;
+  signalStrength?: number;
+  errors?: string[];
 }
 
 interface DeviceFormData {
@@ -129,139 +103,123 @@ const DeviceManagement: React.FC = () => {
   const REFRESH_COOLDOWN = 5000; // 5 second cooldown between refreshes
   const MAX_REFRESH_ATTEMPTS = 3;
   const refreshAttemptsRef = useRef(0);
+  const componentMounted = useRef(true);
 
-  // Initialize devices and set up socket subscription with strict controls
-  useEffect(() => {
-    let isMounted = true;
-    isMountedRef.current = true;
-    let initTimeout: NodeJS.Timeout | null = null;
-
-    const initializeDevices = async () => {
-      if (!isMounted || !isInitialLoadRef.current) return;
-      
-      setIsLoading(true);
-      setErrorMessage(null);
-
-      try {
-        // Initial fetch
-        const response = await apiServiceInstance.get('/devices/detailed');
-        if (!isMounted) return;
-
-        if (response.data?.success) {
-          setDevices(response.data.data);
-          lastRefreshTimeRef.current = Date.now();
-          refreshAttemptsRef.current = 0;
-        }
-
-        // Subscribe to device updates only if mounted
-        if (isMounted && !unsubscribeRef.current) {
-          unsubscribeRef.current = apiServiceInstance.subscribeToDeviceUpdates((updatedDevices) => {
-            if (isMounted) {
-              setDevices(updatedDevices);
-              refreshAttemptsRef.current = 0;
-            }
-          });
-        }
-      } catch (error) {
-        if (!isMounted) return;
-        
-        console.error('Error fetching devices:', error);
-        if (isAuthError(error)) {
-          handleAuthError(error, 'Authentication error in DeviceManagement');
-        } else {
-          setErrorMessage((error as any)?.response?.data?.message || 'Error fetching devices');
-          
-          // Increment refresh attempts on error
-          refreshAttemptsRef.current++;
-          
-          // If we haven't exceeded max attempts, try again after a delay
-          if (refreshAttemptsRef.current < MAX_REFRESH_ATTEMPTS) {
-            initTimeout = setTimeout(initializeDevices, REFRESH_COOLDOWN);
-          }
-        }
-      } finally {
-        if (isMounted) {
-          setIsLoading(false);
-          isInitialLoadRef.current = false;
-        }
-      }
-    };
-
-    // Start initialization with a small delay to prevent rapid mounting/unmounting issues
-    initTimeout = setTimeout(initializeDevices, 100);
-
-    // Cleanup function
-    return () => {
-      isMounted = false;
-      isMountedRef.current = false;
-      
-      if (initTimeout) {
-        clearTimeout(initTimeout);
-      }
-      
-      if (unsubscribeRef.current) {
-        unsubscribeRef.current();
-        unsubscribeRef.current = null;
-      }
-      
-      if (refreshTimeoutRef.current) {
-        clearTimeout(refreshTimeoutRef.current);
-        refreshTimeoutRef.current = null;
-      }
-      
-      refreshAttemptsRef.current = 0;
-    };
-  }, []); // No dependencies needed as we're using refs
-
-  // Manual refresh function with strict controls
-  const handleRefresh = async () => {
-    const now = Date.now();
-    if (isLoading || isRefreshing || (now - lastRefreshTimeRef.current < REFRESH_COOLDOWN)) {
-      console.log('Skipping refresh - too soon or already in progress');
-      return;
-    }
+  const handleDeviceUpdate = useCallback((event: CustomEvent<{ deviceId: string; status: DeviceStatus }>) => {
+    const { deviceId, status } = event.detail;
     
-    // Clear any pending refresh
-    if (refreshTimeoutRef.current) {
-      clearTimeout(refreshTimeoutRef.current);
-      refreshTimeoutRef.current = null;
-    }
+    setDevices(prevDevices => {
+      const deviceIndex = prevDevices.findIndex(d => d.id === deviceId);
+      if (deviceIndex === -1) return prevDevices;
 
-    setIsRefreshing(true);
-    setErrorMessage(null);
+      const updatedDevices = [...prevDevices];
+      updatedDevices[deviceIndex] = {
+        ...updatedDevices[deviceIndex],
+        status: status.status,
+        lastSeen: status.lastSeen,
+        batteryLevel: status.batteryLevel,
+        signalStrength: status.signalStrength,
+        errors: status.errors
+      };
+      return updatedDevices;
+    });
+  }, []);
+
+  const fetchDevices = useCallback(async () => {
+    if (!componentMounted.current) return;
     
     try {
-      const response = await apiServiceInstance.get('/devices/detailed');
-      if (!isMountedRef.current) return;
-
-      if (response.data?.success) {
-        setDevices(response.data.data);
-        lastRefreshTimeRef.current = now;
-        refreshAttemptsRef.current = 0;
-      }
-    } catch (error) {
-      if (!isMountedRef.current) return;
+      setError(null);
+      setIsLoading(true);
+      const response = await apiServiceInstance.get<Device[]>('/devices');
       
-      console.error('Error refreshing devices:', error);
-      if (isAuthError(error)) {
-        handleAuthError(error, 'Authentication error in DeviceManagement');
-      } else {
-        setErrorMessage((error as any)?.response?.data?.message || 'Error refreshing devices');
-        
-        // Increment refresh attempts on error
-        refreshAttemptsRef.current++;
-        
-        // If we haven't exceeded max attempts, try again after a delay
-        if (refreshAttemptsRef.current < MAX_REFRESH_ATTEMPTS) {
-          refreshTimeoutRef.current = setTimeout(handleRefresh, REFRESH_COOLDOWN);
-        }
+      if (componentMounted.current) {
+        setDevices(response);
+        // Subscribe to updates for each device
+        response.forEach(device => {
+          apiServiceInstance.subscribeToDevice(device.id, 'DeviceManagement');
+        });
+      }
+    } catch (err) {
+      if (componentMounted.current) {
+        setError('Failed to fetch devices');
+        console.error('Error fetching devices:', err);
       }
     } finally {
-      if (isMountedRef.current) {
-        setIsRefreshing(false);
+      if (componentMounted.current) {
+        setIsLoading(false);
       }
     }
-  };
+  }, []);
+
+  const handleRefresh = useCallback(async () => {
+    const now = Date.now();
+    if (now - lastRefreshTimeRef.current < REFRESH_COOLDOWN) {
+      console.log('Refresh cooldown in effect');
+      return;
+    }
+
+    if (isRefreshing) {
+      console.log('Already refreshing');
+      return;
+    }
+
+    lastRefreshTimeRef.current = now;
+    setIsRefreshing(true);
+
+    try {
+      await Promise.all(devices.map(device => 
+        apiServiceInstance.refreshDeviceStatus(device.id)
+      ));
+    } catch (err) {
+      console.error('Error refreshing devices:', err);
+      setError('Failed to refresh devices');
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [devices, isRefreshing]);
+
+  const handleRegisterUSBDevice = useCallback(async () => {
+    try {
+      setError(null);
+      const port = await requestSerialPort();
+      if (!port) {
+        setError('No serial port selected');
+        return;
+      }
+
+      const deviceInfo = await connectToDevice(port);
+      if (!deviceInfo) {
+        setError('Failed to connect to device');
+        return;
+      }
+
+      // Register the device with the backend
+      await apiServiceInstance.post('/devices', deviceInfo);
+      await fetchDevices(); // Refresh the device list
+    } catch (err) {
+      console.error('Error registering USB device:', err);
+      setError('Failed to register USB device');
+    }
+  }, [fetchDevices]);
+
+  useEffect(() => {
+    // Initial fetch
+    fetchDevices();
+
+    // Set up device update listener
+    window.addEventListener('device:update', handleDeviceUpdate as EventListener);
+
+    return () => {
+      componentMounted.current = false;
+      // Clean up subscriptions
+      devices.forEach(device => {
+        apiServiceInstance.unsubscribeFromDevice(device.id, 'DeviceManagement');
+      });
+      // Remove event listener
+      window.removeEventListener('device:update', handleDeviceUpdate as EventListener);
+    };
+  }, [fetchDevices, handleDeviceUpdate, devices]);
 
   // Handle form input changes
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -449,7 +407,7 @@ const DeviceManagement: React.FC = () => {
   };
   
   // Update device status without triggering a refresh
-  const updateDeviceStatus = async (deviceId: number, status: 'online' | 'offline' | 'busy') => {
+  const updateDeviceStatus = async (deviceId: string, status: string) => {
     if (!isMountedRef.current) return;
     
     setErrorMessage(null);
@@ -479,7 +437,7 @@ const DeviceManagement: React.FC = () => {
   };
   
   // Deploy payload without triggering a refresh
-  const deployPayload = async (deviceId: number, payloadId: string) => {
+  const deployPayload = async (deviceId: string, payloadId: string) => {
     if (!isMountedRef.current) return;
 
     try {
@@ -737,7 +695,7 @@ const DeviceManagement: React.FC = () => {
                       <td className="px-4 py-3 text-sm text-white">{device.name}</td>
                       <td className="px-4 py-3 text-sm">{getConnectionTypeBadge(device.connectionType)}</td>
                       <td className="px-4 py-3 text-sm">{getStatusBadge(device.status, device)}</td>
-                      <td className="px-4 py-3 text-sm text-slate-300">{formatDateTime(device.lastCheckIn)}</td>
+                      <td className="px-4 py-3 text-sm text-slate-300">{formatDateTime(device.lastSeen)}</td>
                       <td className="px-4 py-3 text-sm text-slate-300">{device.firmwareVersion || 'Unknown'}</td>
                       <td className="px-4 py-3 text-sm">
                         <button 

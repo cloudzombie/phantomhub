@@ -1,19 +1,37 @@
-import axios, { AxiosInstance, AxiosRequestConfig } from 'axios';
+import { AxiosInstance, AxiosRequestConfig } from 'axios';
+import axios from 'axios';
 import { io, Socket } from 'socket.io-client';
 import { getToken, getUserData } from '../utils/tokenManager';
 import { API_CONFIG } from '../config/api';
 
-interface ApiConfig {
-  endpoint: string;
-  pollingInterval: number;
+export interface DeviceStatus {
+  deviceId: string;
+  status: 'online' | 'offline' | 'error';
+  lastSeen: string;
+  batteryLevel?: number;
+  signalStrength?: number;
+  errors?: string[];
+}
+
+export interface ApiConfig {
+  baseURL: string;
   timeout: number;
 }
 
 class ApiService {
-  private static instance: ApiService;
+  private static instance: ApiService | null = null;
+  private socket: Socket | null = null;
+  private deviceSubscriptions: Map<string, Set<string>> = new Map();
+  private deviceStates: Map<string, DeviceStatus> = new Map();
+  private updateQueue: Map<string, NodeJS.Timeout> = new Map();
+  private readonly UPDATE_THROTTLE = 5000; // 5 seconds
+  private isConnecting: boolean = false;
+  private connectionAttempts: number = 0;
+  private readonly MAX_RECONNECT_ATTEMPTS = 3;
+  private readonly RECONNECT_DELAY = 5000; // 5 seconds
+  private isInitialized: boolean = false;
   private axiosInstance: AxiosInstance;
   private config: ApiConfig;
-  private socket: Socket | null = null;
   private baseURL: string;
   private deviceState: Map<number, any> = new Map();
   private deviceSubscribers: Set<(devices: any[]) => void> = new Set();
@@ -24,24 +42,22 @@ class ApiService {
   private maxReconnectAttempts: number = 3;
   private socketReconnectDelay: number = 30000; // 30 seconds
   private subscriptionTimeout: NodeJS.Timeout | null = null;
-  private isInitialized: boolean = false;
   private isUpdating: boolean = false;
   private updateQueue: any[] = [];
   private lastSocketAttempt: number = 0;
   private isSubscribed: boolean = false;
   private pendingUpdates: Set<number> = new Set();
   private updateTimeoutId: NodeJS.Timeout | null = null;
+  private updateQueue: Map<string, NodeJS.Timeout> = new Map();
 
   private constructor() {
     this.config = {
-      endpoint: API_CONFIG.endpoint,
-      pollingInterval: API_CONFIG.pollingInterval,
-      timeout: API_CONFIG.timeout
+      baseURL: 'https://ghostwire-backend-e0380bcf4e0e.herokuapp.com/api',
+      timeout: 30
     };
 
-    // Initialize axios instance with default config
     this.axiosInstance = axios.create({
-      baseURL: this.config.endpoint,
+      baseURL: this.config.baseURL,
       timeout: this.config.timeout * 1000,
       withCredentials: true
     });
@@ -49,10 +65,6 @@ class ApiService {
     // Add request interceptor to include auth token
     this.axiosInstance.interceptors.request.use(
       (config) => {
-        const token = getToken();
-        if (token) {
-          config.headers.Authorization = `Bearer ${token}`;
-        }
         config.withCredentials = true;
         return config;
       },
@@ -69,7 +81,7 @@ class ApiService {
         return Promise.reject(error);
       }
     );
-    
+
     this.baseURL = API_CONFIG.socketEndpoint;
   }
 
@@ -188,8 +200,7 @@ class ApiService {
   public getConfig(): ApiConfig {
     // Always return the hardcoded config to prevent any overrides
     return {
-      endpoint: 'https://ghostwire-backend-e0380bcf4e0e.herokuapp.com/api',
-      pollingInterval: 300,
+      baseURL: 'https://ghostwire-backend-e0380bcf4e0e.herokuapp.com/api',
       timeout: 30
     };
   }
@@ -199,43 +210,25 @@ class ApiService {
   }
 
   public async get<T = any>(url: string, config?: AxiosRequestConfig): Promise<T> {
-    // Ensure we're always using the Heroku URL
-    this.axiosInstance.defaults.baseURL = this.config.endpoint;
-    
-    // Ensure auth token is included in request
-    const token = getToken();
-    if (token) {
-      this.axiosInstance.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-    }
-    
-    console.log(`ApiService: Making GET request to ${this.axiosInstance.defaults.baseURL}${url}`);
-    const response = await this.axiosInstance.get<T>(url, {
-      ...config,
-      withCredentials: true
-    });
+    this.axiosInstance.defaults.baseURL = this.config.baseURL;
+    const response = await this.axiosInstance.get<T>(url, config);
     return response.data;
   }
 
   public async post<T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T> {
-    // Ensure we're always using the Heroku URL
-    this.axiosInstance.defaults.baseURL = this.config.endpoint;
-    console.log(`ApiService: Making POST request to ${this.axiosInstance.defaults.baseURL}${url}`);
+    this.axiosInstance.defaults.baseURL = this.config.baseURL;
     const response = await this.axiosInstance.post<T>(url, data, config);
     return response.data;
   }
 
   public async put<T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T> {
-    // Ensure we're always using the Heroku URL
-    this.axiosInstance.defaults.baseURL = this.config.endpoint;
-    console.log(`ApiService: Making PUT request to ${this.axiosInstance.defaults.baseURL}${url}`);
+    this.axiosInstance.defaults.baseURL = this.config.baseURL;
     const response = await this.axiosInstance.put<T>(url, data, config);
     return response.data;
   }
 
   public async delete<T = any>(url: string, config?: AxiosRequestConfig): Promise<T> {
-    // Ensure we're always using the Heroku URL
-    this.axiosInstance.defaults.baseURL = this.config.endpoint;
-    console.log(`ApiService: Making DELETE request to ${this.axiosInstance.defaults.baseURL}${url}`);
+    this.axiosInstance.defaults.baseURL = this.config.baseURL;
     const response = await this.axiosInstance.delete<T>(url, config);
     return response.data;
   }
@@ -526,11 +519,188 @@ class ApiService {
       this.isInitialized = true;
     }
   }
+
+  public async connect(): Promise<void> {
+    if (this.socket?.connected || this.isConnecting) {
+      return;
+    }
+
+    this.isConnecting = true;
+
+    try {
+      if (this.connectionAttempts >= this.MAX_RECONNECT_ATTEMPTS) {
+        console.error('Max reconnection attempts reached');
+        this.isConnecting = false;
+        return;
+      }
+
+      this.socket = io(process.env.REACT_APP_API_URL || 'http://localhost:3000', {
+        reconnection: false,
+        timeout: 5000
+      });
+
+      this.socket.on('connect', () => {
+        console.log('Socket connected');
+        this.isConnecting = false;
+        this.connectionAttempts = 0;
+        this.resubscribeDevices();
+      });
+
+      this.socket.on('disconnect', () => {
+        console.log('Socket disconnected');
+        this.clearAllDeviceStates();
+      });
+
+      this.socket.on('device:status', (deviceId: string, status: DeviceStatus) => {
+        this.handleDeviceStatusUpdate(deviceId, status);
+      });
+
+      this.socket.on('device:error', (deviceId: string, error: any) => {
+        this.handleDeviceError(deviceId, error);
+      });
+
+      this.socket.on('connect_error', (error) => {
+        console.error('Socket connection error:', error);
+        this.isConnecting = false;
+        this.connectionAttempts++;
+        setTimeout(() => this.connect(), this.RECONNECT_DELAY);
+      });
+
+    } catch (error) {
+      console.error('Error connecting socket:', error);
+      this.isConnecting = false;
+      this.connectionAttempts++;
+      setTimeout(() => this.connect(), this.RECONNECT_DELAY);
+    }
+  }
+
+  public disconnect(): void {
+    if (this.socket) {
+      this.socket.disconnect();
+      this.socket = null;
+    }
+    this.clearAllDeviceStates();
+    this.deviceSubscriptions.clear();
+    this.clearAllUpdateQueues();
+  }
+
+  private clearAllDeviceStates(): void {
+    this.deviceStates.clear();
+  }
+
+  private clearAllUpdateQueues(): void {
+    for (const timeout of this.updateQueue.values()) {
+      clearTimeout(timeout);
+    }
+    this.updateQueue.clear();
+  }
+
+  private async resubscribeDevices(): Promise<void> {
+    for (const [deviceId, subscribers] of this.deviceSubscriptions.entries()) {
+      if (subscribers.size > 0) {
+        await this.subscribeToDevice(deviceId);
+      }
+    }
+  }
+
+  public async subscribeToDevice(deviceId: string, subscriberId?: string): Promise<void> {
+    if (!this.socket?.connected) {
+      await this.connect();
+    }
+
+    if (!this.deviceSubscriptions.has(deviceId)) {
+      this.deviceSubscriptions.set(deviceId, new Set());
+    }
+
+    if (subscriberId) {
+      this.deviceSubscriptions.get(deviceId)?.add(subscriberId);
+    }
+
+    if (this.socket?.connected) {
+      this.socket.emit('device:subscribe', deviceId);
+    }
+  }
+
+  public unsubscribeFromDevice(deviceId: string, subscriberId?: string): void {
+    const subscribers = this.deviceSubscriptions.get(deviceId);
+    if (!subscribers) return;
+
+    if (subscriberId) {
+      subscribers.delete(subscriberId);
+    }
+
+    if (!subscriberId || subscribers.size === 0) {
+      this.deviceSubscriptions.delete(deviceId);
+      if (this.socket?.connected) {
+        this.socket.emit('device:unsubscribe', deviceId);
+      }
+      this.deviceStates.delete(deviceId);
+      const timeout = this.updateQueue.get(deviceId);
+      if (timeout) {
+        clearTimeout(timeout);
+        this.updateQueue.delete(deviceId);
+      }
+    }
+  }
+
+  private handleDeviceStatusUpdate(deviceId: string, status: DeviceStatus): void {
+    const currentState = this.deviceStates.get(deviceId);
+    
+    // Only update if state has changed
+    if (!currentState || 
+        currentState.status !== status.status || 
+        currentState.batteryLevel !== status.batteryLevel ||
+        currentState.signalStrength !== status.signalStrength) {
+      
+      this.deviceStates.set(deviceId, status);
+      
+      // Throttle updates
+      const existingTimeout = this.updateQueue.get(deviceId);
+      if (existingTimeout) {
+        clearTimeout(existingTimeout);
+      }
+      
+      const timeout = setTimeout(() => {
+        this.emitDeviceUpdate(deviceId, status);
+        this.updateQueue.delete(deviceId);
+      }, this.UPDATE_THROTTLE);
+      
+      this.updateQueue.set(deviceId, timeout);
+    }
+  }
+
+  private handleDeviceError(deviceId: string, error: any): void {
+    const errorStatus: DeviceStatus = {
+      deviceId,
+      status: 'error',
+      lastSeen: new Date().toISOString(),
+      errors: [error.message || 'Unknown error']
+    };
+    
+    this.handleDeviceStatusUpdate(deviceId, errorStatus);
+  }
+
+  private emitDeviceUpdate(deviceId: string, status: DeviceStatus): void {
+    const event = new CustomEvent('device:update', {
+      detail: { deviceId, status }
+    });
+    window.dispatchEvent(event);
+  }
+
+  public getDeviceState(deviceId: string): DeviceStatus | undefined {
+    return this.deviceStates.get(deviceId);
+  }
+
+  public async refreshDeviceStatus(deviceId: string): Promise<void> {
+    if (!this.socket?.connected) {
+      await this.connect();
+    }
+
+    if (this.socket?.connected) {
+      this.socket.emit('device:refresh', deviceId);
+    }
+  }
 }
 
-// Export the instance as default
-const apiServiceInstance = ApiService.getInstance();
-export default apiServiceInstance;
-
-// Also export the class for static method access
+export const apiService = ApiService.getInstance();
 export { ApiService }; 
