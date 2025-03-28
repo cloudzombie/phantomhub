@@ -92,14 +92,46 @@ interface FetchState {
 }
 
 // Configure Monaco Editor workers
-self.MonacoEnvironment = {
+window.MonacoEnvironment = {
   getWorkerUrl: function (moduleId, label) {
-    return `data:text/javascript;charset=utf-8,${encodeURIComponent(`
+    if (label === 'json') {
+      return 'data:text/javascript;charset=utf-8,' + encodeURIComponent(`
+        self.MonacoEnvironment = {
+          baseUrl: 'https://unpkg.com/monaco-editor@0.52.2/min/'
+        };
+        importScripts('https://unpkg.com/monaco-editor@0.52.2/min/vs/language/json/json.worker');
+      `);
+    }
+    if (label === 'css' || label === 'scss' || label === 'less') {
+      return 'data:text/javascript;charset=utf-8,' + encodeURIComponent(`
+        self.MonacoEnvironment = {
+          baseUrl: 'https://unpkg.com/monaco-editor@0.52.2/min/'
+        };
+        importScripts('https://unpkg.com/monaco-editor@0.52.2/min/vs/language/css/css.worker');
+      `);
+    }
+    if (label === 'html' || label === 'handlebars' || label === 'razor') {
+      return 'data:text/javascript;charset=utf-8,' + encodeURIComponent(`
+        self.MonacoEnvironment = {
+          baseUrl: 'https://unpkg.com/monaco-editor@0.52.2/min/'
+        };
+        importScripts('https://unpkg.com/monaco-editor@0.52.2/min/vs/language/html/html.worker');
+      `);
+    }
+    if (label === 'typescript' || label === 'javascript') {
+      return 'data:text/javascript;charset=utf-8,' + encodeURIComponent(`
+        self.MonacoEnvironment = {
+          baseUrl: 'https://unpkg.com/monaco-editor@0.52.2/min/'
+        };
+        importScripts('https://unpkg.com/monaco-editor@0.52.2/min/vs/language/typescript/ts.worker');
+      `);
+    }
+    return 'data:text/javascript;charset=utf-8,' + encodeURIComponent(`
       self.MonacoEnvironment = {
         baseUrl: 'https://unpkg.com/monaco-editor@0.52.2/min/'
       };
-      importScripts('https://unpkg.com/monaco-editor@0.52.2/min/vs/base/worker/workerMain.js');`
-    )}`;
+      importScripts('https://unpkg.com/monaco-editor@0.52.2/min/vs/editor/editor.worker');
+    `);
   }
 };
 

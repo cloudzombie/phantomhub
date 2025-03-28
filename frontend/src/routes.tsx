@@ -1,5 +1,6 @@
 import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
+import { useSelector } from 'react-redux';
 import Layout from './components/Layout';
 import Dashboard from './pages/Dashboard';
 import Login from './pages/Login';
@@ -12,28 +13,45 @@ import AdminDashboard from './pages/AdminDashboard';
 import AdminUserManagement from './pages/AdminUserManagement';
 import AdminNotFound from './pages/AdminNotFound';
 import AdminLayout from './components/admin/AdminLayout';
-import { useAuth } from './contexts/AuthContext';
+import { RootState } from './store';
 
-// Protected route component with enhanced authentication checking
+// Protected route component with Redux authentication checking
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, isLoading } = useSelector((state: RootState) => state.auth);
   
-  if (!isAuthenticated()) {
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-900">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-green-500"></div>
+      </div>
+    );
+  }
+  
+  if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
   }
   
   return <>{children}</>;
 };
 
-// Admin route component
+// Admin route component with Redux role checking
 const AdminRoute = ({ children }: { children: React.ReactNode }) => {
-  const { user, isAuthenticated } = useAuth();
+  const { isAuthenticated, isLoading, user } = useSelector((state: RootState) => state.auth);
   
-  if (!isAuthenticated()) {
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-900">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-green-500"></div>
+      </div>
+    );
+  }
+  
+  if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
   }
   
   if (!user || user.role !== 'admin') {
+    console.warn('Unauthorized access attempt to admin route');
     return <Navigate to="/" replace />;
   }
   
@@ -62,11 +80,14 @@ const AppRoutes: React.FC = () => {
         <Route path="settings" element={<Settings />} />
         
         {/* Admin routes */}
-        <Route path="admin" element={
-          <AdminRoute>
-            <AdminLayout />
-          </AdminRoute>
-        }>
+        <Route 
+          path="admin" 
+          element={
+            <AdminRoute>
+              <AdminLayout />
+            </AdminRoute>
+          }
+        >
           <Route index element={<AdminDashboard />} />
           <Route path="users" element={<AdminUserManagement />} />
           <Route path="*" element={<AdminNotFound />} />

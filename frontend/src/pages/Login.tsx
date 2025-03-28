@@ -1,13 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { useDispatch, useSelector } from 'react-redux';
 import { FiLogIn, FiShield, FiAlertCircle, FiCheckCircle } from 'react-icons/fi';
 import axios from 'axios';
 import { api } from '../services/api';
 import ThemeService from '../services/ThemeService';
 import NotificationService from '../services/NotificationService';
-import { useAuth } from '../contexts/AuthContext';
 import { API_URL } from '../config';
 import { storeToken, storeUserData } from '../utils/tokenManager';
+import { setUser, setToken, logout } from '../store/slices/authSlice';
+import { RootState } from '../store';
 
 const Login = () => {
   const [email, setEmail] = useState('');
@@ -16,7 +18,8 @@ const Login = () => {
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
   const navigate = useNavigate();
-  const { isAuthenticated, logout } = useAuth();
+  const dispatch = useDispatch();
+  const { isAuthenticated } = useSelector((state: RootState) => state.auth);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   
   // Check for logout action and handle authentication
@@ -29,24 +32,18 @@ const Login = () => {
       // Set flag to prevent multiple logout calls
       setIsLoggingOut(true);
       
-      // Use the AuthContext's logout method for proper cleanup
+      // Use Redux logout action
       console.log('Login: Handling logout action from URL parameter');
-      logout().then(() => {
-        // Clear the URL parameter to prevent repeated logout
-        window.history.replaceState({}, document.title, '/login');
-        setIsLoggingOut(false);
-      });
-    } else if (!isLoggingOut) {
-      // Check authentication status
-      isAuthenticated().then(isAuth => {
-        if (isAuth) {
-          // If already authenticated and not logging out, redirect to home
-          console.log('Login: User already authenticated, redirecting to home');
-          navigate('/');
-        }
-      });
+      dispatch(logout());
+      // Clear the URL parameter to prevent repeated logout
+      window.history.replaceState({}, document.title, '/login');
+      setIsLoggingOut(false);
+    } else if (!isLoggingOut && isAuthenticated) {
+      // If already authenticated and not logging out, redirect to home
+      console.log('Login: User already authenticated, redirecting to home');
+      navigate('/');
     }
-  }, [isAuthenticated, navigate, logout, isLoggingOut]);
+  }, [isAuthenticated, navigate, dispatch, isLoggingOut]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -55,51 +52,26 @@ const Login = () => {
     setSuccessMessage('');
 
     try {
-      // We don't need to clear user settings here as the new api service handles this
-      
       const response = await axios.post(`${API_URL}/auth/login`, {
         email,
         password
       });
 
-      if (response.data && response.data.token) {
-        // Use tokenManager utilities for consistent token storage
-        const token = response.data.token;
-        const userData = response.data.user;
+      if (response.data.success) {
+        const { token, user } = response.data.data;
         
-        // Store token and user data using tokenManager
+        // Store token and user data
         storeToken(token);
-        storeUserData(userData);
+        storeUserData(user);
         
-        // CRITICAL: Set axios default headers for all future requests
-        axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+        // Update Redux state
+        dispatch(setToken(token));
+        dispatch(setUser(user));
         
-        console.log('Login successful, reloading all service settings...');
-        
-        // Fetch settings from API if available
-        try {
-          const settingsResponse = await axios.get(`${API_URL}/users/settings`, {
-            headers: { Authorization: `Bearer ${response.data.token}` }
-          });
-          
-          if (settingsResponse.data && settingsResponse.data.success) {
-            console.log('Successfully loaded user settings from API');
-            
-            // Save the API-retrieved settings to localStorage
-            const userId = response.data.user.id;
-            const settingsKey = userId ? `phantomhub_settings_${userId}` : 'phantomhub_settings';
-            localStorage.setItem(settingsKey, JSON.stringify(settingsResponse.data.data));
-          }
-        } catch (settingsError) {
-          console.warn('Could not load settings from API, using defaults:', settingsError);
-        }
-        
-        // Reload all service settings
-        ThemeService.reloadSettings();
-        NotificationService.reloadSettings();
-        
-        // Explicitly verify the theme is loaded
+        // Reload theme settings for the user
         const currentTheme = ThemeService.getConfig().theme;
+        console.log(`Current theme before reload: ${currentTheme}`);
+        ThemeService.reloadSettings();
         console.log(`Current theme after reload: ${currentTheme}`);
         
         setSuccessMessage('Login successful! Redirecting...');
@@ -147,7 +119,7 @@ const Login = () => {
         )}
         
         {successMessage && (
-          <div className="mb-4 p-3 bg-purple-500/5 border border-purple-500/20 rounded-lg text-purple-400 text-sm">
+          <div className="mb-4 p-3 bg-green-500/5 border border-green-500/20 rounded-lg text-green-400 text-sm">
             <div className="flex items-center">
               <FiCheckCircle className="mr-2 flex-shrink-0" size={16} />
               <p>{successMessage}</p>
@@ -156,56 +128,51 @@ const Login = () => {
         )}
         
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="relative">
-            <div className="relative border border-purple-500/20 rounded-lg transition-colors focus-within:border-purple-500/50">
-              <label className="absolute -top-2.5 left-2 px-1 bg-slate-800 text-xs font-medium text-slate-400">
-                Email
-              </label>
-              <input 
-                type="email" 
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full px-3 py-2 bg-transparent text-white text-sm focus:outline-none rounded-lg"
-                placeholder="admin@ghostwire.io"
-                disabled={isLoading}
-              />
-            </div>
+          <div>
+            <label htmlFor="email" className="block text-sm font-medium text-slate-300 mb-1">
+              Email
+            </label>
+            <input
+              type="email"
+              id="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-md text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+              placeholder="Enter your email"
+              required
+            />
           </div>
           
-          <div className="relative">
-            <div className="relative border border-purple-500/20 rounded-lg transition-colors focus-within:border-purple-500/50">
-              <label className="absolute -top-2.5 left-2 px-1 bg-slate-800 text-xs font-medium text-slate-400">
-                Password
-              </label>
-              <input 
-                type="password" 
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full px-3 py-2 bg-transparent text-white text-sm focus:outline-none rounded-lg"
-                placeholder="********"
-                disabled={isLoading}
-              />
-            </div>
+          <div>
+            <label htmlFor="password" className="block text-sm font-medium text-slate-300 mb-1">
+              Password
+            </label>
+            <input
+              type="password"
+              id="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-md text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+              placeholder="Enter your password"
+              required
+            />
           </div>
           
-          <button 
+          <button
             type="submit"
-            className="w-full flex items-center justify-center py-2.5 px-4 bg-purple-500/10 text-purple-400 border border-purple-500/20 rounded-lg hover:bg-purple-500/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed mt-2"
             disabled={isLoading}
+            className="w-full flex items-center justify-center px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 focus:ring-offset-slate-800 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isLoading ? (
-              <div className="flex items-center">
-                <svg className="animate-spin h-4 w-4 text-purple-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-                <span className="ml-2">Authenticating...</span>
-              </div>
+              <>
+                <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-white mr-2"></div>
+                Signing in...
+              </>
             ) : (
-              <div className="flex items-center">
-                <FiLogIn className="mr-2" size={16} />
-                <span>Log In</span>
-              </div>
+              <>
+                <FiLogIn className="mr-2" />
+                Sign In
+              </>
             )}
           </button>
         </form>

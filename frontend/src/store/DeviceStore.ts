@@ -6,7 +6,7 @@ import axios from 'axios';
 export interface Device {
   id: string;
   name: string;
-  status: 'online' | 'offline' | 'busy' | 'error';
+  status: 'online' | 'offline' | 'busy' | 'error' | 'attacking';
   connectionType: 'network' | 'usb';
   ipAddress?: string;
   serialPortId?: string;
@@ -30,7 +30,7 @@ export interface Device {
 
 export interface DeviceStatus {
   deviceId: string;
-  status: 'online' | 'offline' | 'error';
+  status: 'online' | 'offline' | 'busy' | 'error' | 'attacking';
   lastSeen: string;
   batteryLevel?: number;
   signalStrength?: number;
@@ -58,18 +58,57 @@ export class DeviceStore {
   }
 
   private setupWebSocketListeners(): void {
-    this.wsManager.subscribe('device_status', this.handleDeviceUpdate.bind(this));
+    // Subscribe to device status updates
+    this.wsManager.subscribe('device_status_update', this.handleDeviceUpdate.bind(this));
+    // Subscribe to device errors
+    this.wsManager.subscribe('device_error', this.handleDeviceError.bind(this));
+    // Subscribe to device activity
+    this.wsManager.subscribe('device_activity', this.handleDeviceActivity.bind(this));
   }
 
-  private handleDeviceUpdate(data: DeviceStatus): void {
+  private handleDeviceUpdate(data: { deviceId: string; status: DeviceStatus }): void {
     runInAction(() => {
-      this.deviceStatuses.set(data.deviceId, data);
-      const device = this.devices.get(data.deviceId);
+      const { deviceId, status } = data;
+      this.deviceStatuses.set(deviceId, status);
+      const device = this.devices.get(deviceId);
       if (device) {
-        this.devices.set(data.deviceId, {
+        this.devices.set(deviceId, {
           ...device,
-          status: data.status,
-          lastCheckIn: data.lastSeen
+          status: status.status,
+          lastCheckIn: status.lastSeen
+        });
+      }
+    });
+  }
+
+  private handleDeviceError(data: { deviceId: string; error: any }): void {
+    runInAction(() => {
+      const { deviceId, error } = data;
+      const device = this.devices.get(deviceId);
+      if (device) {
+        this.devices.set(deviceId, {
+          ...device,
+          status: 'error',
+          errors: [...(device.errors || []), error.message || 'Unknown error']
+        });
+      }
+    });
+  }
+
+  private handleDeviceActivity(data: { deviceId: string; activity: any }): void {
+    runInAction(() => {
+      const { deviceId, activity } = data;
+      const device = this.devices.get(deviceId);
+      if (device) {
+        // Update device status based on activity
+        const newStatus = activity.type === 'attack_started' ? 'attacking' : 
+                         activity.type === 'attack_completed' ? 'online' : 
+                         device.status;
+        
+        this.devices.set(deviceId, {
+          ...device,
+          status: newStatus,
+          lastCheckIn: new Date().toISOString()
         });
       }
     });
@@ -87,6 +126,8 @@ export class DeviceStore {
           const devices = response.data.data || [];
           devices.forEach(device => {
             this.devices.set(device.id, device);
+            // Fetch initial status for each device
+            this.fetchDeviceStatus(device.id);
           });
         }
       });
@@ -107,6 +148,14 @@ export class DeviceStore {
       if (response.data?.success) {
         runInAction(() => {
           this.deviceStatuses.set(deviceId, response.data.data);
+          const device = this.devices.get(deviceId);
+          if (device) {
+            this.devices.set(deviceId, {
+              ...device,
+              status: response.data.data.status,
+              lastCheckIn: response.data.data.lastSeen
+            });
+          }
         });
       }
     } catch (error) {
@@ -122,7 +171,10 @@ export class DeviceStore {
       const response = await api.post<Device>('/devices', deviceData);
       if (response.data?.success) {
         runInAction(() => {
-          this.devices.set(response.data.data.id, response.data.data);
+          const newDevice = response.data.data;
+          this.devices.set(newDevice.id, newDevice);
+          // Fetch initial status for the new device
+          this.fetchDeviceStatus(newDevice.id);
         });
       }
     } catch (error) {
@@ -197,6 +249,10 @@ export class DeviceStore {
 
   public get busyDevices(): Device[] {
     return this.allDevices.filter(device => device.status === 'busy');
+  }
+
+  public get attackingDevices(): Device[] {
+    return this.allDevices.filter(device => device.status === 'attacking');
   }
 
   public get errorDevices(): Device[] {

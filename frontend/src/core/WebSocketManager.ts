@@ -3,6 +3,7 @@ import { getToken } from '../utils/tokenManager';
 import { SOCKET_ENDPOINT, WEBSOCKET_CONFIG } from '../config/api';
 
 type EventCallback = (data: any) => void;
+type EventData = Record<string, any>;
 
 export class WebSocketManager {
   private static instance: WebSocketManager | null = null;
@@ -23,19 +24,25 @@ export class WebSocketManager {
   }
 
   public connect(url: string = SOCKET_ENDPOINT): void {
-    if (this.socket) {
+    if (this.socket?.connected) {
       return;
     }
 
     this.connectionStatus = 'connecting';
     const token = getToken();
 
+    if (!token) {
+      console.warn('No authentication token found for WebSocket connection');
+      return;
+    }
+
     this.socket = io(url, {
       auth: { token },
       reconnectionAttempts: this.maxReconnectionAttempts,
       reconnectionDelay: this.reconnectionDelay,
       autoConnect: true,
-      transports: ['websocket']
+      transports: ['websocket'],
+      timeout: WEBSOCKET_CONFIG.timeout
     });
 
     this.setupSocketListeners();
@@ -48,11 +55,13 @@ export class WebSocketManager {
       console.log('WebSocket connected');
       this.connectionStatus = 'connected';
       this.reconnectionAttempts = 0;
+      this.notifyListeners('connect');
     });
 
     this.socket.on('disconnect', (reason) => {
       console.log(`WebSocket disconnected: ${reason}`);
       this.connectionStatus = 'disconnected';
+      this.notifyListeners('disconnect');
       
       if (reason === 'io server disconnect') {
         // The server has forcefully disconnected the socket
@@ -63,6 +72,7 @@ export class WebSocketManager {
     this.socket.on('connect_error', (error) => {
       console.error('WebSocket connection error:', error);
       this.reconnectionAttempts++;
+      this.notifyListeners('connect_error', error);
       
       if (this.reconnectionAttempts >= this.maxReconnectionAttempts) {
         console.error('Max reconnection attempts reached, giving up');
@@ -73,40 +83,27 @@ export class WebSocketManager {
     });
 
     // Handle device status updates
-    this.socket.on('device:*:status', (data) => {
+    this.socket.on('device:*:status', (data: EventData) => {
       const deviceId = data.deviceId;
-      this.emit('device_status_update', { deviceId, status: data });
+      this.notifyListeners('device_status_update', { deviceId, status: data });
     });
 
     // Handle device errors
-    this.socket.on('device:*:error', (data) => {
+    this.socket.on('device:*:error', (data: EventData) => {
       const deviceId = data.deviceId;
-      this.emit('device_error', { deviceId, error: data });
+      this.notifyListeners('device_error', { deviceId, error: data });
     });
 
     // Handle device activity
-    this.socket.on('device:*:activity', (data) => {
+    this.socket.on('device:*:activity', (data: EventData) => {
       const deviceId = data.deviceId;
-      this.emit('device_activity', { deviceId, activity: data });
+      this.notifyListeners('device_activity', { deviceId, activity: data });
     });
 
     // Add custom event handlers here
     this.socket.onAny((eventName, ...args) => {
-      this.notifyListeners(eventName, ...args);
+      this.notifyListeners(eventName, args[0]);
     });
-  }
-
-  private notifyListeners(eventName: string, ...args: any[]): void {
-    const eventListeners = this.listeners.get(eventName);
-    if (eventListeners) {
-      eventListeners.forEach(callback => {
-        try {
-          callback(args.length === 1 ? args[0] : args);
-        } catch (error) {
-          console.error(`Error in event listener for "${eventName}":`, error);
-        }
-      });
-    }
   }
 
   public subscribe(eventName: string, callback: EventCallback): void {
@@ -123,23 +120,21 @@ export class WebSocketManager {
   }
 
   public unsubscribe(eventName: string, callback: EventCallback): void {
-    const eventListeners = this.listeners.get(eventName);
-    if (eventListeners) {
-      eventListeners.delete(callback);
-      if (eventListeners.size === 0) {
-        this.listeners.delete(eventName);
-      }
-    }
+    this.listeners.get(eventName)?.delete(callback);
+  }
 
-    // If this is a device subscription event, notify the backend
-    if (eventName.startsWith('device:') && eventName.endsWith(':status')) {
-      const deviceId = eventName.split(':')[1];
-      this.socket?.emit('unsubscribe:device', deviceId);
-    }
+  private notifyListeners(eventName: string, data: any): void {
+    this.listeners.get(eventName)?.forEach(callback => {
+      try {
+        callback(data);
+      } catch (error) {
+        console.error(`Error in event listener for ${eventName}:`, error);
+      }
+    });
   }
 
   public emit(eventName: string, data?: any): void {
-    if (this.socket && this.connectionStatus === 'connected') {
+    if (this.socket?.connected) {
       this.socket.emit(eventName, data);
     } else {
       console.warn(`Cannot emit event "${eventName}": Socket is not connected`);
