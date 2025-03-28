@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import axios from 'axios';
 import { API_URL } from '../config';
 import ApiHealthStatus from './ApiHealthStatus';
-import ApiService from '../services/ApiService';
+import { apiService } from '../services/ApiService';
 import NotificationService from '../services/NotificationService';
 import ThemeService from '../services/ThemeService';
 import ThemeToggle from './ui/ThemeToggle';
@@ -106,7 +106,7 @@ const Layout = () => {
         // Don't remove settings, just save them to API if needed
         console.log('Layout: Saving user settings before logout');
         // ApiService will handle this properly without removing tokens
-        ApiService.saveUserSettings();
+        apiService.saveUserSettings();
       } catch (err) {
         console.error('Layout: Error saving settings before logout', err);
       }
