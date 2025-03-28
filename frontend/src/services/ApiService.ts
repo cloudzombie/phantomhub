@@ -29,7 +29,7 @@ class ApiService {
   private connectionAttempts: number = 0;
   private readonly MAX_RECONNECT_ATTEMPTS = 3;
   private readonly RECONNECT_DELAY = 5000; // 5 seconds
-  private isInitialized: boolean = false;
+  private _isInitialized: boolean = false;
   private axiosInstance: AxiosInstance;
   private config: ApiConfig;
   private baseURL: string;
@@ -43,12 +43,10 @@ class ApiService {
   private socketReconnectDelay: number = 30000; // 30 seconds
   private subscriptionTimeout: NodeJS.Timeout | null = null;
   private isUpdating: boolean = false;
-  private updateQueue: any[] = [];
   private lastSocketAttempt: number = 0;
   private isSubscribed: boolean = false;
   private pendingUpdates: Set<number> = new Set();
   private updateTimeoutId: NodeJS.Timeout | null = null;
-  private updateQueue: Map<string, NodeJS.Timeout> = new Map();
 
   private constructor() {
     this.config = {
@@ -238,9 +236,18 @@ class ApiService {
     return response.data;
   }
 
-  // Add method to get current device state
-  public getDeviceState(): any[] {
+  // Update getDeviceState to handle both cases with proper type checking
+  public getDeviceState(deviceId?: string): any[] {
+    if (deviceId) {
+      const status = this.deviceStates.get(deviceId);
+      return status ? [status] : [];
+    }
     return Array.from(this.deviceState.values());
+  }
+
+  // Add method to get device status specifically
+  public getDeviceStatus(deviceId: string): DeviceStatus | undefined {
+    return this.deviceStates.get(deviceId);
   }
 
   // Update device state with strict controls
@@ -503,20 +510,20 @@ class ApiService {
     this.deviceSubscribers.clear();
     this.isReconnecting = false;
     this.reconnectAttempts = 0;
-    this.isInitialized = false;
+    this._isInitialized = false;
     this.isSubscribed = false;
   }
 
-  // Add method to check if service is initialized
+  // Method to check if service is initialized
   public isInitialized(): boolean {
-    return this.isInitialized;
+    return this._isInitialized;
   }
 
-  // Add method to initialize service
+  // Method to initialize service
   public initialize(): void {
-    if (!this.isInitialized) {
+    if (!this._isInitialized) {
       this.initializeSocket();
-      this.isInitialized = true;
+      this._isInitialized = true;
     }
   }
 
@@ -685,10 +692,6 @@ class ApiService {
       detail: { deviceId, status }
     });
     window.dispatchEvent(event);
-  }
-
-  public getDeviceState(deviceId: string): DeviceStatus | undefined {
-    return this.deviceStates.get(deviceId);
   }
 
   public async refreshDeviceStatus(deviceId: string): Promise<void> {
