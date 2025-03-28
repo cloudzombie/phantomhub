@@ -1,5 +1,4 @@
 import { io, Socket } from 'socket.io-client';
-import { getToken } from '../utils/tokenManager';
 import { SOCKET_ENDPOINT, WEBSOCKET_CONFIG } from '../config/api';
 
 type EventCallback = (data: any) => void;
@@ -29,20 +28,14 @@ export class WebSocketManager {
     }
 
     this.connectionStatus = 'connecting';
-    const token = getToken();
-
-    if (!token) {
-      console.warn('No authentication token found for WebSocket connection');
-      return;
-    }
 
     this.socket = io(url, {
-      auth: { token },
       reconnectionAttempts: this.maxReconnectionAttempts,
       reconnectionDelay: this.reconnectionDelay,
       autoConnect: true,
       transports: ['websocket'],
-      timeout: WEBSOCKET_CONFIG.timeout
+      timeout: WEBSOCKET_CONFIG.timeout,
+      withCredentials: true // Enable sending cookies with WebSocket connection
     });
 
     this.setupSocketListeners();
@@ -55,13 +48,13 @@ export class WebSocketManager {
       console.log('WebSocket connected');
       this.connectionStatus = 'connected';
       this.reconnectionAttempts = 0;
-      this.notifyListeners('connect');
+      this.notifyListeners('connect', { status: 'connected' });
     });
 
     this.socket.on('disconnect', (reason) => {
       console.log(`WebSocket disconnected: ${reason}`);
       this.connectionStatus = 'disconnected';
-      this.notifyListeners('disconnect');
+      this.notifyListeners('disconnect', { reason });
       
       if (reason === 'io server disconnect') {
         // The server has forcefully disconnected the socket
@@ -128,7 +121,7 @@ export class WebSocketManager {
       try {
         callback(data);
       } catch (error) {
-        console.error(`Error in event listener for ${eventName}:`, error);
+        console.error(`Error in ${eventName} listener:`, error);
       }
     });
   }
@@ -137,7 +130,7 @@ export class WebSocketManager {
     if (this.socket?.connected) {
       this.socket.emit(eventName, data);
     } else {
-      console.warn(`Cannot emit event "${eventName}": Socket is not connected`);
+      console.warn('Cannot emit event: WebSocket is not connected');
     }
   }
 
@@ -152,6 +145,8 @@ export class WebSocketManager {
       this.socket.disconnect();
       this.socket = null;
       this.connectionStatus = 'disconnected';
+      this.reconnectionAttempts = 0;
+      this.notifyListeners('disconnect', { reason: 'manual_disconnect' });
     }
   }
 
