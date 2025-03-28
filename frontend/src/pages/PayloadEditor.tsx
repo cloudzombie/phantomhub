@@ -61,6 +61,18 @@ interface Script {
   updatedAt: string;
 }
 
+// Configure Monaco Editor workers
+self.MonacoEnvironment = {
+  getWorkerUrl: function (moduleId, label) {
+    return `data:text/javascript;charset=utf-8,${encodeURIComponent(`
+      self.MonacoEnvironment = {
+        baseUrl: 'https://unpkg.com/monaco-editor@0.52.2/min/'
+      };
+      importScripts('https://unpkg.com/monaco-editor@0.52.2/min/vs/base/worker/workerMain.js');`
+    )}`;
+  }
+};
+
 const PayloadEditor = () => {
   // Helper function to get current user from storage
   const getCurrentUserFromStorage = () => {
@@ -134,23 +146,12 @@ const PayloadEditor = () => {
     // Register the DuckyScript language
     registerDuckyScriptLanguage();
     
-    // Fetch available devices
-    fetchDevices();
-    
-    // Fetch available payloads
-    fetchPayloads();
-    
-    // Get any already connected USB devices
-    if (isWebSerialSupported()) {
-      checkUsbDevices();
-    }
-    
     // Initialize Monaco Editor
     if (editorContainerRef.current) {
       editorRef.current = monaco.editor.create(editorContainerRef.current, {
         value: DEFAULT_DUCKY_SCRIPT,
-        language: 'duckyscript', // Use our custom language
-        theme: 'duckyscript-theme', // Use our custom theme
+        language: 'duckyscript',
+        theme: 'duckyscript-theme',
         minimap: { enabled: true },
         automaticLayout: true,
         fontSize: 14,
@@ -163,45 +164,90 @@ const PayloadEditor = () => {
         suggestOnTriggerCharacters: true,
       });
     }
-    
-    // Setup interval to refresh USB devices
-    let isMounted = true;
-    let intervalId: NodeJS.Timeout | null = null;
 
-    const refreshUsbDevices = async () => {
+    // Get user role when component mounts
+    setUserRole(getCurrentUserRole());
+
+    // Cleanup function
+    return () => {
+      if (editorRef.current) {
+        editorRef.current.dispose();
+      }
+    };
+  }, []); // Only run once on mount
+
+  // Separate effect for data fetching
+  useEffect(() => {
+    let isMounted = true;
+
+    const fetchInitialData = async () => {
       if (!isMounted) return;
       
       try {
-        const response = await apiService.get('/devices/usb');
-        if (response.data?.success && isMounted) {
-          setUsbDevices(response.data.data);
+        // Fetch devices first - this is essential for device selection
+        const devicesResponse = await apiService.get('/devices');
+        if (devicesResponse.data?.success && isMounted) {
+          const fetchedDevices = devicesResponse.data.data || [];
+          setDevices(fetchedDevices);
+          
+          // Only select first device if there are any online devices
+          const onlineDevice = fetchedDevices.find((d: Device) => d.status === 'online');
+          if (onlineDevice) {
+            setSelectedDevice(onlineDevice.id.toString());
+          }
+        }
+
+        // Fetch payloads - not critical for initial setup
+        try {
+          const payloadsResponse = await apiService.get('/payloads');
+          if (payloadsResponse.data?.success && isMounted) {
+            setPayloads(payloadsResponse.data.data || []);
+          }
+        } catch (error) {
+          // Handle 404 or empty payloads gracefully - this is expected for new users
+          if (axios.isAxiosError(error) && error.response?.status === 404) {
+            setPayloads([]);
+          } else {
+            console.error('Error fetching payloads:', error);
+          }
+        }
+
+        // Fetch scripts - not critical for initial setup
+        try {
+          const scriptsResponse = await apiService.get('/scripts');
+          if (scriptsResponse.data?.success && isMounted) {
+            setScripts(scriptsResponse.data.data || []);
+          }
+        } catch (error) {
+          // Handle 404 or empty scripts gracefully - this is expected for new users
+          if (axios.isAxiosError(error) && error.response?.status === 404) {
+            setScripts([]);
+          } else {
+            console.error('Error fetching scripts:', error);
+          }
         }
       } catch (error) {
-        console.error('Error refreshing USB devices:', error);
+        console.error('Error fetching initial data:', error);
+        
+        // Handle auth errors
+        if (isAuthError(error)) {
+          handleAuthError(error, 'Authentication error while fetching data');
+        }
+        
+        // For other errors, ensure we have empty arrays to allow manual creation
+        setDevices([]);
+        setPayloads([]);
+        setScripts([]);
       }
     };
 
-    // Initial fetch
-    refreshUsbDevices();
+    fetchInitialData();
 
-    // Set up interval for periodic refresh
-    intervalId = setInterval(refreshUsbDevices, 10000); // Refresh every 10 seconds
-
-    // Fetch available scripts
-    fetchScripts();
-    
-    // Get user role when component mounts
-    setUserRole(getCurrentUserRole());
-    
-    // Cleanup function
     return () => {
       isMounted = false;
-      if (intervalId) {
-        clearInterval(intervalId);
-      }
     };
-  }, []);
-  
+  }, []); // Only run once on mount
+
   const checkUsbDevices = () => {
     try {
       const devices = getConnectedDevices();
