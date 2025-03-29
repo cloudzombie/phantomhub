@@ -1,10 +1,9 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { API_URL } from '../config.ts';
-import { useAuth } from '../contexts/AuthContext.tsx';
-import { getToken } from '../utils/tokenManager';
+import { useAuth } from '../hooks/useAuth';
 import debounce from 'lodash/debounce';
-import { api } from '../services/api';
+import axios from 'axios';
 import type { ApiResponse } from '../core/apiClient';
 
 // Component imports
@@ -78,13 +77,14 @@ const AdminUserManagement: React.FC = () => {
       setLoading(true);
       setError(null);
       
-      const response = await api.get('/admin/users', {
+      const response = await axios.get(`${API_URL}/admin/users`, {
         params: {
           page,
           limit: 10,
           search: searchTerm || undefined,
           role: filterRole !== 'all' ? filterRole : undefined
-        }
+        },
+        withCredentials: true
       });
       
       const responseData = response.data as ApiResponse<UsersResponse>;
@@ -152,7 +152,9 @@ const AdminUserManagement: React.FC = () => {
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const response = await api.post<ApiResponse<User>>('/admin/users', formData);
+      const response = await axios.post(`${API_URL}/admin/users`, formData, {
+        withCredentials: true
+      });
       
       if (response.data?.success) {
         // Reset form and refresh user list
@@ -187,7 +189,9 @@ const AdminUserManagement: React.FC = () => {
     }
     
     try {
-      const response = await api.delete<ApiResponse<void>>(`/admin/users/${userId}`);
+      const response = await axios.delete(`${API_URL}/admin/users/${userId}`, {
+        withCredentials: true
+      });
       
       if (response.data?.success) {
         // Remove user from list
@@ -208,7 +212,9 @@ const AdminUserManagement: React.FC = () => {
     }
 
     try {
-      const response = await api.put<ApiResponse<User>>(`/admin/users/${userId}/role`, { role: newRole });
+      const response = await axios.put(`${API_URL}/admin/users/${userId}/role`, { role: newRole }, {
+        withCredentials: true
+      });
       
       if (response.data?.success) {
         // Update user in list
@@ -228,8 +234,10 @@ const AdminUserManagement: React.FC = () => {
     if (!newPassword) return;
     
     try {
-      const response = await api.put<ApiResponse<void>>(`/admin/users/${userId}/reset-password`, { 
+      const response = await axios.put(`${API_URL}/admin/users/${userId}/reset-password`, { 
         password: newPassword 
+      }, {
+        withCredentials: true
       });
       
       if (response.data?.success) {

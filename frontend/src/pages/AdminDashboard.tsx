@@ -3,8 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 // Import directly from the absolute path to avoid module resolution issues
 import { API_URL } from '../config.ts';
-import { useAuth } from '../contexts/AuthContext.tsx';
-import { getToken } from '../utils/tokenManager';
+import { useAuth } from '../hooks/useAuth';
 
 // Component imports
 import { Card } from '../components/ui/Card';
@@ -109,7 +108,8 @@ const AdminDashboard: React.FC = () => {
       try {
         const requestOptions = {
           ...options,
-          timeout: 20000 // Increased to 20 seconds per request
+          timeout: 20000, // Increased to 20 seconds per request
+          withCredentials: true // Enable sending cookies with requests
         };
         return await axios.get(url, requestOptions);
       } catch (error: any) {
@@ -128,13 +128,9 @@ const AdminDashboard: React.FC = () => {
         loadingStates.stats = true;
         if (isMounted) setLoading(true);
         
-        const token = getToken();
-        console.log('Fetching system stats with token:', token ? 'Token exists' : 'No token');
+        console.log('Fetching system stats');
         
         const response = await fetchWithRetry(`${API_URL}/admin/system/stats`, {
-          headers: {
-            Authorization: `Bearer ${token}`
-          },
           signal: controller.signal
         });
         
@@ -163,13 +159,9 @@ const AdminDashboard: React.FC = () => {
         if (!isMounted) return;
         loadingStates.health = true;
         
-        const token = getToken();
         console.log('Fetching system health');
         
         const response = await fetchWithRetry(`${API_URL}/admin/system/health`, {
-          headers: {
-            Authorization: `Bearer ${token}`
-          },
           signal: controller.signal
         });
         
@@ -198,116 +190,67 @@ const AdminDashboard: React.FC = () => {
         console.error(`${type} endpoint not found`);
         if (type === 'stats') {
           setError('System statistics endpoint not available. The server may need to be updated.');
+        } else {
+          setError('System health endpoint not available. The server may need to be updated.');
         }
-      } else if (err.code === 'ECONNABORTED') {
-        console.error(`${type} request timed out`);
-        setError(`Request timed out. Please check your connection and try again.`);
       } else {
         console.error(`Error fetching ${type}:`, err);
-        setError(err.message || 'Error connecting to the server');
+        setError(`Failed to fetch ${type === 'stats' ? 'system statistics' : 'system health'}: ${err.message || 'Unknown error'}`);
       }
     };
 
-    // Set a timeout for the entire loading process with progress tracking
-    let progressTimeout: NodeJS.Timeout;
-    const timeoutId = setTimeout(() => {
-      if (isMounted && loading) {
-        // Check if we have partial data before showing the timeout error
-        if (!systemStats && !systemHealth) {
-          setLoading(false);
-          setError('Loading timed out. The server might be experiencing high load. Please try refreshing.');
-          console.warn('Loading timed out after 30 seconds');
-        } else if (systemStats || systemHealth) {
-          // If we have partial data, keep the page functional
-          setLoading(false);
-          console.warn('Partial data loaded, some information may be missing');
-        }
-      }
-    }, 30000); // Increased to 30 seconds for the overall timeout
+    // Initial data fetch
+    fetchSystemStats();
+    fetchSystemHealth();
 
-    // Add a progress indicator after 10 seconds
-    progressTimeout = setTimeout(() => {
-      if (isMounted && loading) {
-        console.log('Still loading... Waiting for response from server');
-      }
-    }, 10000);
-    
-    if (user && user.role === 'admin') {
-      // Start both fetches in parallel with better error handling
-      Promise.all([
-        fetchSystemStats().catch(err => {
-          console.error('Error in system stats fetch:', err);
-          return null;
-        }),
-        fetchSystemHealth().catch(err => {
-          console.error('Error in system health fetch:', err);
-          return null;
-        })
-      ]).catch(err => {
-        console.error('Error in parallel fetches:', err);
-        if (isMounted) {
-          setLoading(false);
-          setError('Failed to load dashboard data. Please try again.');
-        }
-      });
-    }
-    
-    // Cleanup function
     return () => {
       isMounted = false;
       controller.abort();
-      clearTimeout(timeoutId);
-      clearTimeout(progressTimeout);
-      console.log('AdminDashboard data fetching cleanup');
     };
   }, [user]);
 
   // Toggle maintenance mode with retry logic for rate limiting
   const handleToggleMaintenance = async () => {
     try {
-      const token = getToken(); // Use tokenManager for consistency
-      
-      // Add retry logic for rate limiting
+      setLoading(true);
       const makeRequest = async (retries = 3, delay = 1000) => {
         try {
-          return await axios.post(
+          const response = await axios.post(
             `${API_URL}/admin/system/maintenance`,
             { enabled: !maintenanceMode },
-            { 
-              headers: {
-                Authorization: `Bearer ${token}`
-              },
-              timeout: 10000 // 10 second timeout
+            {
+              withCredentials: true,
+              timeout: 5000
             }
           );
+          
+          if (response.data.success) {
+            setMaintenanceMode(!maintenanceMode);
+            // Refresh system stats after toggling maintenance mode
+            const statsResponse = await axios.get(`${API_URL}/admin/system/stats`, {
+              withCredentials: true
+            });
+            if (statsResponse.data.success) {
+              setSystemStats(statsResponse.data.data);
+            }
+          } else {
+            throw new Error(response.data.message || 'Failed to toggle maintenance mode');
+          }
         } catch (error: any) {
-          if (error.response && error.response.status === 429 && retries > 0) {
-            console.log(`Rate limited, retrying in ${delay}ms... (${retries} retries left)`);
+          if (error.response?.status === 429 && retries > 0) {
             await new Promise(resolve => setTimeout(resolve, delay));
             return makeRequest(retries - 1, delay * 2);
           }
           throw error;
         }
       };
-      
-      const response = await makeRequest();
-      
-      if (response.data.success) {
-        setMaintenanceMode(!maintenanceMode);
-        // Show success message
-        setError(null); // Clear any existing errors
-        // You could add a success toast/notification here
-      }
-    } catch (err: any) {
-      console.error('Error toggling maintenance mode:', err);
-      // Show a more user-friendly error message
-      if (err.response && err.response.status === 404) {
-        setError('Maintenance mode toggle is not available. The server may need to be updated.');
-      } else if (err.response && err.response.status === 429) {
-        setError('Rate limit exceeded. Please try again in a few minutes.');
-      } else {
-        setError(`Failed to toggle maintenance mode: ${err.message || 'Unknown error'}`);
-      }
+
+      await makeRequest();
+    } catch (error: any) {
+      console.error('Error toggling maintenance mode:', error);
+      setError(error.message || 'Failed to toggle maintenance mode');
+    } finally {
+      setLoading(false);
     }
   };
 

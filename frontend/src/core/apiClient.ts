@@ -1,5 +1,4 @@
 import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
-import { getToken } from '../utils/tokenManager';
 import { API_ENDPOINT } from '../config/api';
 
 // Define common types for API responses
@@ -31,8 +30,10 @@ export interface Device {
   signalStrength?: number;
   errors?: string[];
   capabilities?: {
+    usbHid: boolean;
+    wifi: boolean;
+    bluetooth: boolean;
     storage: string;
-    availableSlots: number;
     supportedFeatures: string[];
   };
   attackState?: {
@@ -75,13 +76,7 @@ export const apiSlice = createApi({
   reducerPath: 'api',
   baseQuery: fetchBaseQuery({
     baseUrl: API_ENDPOINT,
-    prepareHeaders: (headers) => {
-      const token = getToken();
-      if (token) {
-        headers.set('Authorization', `Bearer ${token}`);
-      }
-      return headers;
-    },
+    credentials: 'include', // Enable sending cookies with requests
   }),
   tagTypes: ['Device', 'Payload', 'Script', 'User', 'Deployment'],
   endpoints: (builder) => ({

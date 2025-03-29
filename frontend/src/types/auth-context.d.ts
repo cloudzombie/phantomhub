@@ -14,10 +14,8 @@ declare module '../contexts/AuthContext' {
     error: string | null;
     login: (email: string, password: string) => Promise<boolean>;
     register: (name: string, email: string, password: string) => Promise<boolean>;
-    logout: () => void;
-    isAuthenticated: () => boolean;
+    logout: () => Promise<boolean>;
+    isAuthenticated: () => Promise<boolean>;
     checkAuthStatus: () => Promise<void>;
   }
-
-  export const useAuth: () => AuthContextType;
 }

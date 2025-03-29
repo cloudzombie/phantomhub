@@ -3,6 +3,7 @@ import { api } from '../services/api';
 import { WebSocketManager } from '../core/WebSocketManager';
 import axios from 'axios';
 import type { ApiResponse } from '../core/apiClient';
+import type { Script as ApiScript } from '../core/apiClient';
 
 export interface Script {
   id: string;
@@ -225,4 +226,10 @@ export class ScriptStore {
   public get errorMessage(): string | null {
     return this.error;
   }
-} 
+
+  setScripts(scripts: Script[]) {
+    this.scripts = scripts;
+  }
+}
+
+export default ScriptStore; 

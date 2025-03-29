@@ -2,31 +2,7 @@ import { makeAutoObservable, runInAction } from 'mobx';
 import { api } from '../services/api';
 import { WebSocketManager } from '../core/WebSocketManager';
 import axios from 'axios';
-
-export interface Device {
-  id: string;
-  name: string;
-  status: 'online' | 'offline' | 'busy' | 'error' | 'attacking';
-  connectionType: 'network' | 'usb';
-  ipAddress?: string;
-  serialPortId?: string;
-  firmwareVersion?: string;
-  lastCheckIn?: string;
-  userId: string;
-  owner?: {
-    id: string;
-    name: string;
-    username: string;
-  };
-  capabilities?: {
-    usbHid: boolean;
-    wifi: boolean;
-    bluetooth: boolean;
-    storage: string;
-    supportedFeatures: string[];
-  };
-  errors?: string[];
-}
+import type { Device } from '../core/apiClient';
 
 export interface DeviceStatus {
   deviceId: string;
@@ -273,5 +249,15 @@ export class DeviceStore {
 
   public get errorMessage(): string | null {
     return this.error;
+  }
+
+  handleDeviceStatusUpdate(data: { id: string; status: DeviceStatus['status'] }): void {
+    const device = this.devices.get(data.id);
+    if (device) {
+      this.devices.set(data.id, {
+        ...device,
+        status: data.status
+      });
+    }
   }
 } 

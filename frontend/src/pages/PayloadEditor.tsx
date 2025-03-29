@@ -1,8 +1,8 @@
-import { useState, useEffect, useRef, ChangeEvent } from 'react';
+import React, { useState, useEffect, useCallback, useRef, ChangeEvent } from 'react';
 import { FiSave, FiCode, FiZap, FiInfo, FiAlertCircle, FiCheckCircle, FiRefreshCw, FiHardDrive, FiWifi, FiUpload, FiLink, FiList, FiFile, FiTrash2, FiPlusCircle, FiX, FiEdit2, FiEdit, FiCheck } from 'react-icons/fi';
 import axios from 'axios';
 import { api } from '../services/api';
-import { handleAuthError, isAuthError, getToken, getUserData } from '../utils/tokenManager';
+import { handleAuthError, isAuthError, getUserData } from '../utils/tokenManager';
 import * as monaco from 'monaco-editor';
 import { registerDuckyScriptLanguage } from '../utils/duckyScriptLanguage';
 import { observer } from 'mobx-react-lite';
@@ -29,7 +29,10 @@ import {
   useDisassociateScriptMutation,
   useCreateScriptMutation,
   useUpdateScriptMutation,
-  useDeleteScriptMutation
+  useDeleteScriptMutation,
+  type Device,
+  type Payload,
+  type Script
 } from '../core/apiClient';
 
 // Hardcoded Heroku URL for API calls
@@ -37,11 +40,17 @@ const API_URL = 'https://ghostwire-backend-e0380bcf4e0e.herokuapp.com/api';
 
 // Default empty DuckyScript template
 const DEFAULT_DUCKY_SCRIPT = `REM DuckyScript Payload Template
-REM Replace with your own commands
+REM Author: Your Name
+REM Description: Brief description of what this payload does
+REM Target: Target system or use case
 
-DELAY 1000
-STRING Your payload commands here
-ENTER`;
+REM Delay to ensure system is ready
+DELAY 2000
+
+REM Your payload commands here
+STRING Hello World!
+ENTER
+`;
 
 interface ApiResponse<T> {
   success: boolean;
@@ -49,42 +58,6 @@ interface ApiResponse<T> {
   message?: string;
 }
 
-interface Device {
-  id: number;
-  name: string;
-  ipAddress: string;
-  firmwareVersion: string | null;
-  status: 'online' | 'offline' | 'busy';
-  connectionType?: 'network' | 'usb'; 
-  serialPortId?: string;
-}
-
-interface Payload {
-  id: string;
-  name: string;
-  script: string;
-  description: string | null;
-  createdAt: string;
-  updatedAt: string;
-  userId: string;
-}
-
-interface Script {
-  id: string;
-  name: string;
-  content: string;
-  type: 'callback' | 'exfiltration' | 'command' | 'custom';
-  description: string | null;
-  isPublic: boolean;
-  endpoint: string | null;
-  callbackUrl: string | null;
-  lastExecuted: string | null;
-  executionCount: number;
-  createdAt: string;
-  updatedAt: string;
-}
-
-// Add these near the top with other interfaces
 interface FetchState {
   isLoading: boolean;
   error: string | null;
@@ -220,8 +193,6 @@ const PayloadEditor = observer(() => {
     lastUpdated: null
   });
 
-  const { devicesStore, payloadsStore, scriptsStore } = useStores();
-
   // Get MobX stores
   const { deviceStore, payloadStore, scriptStore } = useStores();
 
@@ -340,231 +311,84 @@ const PayloadEditor = observer(() => {
   
   const fetchDevices = async () => {
     try {
-      setDevicesFetchState(prev => ({ ...prev, isLoading: true, error: null }));
-      
-      const token = getToken();
-      if (!token) {
-        // Don't redirect, just update state
-        setDevicesFetchState(prev => ({
-          ...prev,
-          isLoading: false,
-          error: 'Authentication required'
-        }));
-        return;
-      }
-      
-      const response = await api.get<ApiResponse<Device[]>>('/devices');
+      setIsLoading(true);
+      const response = await axios.get(`${API_URL}/devices`, {
+        withCredentials: true
+      });
       
       if (response.data?.success) {
-        const fetchedDevices = response.data.data || [];
-        setDevices(fetchedDevices as Device[]);
-        
-        // Only select first device if we don't have one selected
-        if (fetchedDevices.length > 0 && !selectedDevice) {
-          const onlineDevice = fetchedDevices.find((d: Device) => d.status === 'online');
-          if (onlineDevice) {
-            setSelectedDevice(onlineDevice.id.toString());
-          }
-        }
-        
-        setDevicesFetchState({
-          isLoading: false,
-          error: null,
-          lastUpdated: Date.now()
-        });
+        setDevices(response.data.data || []);
+      } else {
+        setDevices([]);
       }
     } catch (error) {
       console.error('Error fetching devices:', error);
-      
       if (isAuthError(error)) {
-        // Handle auth errors without disrupting the UI
-        setDevicesFetchState(prev => ({
-          ...prev,
-          isLoading: false,
-          error: 'Session expired. Please refresh your authentication.'
-        }));
-        
-        // Let the auth handler deal with the token
-        handleAuthError(error, 'Authentication error');
-      } else if (axios.isAxiosError(error)) {
-        // Handle different HTTP errors appropriately
-        switch (error.response?.status) {
-          case 500:
-            setDevices([]);
-            setDevicesFetchState(prev => ({
-              ...prev,
-              isLoading: false,
-              error: null // Don't show error for empty state
-            }));
-            break;
-          case 403:
-            setDevicesFetchState(prev => ({
-              ...prev,
-              isLoading: false,
-              error: 'You do not have permission to view devices'
-            }));
-            break;
-          default:
-            setDevicesFetchState(prev => ({
-              ...prev,
-              isLoading: false,
-              error: 'Failed to fetch devices. Please try again.'
-            }));
-        }
+        handleAuthError(error);
       }
+    } finally {
+      setIsLoading(false);
     }
   };
   
   const fetchPayloads = async () => {
     try {
-      setPayloadsFetchState(prev => ({ ...prev, isLoading: true, error: null }));
-      
-      const token = getToken();
-      if (!token) {
-        setPayloadsFetchState(prev => ({
-          ...prev,
-          isLoading: false,
-          error: 'Authentication required'
-        }));
-        return;
-      }
-      
-      const response = await api.get<ApiResponse<Payload[]>>('/payloads');
+      setIsLoading(true);
+      const response = await axios.get(`${API_URL}/payloads`, {
+        withCredentials: true
+      });
       
       if (response.data?.success) {
-        const fetchedPayloads = response.data.data || [];
-        setPayloads(fetchedPayloads as Payload[]);
-        
-        setPayloadsFetchState({
-          isLoading: false,
-          error: null,
-          lastUpdated: Date.now()
-        });
+        setPayloads(response.data.data || []);
+      } else {
+        setPayloads([]);
       }
     } catch (error) {
       console.error('Error fetching payloads:', error);
-      
       if (isAuthError(error)) {
-        setPayloadsFetchState(prev => ({
-          ...prev,
-          isLoading: false,
-          error: 'Session expired. Please refresh your authentication.'
-        }));
-        handleAuthError(error, 'Authentication error');
-      } else if (axios.isAxiosError(error)) {
-        switch (error.response?.status) {
-          case 500:
-            setPayloads([]);
-            setPayloadsFetchState(prev => ({
-              ...prev,
-              isLoading: false,
-              error: null
-            }));
-            break;
-          case 403:
-            setPayloadsFetchState(prev => ({
-              ...prev,
-              isLoading: false,
-              error: 'You do not have permission to view payloads'
-            }));
-            break;
-          default:
-            setPayloadsFetchState(prev => ({
-              ...prev,
-              isLoading: false,
-              error: 'Failed to fetch payloads. Please try again.'
-            }));
-        }
+        handleAuthError(error);
       }
+    } finally {
+      setIsLoading(false);
     }
   };
   
   const fetchScripts = async () => {
     try {
-      setScriptsFetchState(prev => ({ ...prev, isLoading: true, error: null }));
-      
-      const token = getToken();
-      if (!token) {
-        setScriptsFetchState(prev => ({
-          ...prev,
-          isLoading: false,
-          error: 'Authentication required'
-        }));
-        return;
-      }
-      
-      const response = await api.get<ApiResponse<Script[]>>('/scripts');
+      setIsLoading(true);
+      const response = await axios.get(`${API_URL}/scripts`, {
+        withCredentials: true
+      });
       
       if (response.data?.success) {
-        const fetchedScripts = response.data.data || [];
-        setScripts(fetchedScripts as Script[]);
-        
-        setScriptsFetchState({
-          isLoading: false,
-          error: null,
-          lastUpdated: Date.now()
-        });
+        setScripts(response.data.data || []);
+      } else {
+        setScripts([]);
       }
     } catch (error) {
       console.error('Error fetching scripts:', error);
-      
       if (isAuthError(error)) {
-        setScriptsFetchState(prev => ({
-          ...prev,
-          isLoading: false,
-          error: 'Session expired. Please refresh your authentication.'
-        }));
-        handleAuthError(error, 'Authentication error');
-      } else if (axios.isAxiosError(error)) {
-        switch (error.response?.status) {
-          case 500:
-            setScripts([]);
-            setScriptsFetchState(prev => ({
-              ...prev,
-              isLoading: false,
-              error: null
-            }));
-            break;
-          case 403:
-            setScriptsFetchState(prev => ({
-              ...prev,
-              isLoading: false,
-              error: 'You do not have permission to view scripts'
-            }));
-            break;
-          default:
-            setScriptsFetchState(prev => ({
-              ...prev,
-              isLoading: false,
-              error: 'Failed to fetch scripts. Please try again.'
-            }));
-        }
+        handleAuthError(error);
       }
+    } finally {
+      setIsLoading(false);
     }
   };
   
   const fetchScriptsForPayload = async (payloadId: string) => {
     try {
-      const token = getToken();
-      if (!token) {
-        console.error('No authentication token found');
-        window.location.href = '/login';
-        return;
-      }
-      
       const response = await axios.get(`${API_URL}/scripts/payload/${payloadId}`, {
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
+        withCredentials: true
       });
       
-      if (response.data && response.data.success) {
-        const payloadScripts = response.data.data || [];
-        // Set the selected scripts based on what's associated with this payload
-        setSelectedScripts(payloadScripts.map((script: Script) => script.id));
+      if (response.data?.success) {
+        setSelectedScripts(response.data.data.map((script: Script) => script.id));
       }
     } catch (error) {
       console.error('Error fetching scripts for payload:', error);
+      if (isAuthError(error)) {
+        handleAuthError(error);
+      }
     }
   };
   
@@ -591,119 +415,57 @@ const PayloadEditor = observer(() => {
   
   const handleDeletePayload = async (payloadId: string) => {
     try {
-      setIsLoading(true);
-      const result = await deletePayloadMutation(payloadId).unwrap();
-
-      if (result.success) {
-        setMessage({ type: 'success', text: 'Payload deleted successfully' });
-        
-        // If the deleted payload was selected, clear the selection
-        if (selectedPayload && selectedPayload.id === payloadId) {
+      const response = await axios.delete(`${API_URL}/payloads/${payloadId}`, {
+        withCredentials: true
+      });
+      
+      if (response.data?.success) {
+        setPayloads(payloads.filter(p => p.id !== payloadId));
+        if (selectedPayload?.id === payloadId) {
           setSelectedPayload(null);
           setPayloadName('New Payload');
-          
-          // Reset the editor content
           if (editorRef.current) {
             editorRef.current.setValue(DEFAULT_DUCKY_SCRIPT);
           }
         }
-        
-        // Refetch payloads
-        setIsLoading(true);
-        await fetchPayloads();
-      } else {
-        setMessage({ type: 'error', text: result.message || 'Failed to delete payload' });
       }
     } catch (error) {
       console.error('Error deleting payload:', error);
-      
-      if (axios.isAxiosError(error) && error.response?.status === 401) {
-        handleAuthError('Your session has expired. Please log in again.');
-      } else {
-        setMessage({ 
-          type: 'error', 
-          text: error instanceof Error ? error.message : 'An unknown error occurred while deleting the payload'
-        });
+      if (isAuthError(error)) {
+        handleAuthError(error);
       }
-    } finally {
-      setIsLoading(false);
     }
   };
   
   const savePayload = async () => {
     try {
-      if (!editorRef.current) {
-        setMessage({ type: 'error', text: 'Editor not initialized' });
-        return null;
-      }
-      
-      const script = editorRef.current.getValue();
-      if (!script || script.trim() === '') {
-        setMessage({ type: 'error', text: 'Payload content cannot be empty' });
-        return null;
-      }
-      
-      if (!payloadName || payloadName.trim() === '') {
-        setMessage({ type: 'error', text: 'Payload name cannot be empty' });
-        return null;
-      }
-      
       setIsLoading(true);
-      
-      // Create the payload object
       const payloadData = {
         name: payloadName,
-        script: script,
-        description: '', // Can be updated to use an actual description field
+        script: editorRef.current?.getValue() || '',
+        description: null
       };
-      
+
       let response;
-      
-      // If we have a selected payload, update it, otherwise create a new one
       if (selectedPayload) {
-        response = await updatePayloadMutation({ 
-          id: selectedPayload.id, 
-          payload: payloadData 
-        }).unwrap();
+        response = await axios.put(`${API_URL}/payloads/${selectedPayload.id}`, payloadData, {
+          withCredentials: true
+        });
       } else {
-        response = await createPayloadMutation(payloadData).unwrap();
+        response = await axios.post(`${API_URL}/payloads`, payloadData, {
+          withCredentials: true
+        });
       }
-      
-      if (response.success) {
-        setMessage({
-          type: 'success',
-          text: `Payload "${payloadName}" saved successfully!`
-        });
-        
-        // Refresh the payloads list
-        fetchPayloads();
-        
-        // Update the selected payload if we just created one
-        if (!selectedPayload) {
-          setSelectedPayload(response.data);
-        }
-        
-        return response.data;
-      } else {
-        setMessage({
-          type: 'error',
-          text: response.message || 'Failed to save payload'
-        });
-        return null;
+
+      if (response.data?.success) {
+        await fetchPayloads();
+        setMessage({ type: 'success', text: 'Payload saved successfully' });
       }
     } catch (error) {
       console.error('Error saving payload:', error);
-      setMessage({
-        type: 'error',
-        text: 'Failed to save payload. Please try again.'
-      });
-      
-      // If we get a 401, handle auth error without removing token
       if (isAuthError(error)) {
-        handleAuthError(error, 'Authentication error while fetching devices');
+        handleAuthError(error);
       }
-      
-      return null;
     } finally {
       setIsLoading(false);
     }
@@ -711,99 +473,28 @@ const PayloadEditor = observer(() => {
   
   const handleDeployPayload = async () => {
     try {
-      if (!editorRef.current) {
-        setMessage({ type: 'error', text: 'Editor not initialized' });
-        return;
-      }
-
-      if (!selectedDevice) {
-        setMessage({ type: 'error', text: 'Please select a device to deploy to' });
-        return;
-      }
-
-      const deviceObj = devices.find(d => d.id.toString() === selectedDevice);
-      if (!deviceObj) {
-        setMessage({ type: 'error', text: 'Selected device not found' });
-        return;
-      }
-
-      const currentPayloadContent = editorRef.current.getValue();
-      
-      if (!currentPayloadContent || currentPayloadContent.trim() === '') {
-        setMessage({ type: 'error', text: 'Payload content cannot be empty' });
-        return;
-      }
-
       setIsLoading(true);
-      
-      // Save the payload first if it's a new payload or has changes
-      let payloadToUse = selectedPayload;
-      
-      if (
-        !payloadToUse || 
-        payloadToUse.script !== currentPayloadContent ||
-        payloadToUse.name !== payloadName
-      ) {
-        const savedPayload = await savePayload();
-        if (!savedPayload) {
-          return; // Error would have been set in savePayload
-        }
-        payloadToUse = savedPayload;
+      if (!selectedPayload || !selectedDevice) {
+        setMessage({ type: 'error', text: 'Please select both a payload and a device' });
+        return;
       }
 
-      // Handle different deployment methods based on device connection type
-      if (deviceObj.connectionType === 'usb') {
-        // Deploy to USB device using WebSerial API
-        try {
-          await deployToUsbSerialDevice();
-        } catch (error) {
-          console.error('Error deploying to USB device:', error);
-          setMessage({ 
-            type: 'error', 
-            text: error instanceof Error 
-              ? `USB deployment error: ${error.message}` 
-              : 'Failed to deploy to USB device'
-          });
-        }
-      } else {
-        // Deploy to network device using API
-        const deploymentData = {
-          payloadId: payloadToUse.id,
-          deviceId: deviceObj.id.toString(),
-          connectionType: deviceObj.connectionType || 'network'
-        };
-        
-        const result = await deployPayloadMutation(deploymentData).unwrap();
-        
-        if (result.success) {
-          setMessage({ 
-            type: 'success', 
-            text: `Deployment initiated! ID: ${result.data.id}` 
-          });
-        } else {
-          setMessage({ 
-            type: 'error', 
-            text: result.message || 'Failed to deploy payload' 
-          });
-        }
+      const response = await axios.post(`${API_URL}/payloads/deploy`, {
+        payloadId: selectedPayload.id,
+        deviceId: selectedDevice,
+        connectionType: 'network'
+      }, {
+        withCredentials: true
+      });
+
+      if (response.data?.success) {
+        setMessage({ type: 'success', text: 'Payload deployed successfully' });
+        await fetchDevices();
       }
     } catch (error) {
-      console.error('Error in deployPayload:', error);
-      
-      if (axios.isAxiosError(error)) {
-        if (error.response?.status === 401) {
-          handleAuthError('Your session has expired. Please log in again.');
-        } else {
-          setMessage({ 
-            type: 'error', 
-            text: error.response?.data?.message || 'Failed to deploy payload' 
-          });
-        }
-      } else {
-        setMessage({ 
-          type: 'error', 
-          text: error instanceof Error ? error.message : 'An unknown error occurred during deployment'
-        });
+      console.error('Error deploying payload:', error);
+      if (isAuthError(error)) {
+        handleAuthError(error);
       }
     } finally {
       setIsLoading(false);
@@ -914,41 +605,13 @@ const PayloadEditor = observer(() => {
   const handleCreateScript = async () => {
     try {
       setIsLoading(true);
-      
-      // Validate required fields
-      if (!scriptFormData.name.trim()) {
-        setMessage({ type: 'error', text: 'Script name is required' });
-        return;
-      }
-      
-      if (!scriptFormData.content && !fileContent) {
-        setMessage({ type: 'error', text: 'Script content is required' });
-        return;
-      }
-      
-      // If script type is callback, validate callback URL
-      if (scriptFormData.type === 'callback' && !scriptFormData.callbackUrl) {
-        setMessage({ type: 'error', text: 'Callback URL is required for callback scripts' });
-        return;
-      }
-      
-      // Prepare the script data
-      const scriptData = {
-        name: scriptFormData.name,
-        type: scriptFormData.type as 'callback' | 'exfiltration' | 'command' | 'custom',
-        description: scriptFormData.description || null,
-        content: fileContent || scriptFormData.content,
-        isPublic: scriptFormData.isPublic,
-        callbackUrl: scriptFormData.type === 'callback' ? scriptFormData.callbackUrl : null
-      };
-      
-      // Create the script
-      const result = await createScriptMutation(scriptData).unwrap();
-      
-      if (result.success) {
-        setMessage({ type: 'success', text: 'Script created successfully!' });
-        
-        // Reset the form
+      const response = await axios.post(`${API_URL}/scripts`, scriptFormData, {
+        withCredentials: true
+      });
+
+      if (response.data?.success) {
+        await fetchScripts();
+        setShowScriptModal(false);
         setScriptFormData({
           name: '',
           type: 'callback',
@@ -957,27 +620,11 @@ const PayloadEditor = observer(() => {
           isPublic: false,
           callbackUrl: ''
         });
-        setFileContent(null);
-        
-        // Close the modal
-        setShowScriptModal(false);
-        
-        // Refresh scripts
-        setIsLoading(true);
-        await fetchScripts();
-      } else {
-        setMessage({ type: 'error', text: result.message || 'Failed to create script' });
       }
     } catch (error) {
       console.error('Error creating script:', error);
-      
-      if (axios.isAxiosError(error) && error.response?.status === 401) {
-        handleAuthError('Your session has expired. Please log in again.');
-      } else {
-        setMessage({ 
-          type: 'error', 
-          text: error instanceof Error ? error.message : 'An unknown error occurred while creating the script'
-        });
+      if (isAuthError(error)) {
+        handleAuthError(error);
       }
     } finally {
       setIsLoading(false);
@@ -1039,13 +686,6 @@ const PayloadEditor = observer(() => {
       
       setIsLoading(true);
       
-      const token = getToken();
-      if (!token) {
-        console.error('No authentication token found');
-        window.location.href = '/login';
-        return;
-      }
-      
       // Get current scripts associated with the payload
       const currentScriptIds = selectedPayloadScripts?.success 
         ? selectedPayloadScripts.data.map(script => script.id) 
@@ -1096,39 +736,18 @@ const PayloadEditor = observer(() => {
   // Add a new function to delete a script
   const handleDeleteScript = async (scriptId: string) => {
     try {
-      setIsLoading(true);
-      const result = await deleteScriptMutation(scriptId).unwrap();
+      const response = await axios.delete(`${API_URL}/scripts/${scriptId}`, {
+        withCredentials: true
+      });
 
-      if (result.success) {
-        setMessage({ type: 'success', text: 'Script deleted successfully' });
-        
-        // If this script was selected, remove it from the selection
-        setSelectedScripts(prev => prev.filter(id => id !== scriptId));
-        
-        // Refetch scripts
-        setIsLoading(true);
+      if (response.data?.success) {
         await fetchScripts();
-        
-        // If a payload is selected, also refetch its associated scripts
-        if (selectedPayload) {
-          await fetchScriptsForPayload(selectedPayload.id);
-        }
-      } else {
-        setMessage({ type: 'error', text: result.message || 'Failed to delete script' });
       }
     } catch (error) {
       console.error('Error deleting script:', error);
-      
-      if (axios.isAxiosError(error) && error.response?.status === 401) {
-        handleAuthError('Your session has expired. Please log in again.');
-      } else {
-        setMessage({ 
-          type: 'error', 
-          text: error instanceof Error ? error.message : 'An unknown error occurred while deleting the script'
-        });
+      if (isAuthError(error)) {
+        handleAuthError(error);
       }
-    } finally {
-      setIsLoading(false);
     }
   };
 
@@ -1144,18 +763,9 @@ const PayloadEditor = observer(() => {
   
   const openScriptEditor = async (script: Script) => {
     try {
-      const token = getToken();
-      if (!token) {
-        console.error('No authentication token found');
-        window.location.href = '/login';
-        return;
-      }
-      
       // Fetch the script content if needed
       const response = await axios.get(`${API_URL}/scripts/${script.id}`, {
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
+        withCredentials: true
       });
       
       if (response.data && response.data.success) {
@@ -1163,77 +773,36 @@ const PayloadEditor = observer(() => {
         setEditingScript(scriptData);
         setScriptEditorContent(scriptData.content || '');
         setShowScriptEditorModal(true);
-      } else {
-        setMessage({
-          type: 'error',
-          text: response.data?.message || 'Failed to load script'
-        });
       }
     } catch (error) {
-      console.error('Error loading script:', error);
-      setMessage({
-        type: 'error',
-        text: 'Failed to load script. Please try again.'
-      });
-      
-      // If we get a 401, handle auth error without removing token
+      console.error('Error fetching script:', error);
       if (isAuthError(error)) {
-        handleAuthError(error, 'Authentication error while fetching devices');
+        handleAuthError(error);
       }
     }
   };
 
   const saveScriptChanges = async () => {
     try {
-      if (!editingScript) return;
-      
       setIsLoading(true);
-      
-      const token = getToken();
-      if (!token) {
-        console.error('No authentication token found');
-        window.location.href = '/login';
-        return;
-      }
-      
-      const scriptData = {
-        id: editingScript.id,
-        script: {
-          name: editingScript.name,
-          content: scriptEditorContent,
-          type: editingScript.type,
-          description: editingScript.description,
-          isPublic: editingScript.isPublic,
-          callbackUrl: editingScript.callbackUrl
-        }
-      };
-      
-      const result = await updateScriptMutation(scriptData).unwrap();
-      
-      if (result.success) {
-        setMessage({
-          type: 'success',
-          text: `Script "${editingScript.name}" updated successfully!`
-        });
-        
-        // Close the modal
+      if (!editingScript) return;
+
+      const response = await axios.put(`${API_URL}/scripts/${editingScript.id}`, {
+        ...editingScript,
+        content: scriptEditorContent
+      }, {
+        withCredentials: true
+      });
+
+      if (response.data?.success) {
+        await fetchScripts();
         setShowScriptEditorModal(false);
-      } else {
-        setMessage({
-          type: 'error',
-          text: result.message || 'Failed to update script'
-        });
+        setEditingScript(null);
       }
     } catch (error) {
-      console.error('Error updating script:', error);
-      setMessage({
-        type: 'error',
-        text: 'Failed to update script. Please try again.'
-      });
-      
-      // If we get a 401, handle auth error without removing token
+      console.error('Error saving script changes:', error);
       if (isAuthError(error)) {
-        handleAuthError(error, 'Authentication error while fetching devices');
+        handleAuthError(error);
       }
     } finally {
       setIsLoading(false);
@@ -1248,73 +817,22 @@ const PayloadEditor = observer(() => {
 
   const savePayloadRename = async (payloadId: string) => {
     try {
-      if (!newPayloadName.trim()) {
-        setMessage({
-          type: 'error',
-          text: 'Payload name cannot be empty'
-        });
-        return;
-      }
-      
-      setIsLoading(true);
-      
-      const token = getToken();
-      if (!token) {
-        console.error('No authentication token found');
-        window.location.href = '/login';
-        return;
-      }
-      
-      // Get the current payload
-      const payload = payloads.find(p => p.id === payloadId);
-      if (!payload) return;
-      
-      const payloadData = {
-        ...payload,
+      const response = await axios.put(`${API_URL}/payloads/${payloadId}`, {
         name: newPayloadName
-      };
-      
-      const response = await axios.put(`${API_URL}/payloads/${payloadId}`, payloadData, {
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
+      }, {
+        withCredentials: true
       });
-      
-      if (response.data && response.data.success) {
-        setMessage({
-          type: 'success',
-          text: 'Payload renamed successfully'
-        });
-        
-        // Update the local payloads list
-        setPayloads(prevPayloads => 
-          prevPayloads.map(p => 
-            p.id === payloadId ? { ...p, name: newPayloadName } : p
-          )
-        );
-        
-        // Update selected payload if it's the one being renamed
-        if (selectedPayload && selectedPayload.id === payloadId) {
-          setSelectedPayload({ ...selectedPayload, name: newPayloadName });
-          setPayloadName(newPayloadName);
-        }
-        
-        // Clear rename state
+
+      if (response.data?.success) {
+        await fetchPayloads();
         setRenamePayloadId(null);
-      } else {
-        setMessage({
-          type: 'error',
-          text: response.data?.message || 'Failed to rename payload'
-        });
+        setNewPayloadName('');
       }
     } catch (error) {
       console.error('Error renaming payload:', error);
-      setMessage({
-        type: 'error',
-        text: 'Failed to rename payload. Please try again.'
-      });
-    } finally {
-      setIsLoading(false);
+      if (isAuthError(error)) {
+        handleAuthError(error);
+      }
     }
   };
   

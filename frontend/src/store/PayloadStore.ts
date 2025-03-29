@@ -2,19 +2,8 @@ import { makeAutoObservable, runInAction } from 'mobx';
 import { api } from '../services/api';
 import { WebSocketManager } from '../core/WebSocketManager';
 import axios from 'axios';
+import type { Payload } from '../core/apiClient';
 
-export interface Payload {
-  id: string;
-  name: string;
-  script: string;
-  description: string | null;
-  createdAt: string;
-  updatedAt: string;
-  userId: string;
-  status?: 'pending' | 'in_progress' | 'completed' | 'failed';
-}
-
-// Define API response interface
 export interface ApiResponse<T> {
   success: boolean;
   data: T;
@@ -51,7 +40,6 @@ export class PayloadStore {
   }
 
   public async fetchPayloads(): Promise<void> {
-    // Don't fetch if we've fetched recently (within 30 seconds)
     if (this.lastUpdated && Date.now() - this.lastUpdated < 30000) {
       return;
     }
@@ -73,7 +61,6 @@ export class PayloadStore {
       });
     } catch (error) {
       runInAction(() => {
-        // Handle 404 as empty payloads (for new users)
         if (axios.isAxiosError(error) && error.response?.status === 404) {
           this.payloads.clear();
         } else {
@@ -89,7 +76,6 @@ export class PayloadStore {
   }
 
   public async getPayload(id: string): Promise<Payload | null> {
-    // Return from cache if available
     const cachedPayload = this.payloads.get(id);
     if (cachedPayload) {
       return cachedPayload;
@@ -176,12 +162,10 @@ export class PayloadStore {
     }
   }
 
-  // Actions
   public setSelectedPayload(id: string | null): void {
     this.selectedPayloadId = id;
   }
 
-  // Computed properties
   public get allPayloads(): Payload[] {
     return Array.from(this.payloads.values());
   }
@@ -202,4 +186,13 @@ export class PayloadStore {
     this.fetchPayloads();
     this.wsManager.connect();
   }
-} 
+
+  setPayloads(payloads: Payload[]) {
+    this.payloads.clear();
+    payloads.forEach((payload: Payload) => {
+      this.payloads.set(payload.id, payload);
+    });
+  }
+}
+
+export default PayloadStore; 

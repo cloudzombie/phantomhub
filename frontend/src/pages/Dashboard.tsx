@@ -18,7 +18,6 @@ import {
 import axios from 'axios';
 import { Socket } from 'socket.io-client';
 import DeviceInfoPanel from '../components/DeviceInfoPanel';
-import { getToken } from '../utils/tokenManager';
 import { observer } from 'mobx-react-lite';
 import { useStores } from '../hooks/useStores';
 import { useWebSocket } from '../hooks/useWebSocket';
@@ -108,9 +107,17 @@ const Dashboard = observer(() => {
   
   // Placeholder for fetching recent deployments
   const fetchRecentDeployments = async () => {
-    // This would normally be a Redux RTK Query hook or MobX action
-    // For now, just simulate with empty data
-    setRecentDeployments([]);
+    try {
+      const response = await axios.get(`${API_URL}/deployments/recent`, {
+        withCredentials: true
+      });
+      
+      if (response.data?.success) {
+        setRecentDeployments(response.data.data || []);
+      }
+    } catch (error) {
+      console.error('Error fetching recent deployments:', error);
+    }
   };
   
   const isLoading = isLoadingDevices || isLoadingPayloads;
