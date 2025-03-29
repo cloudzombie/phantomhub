@@ -12,13 +12,16 @@ import { API_URL } from '../config';
  */
 export const isAuthenticated = async (): Promise<boolean> => {
   try {
+    console.log('TokenManager: Checking authentication...');
     // Try to access a protected endpoint to verify authentication
     const response = await axios.get(`${API_URL}/auth/check`, {
       withCredentials: true // Important for cookies to be sent
     });
     
+    console.log('TokenManager: Auth check response:', response.data);
     return response.data.success === true;
   } catch (err) {
+    console.error('TokenManager: Auth check failed:', err);
     // If the request fails, the user is not authenticated
     return false;
   }
@@ -29,9 +32,10 @@ export const isAuthenticated = async (): Promise<boolean> => {
  */
 export const storeUserData = (userData: any): void => {
   try {
+    console.log('TokenManager: Storing user data:', userData);
     localStorage.setItem('userData', JSON.stringify(userData));
     sessionStorage.setItem('userData', JSON.stringify(userData));
-    console.log('TokenManager: User data stored');
+    console.log('TokenManager: User data stored successfully');
   } catch (err) {
     console.error('TokenManager: Error storing user data:', err);
   }
@@ -42,7 +46,9 @@ export const storeUserData = (userData: any): void => {
  */
 export const getUserData = (): any => {
   try {
+    console.log('TokenManager: Retrieving user data...');
     const userData = localStorage.getItem('userData') || sessionStorage.getItem('userData');
+    console.log('TokenManager: Retrieved user data:', userData);
     return userData ? JSON.parse(userData) : null;
   } catch (err) {
     console.error('TokenManager: Error retrieving user data:', err);

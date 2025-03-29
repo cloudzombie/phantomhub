@@ -29,24 +29,33 @@ export const initializeAuthAsync = createAsyncThunk(
   'auth/initialize',
   async (_, { rejectWithValue }) => {
     try {
+      console.log('Auth: Starting initialization...');
       const userData = getUserData();
+      console.log('Auth: Retrieved user data:', userData);
       
       if (!userData) {
+        console.log('Auth: No user data found');
         return { isAuthenticated: false };
       }
       
       // Verify authentication with HTTP-only cookie
+      console.log('Auth: Verifying authentication...');
       const isValid = await isAuthenticated();
+      console.log('Auth: Authentication verification result:', isValid);
+      
       if (!isValid) {
+        console.log('Auth: Authentication invalid, clearing data');
         clearAuthData();
         return { isAuthenticated: false };
       }
       
+      console.log('Auth: Authentication successful');
       return {
         user: userData,
         isAuthenticated: true
       };
     } catch (error) {
+      console.error('Auth: Initialization error:', error);
       return rejectWithValue('Failed to initialize authentication');
     }
   }
