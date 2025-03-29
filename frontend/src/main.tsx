@@ -33,7 +33,13 @@ document.documentElement.classList.add(
 const wsManager = WebSocketManager.getInstance();
 wsManager.connect(SOCKET_ENDPOINT);
 
-ReactDOM.createRoot(document.getElementById('root')!).render(
+// Add error boundary for the entire app
+const rootElement = document.getElementById('root');
+if (!rootElement) {
+  throw new Error('Failed to find the root element');
+}
+
+ReactDOM.createRoot(rootElement).render(
   <React.StrictMode>
     <Provider store={store}>
       <RootStoreProvider>

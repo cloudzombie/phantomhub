@@ -30,33 +30,47 @@ export const initializeAuthAsync = createAsyncThunk(
   async (_, { rejectWithValue }) => {
     try {
       console.log('Auth: Starting initialization...');
-      const userData = getUserData();
-      console.log('Auth: Retrieved user data:', userData);
       
-      if (!userData) {
-        console.log('Auth: No user data found');
-        return { isAuthenticated: false };
-      }
-      
-      // Verify authentication with HTTP-only cookie
-      console.log('Auth: Verifying authentication...');
-      const isValid = await isAuthenticated();
-      console.log('Auth: Authentication verification result:', isValid);
-      
-      if (!isValid) {
-        console.log('Auth: Authentication invalid, clearing data');
-        clearAuthData();
-        return { isAuthenticated: false };
-      }
-      
-      console.log('Auth: Authentication successful');
-      return {
-        user: userData,
-        isAuthenticated: true
-      };
+      // Add a timeout to prevent infinite loading
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Auth initialization timeout')), 5000);
+      });
+
+      const initPromise = (async () => {
+        const userData = getUserData();
+        console.log('Auth: Retrieved user data:', userData);
+        
+        if (!userData) {
+          console.log('Auth: No user data found');
+          return { isAuthenticated: false };
+        }
+        
+        // Verify authentication with HTTP-only cookie
+        console.log('Auth: Verifying authentication...');
+        const isValid = await isAuthenticated();
+        console.log('Auth: Authentication verification result:', isValid);
+        
+        if (!isValid) {
+          console.log('Auth: Authentication invalid, clearing data');
+          clearAuthData();
+          return { isAuthenticated: false };
+        }
+        
+        console.log('Auth: Authentication successful');
+        return {
+          user: userData,
+          isAuthenticated: true
+        };
+      })();
+
+      // Race between timeout and initialization
+      const result = await Promise.race([initPromise, timeoutPromise]);
+      return result;
     } catch (error) {
       console.error('Auth: Initialization error:', error);
-      return rejectWithValue('Failed to initialize authentication');
+      // On error, clear auth data and return unauthenticated
+      clearAuthData();
+      return { isAuthenticated: false };
     }
   }
 );
@@ -96,12 +110,15 @@ const authSlice = createSlice({
     builder
       .addCase(initializeAuthAsync.pending, (state) => {
         state.isLoading = true;
+        state.error = null;
       })
       .addCase(initializeAuthAsync.fulfilled, (state, action) => {
         state.isLoading = false;
         state.isAuthenticated = action.payload.isAuthenticated;
         if (action.payload.isAuthenticated) {
           state.user = action.payload.user;
+        } else {
+          state.user = null;
         }
         state.lastUpdated = Date.now();
       })

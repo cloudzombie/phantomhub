@@ -15,14 +15,16 @@ export const isAuthenticated = async (): Promise<boolean> => {
     console.log('TokenManager: Checking authentication...');
     // Try to access a protected endpoint to verify authentication
     const response = await axios.get(`${API_URL}/auth/check`, {
-      withCredentials: true // Important for cookies to be sent
+      withCredentials: true, // Important for cookies to be sent
+      timeout: 5000 // 5 second timeout
     });
     
     console.log('TokenManager: Auth check response:', response.data);
     return response.data.success === true;
-  } catch (err) {
+  } catch (err: any) {
     console.error('TokenManager: Auth check failed:', err);
-    // If the request fails, the user is not authenticated
+    // If the request fails, clear auth data and return false
+    clearAuthData();
     return false;
   }
 };
@@ -33,11 +35,16 @@ export const isAuthenticated = async (): Promise<boolean> => {
 export const storeUserData = (userData: any): void => {
   try {
     console.log('TokenManager: Storing user data:', userData);
+    if (!userData) {
+      console.log('TokenManager: No user data to store');
+      return;
+    }
     localStorage.setItem('userData', JSON.stringify(userData));
     sessionStorage.setItem('userData', JSON.stringify(userData));
     console.log('TokenManager: User data stored successfully');
   } catch (err) {
     console.error('TokenManager: Error storing user data:', err);
+    clearAuthData();
   }
 };
 
@@ -48,10 +55,16 @@ export const getUserData = (): any => {
   try {
     console.log('TokenManager: Retrieving user data...');
     const userData = localStorage.getItem('userData') || sessionStorage.getItem('userData');
-    console.log('TokenManager: Retrieved user data:', userData);
-    return userData ? JSON.parse(userData) : null;
+    if (!userData) {
+      console.log('TokenManager: No user data found in storage');
+      return null;
+    }
+    const parsedData = JSON.parse(userData);
+    console.log('TokenManager: Retrieved user data:', parsedData);
+    return parsedData;
   } catch (err) {
     console.error('TokenManager: Error retrieving user data:', err);
+    clearAuthData();
     return null;
   }
 };
